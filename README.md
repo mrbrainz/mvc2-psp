@@ -1,7 +1,12 @@
+# Marvel vs. Capcom 2 — PSP port
+
+Attempt at forking the amazing work by G Guthrie at decompiling MvC2 for the PS2 and porting it over to PSP
+
+Below is the original upstream Readme
+
 # Marvel vs. Capcom 2 — port and decompilation
 
 [![Progress report](https://github.com/g-guthrie/mvc2-port-and-decomp/actions/workflows/report.yml/badge.svg)](https://github.com/g-guthrie/mvc2-port-and-decomp/actions/workflows/report.yml)
-[![Code progress](https://decomp.dev/g-guthrie/mvc2-ps2-decomp.svg?mode=shield&measure=code&label=PS2%20code)](https://decomp.dev/g-guthrie/mvc2-ps2-decomp)
 
 *Marvel vs. Capcom 2: New Age of Heroes*, rebuilt from source:
 
