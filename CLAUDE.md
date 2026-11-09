@@ -1,1 +1,3 @@
+@CONTEXT.md
+
 @AGENTS.md
