@@ -30,4 +30,4 @@ A PSP build of the Marvel vs. Capcom 2 decompilation, as a new platform backend 
 - Ticket `note`s: 1–3 sentences (what changed, how verified, limits). No narration.
 
 ## Status (max 3 lines; replace, never append)
-- Backlog seeded with PSP port phases (P0–P5); nothing started. Next: P01 toolchain.
+- P02 done: game lib builds for mipsel with clang (port/docs/PSP.md). Next: P05 o32 vs EABI32 boundary, then P03 link/boot.

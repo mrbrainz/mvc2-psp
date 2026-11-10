@@ -12,3 +12,7 @@ __pycache__/
 .venv/
 /config/SLUS_204.86.d
 /build-inputs/*.tar.gz
+
+# Disc images (never commit)
+*.iso
+*.ISO

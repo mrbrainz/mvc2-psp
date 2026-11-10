@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.10)
+project(mvc2_hello C)
+add_executable(mvc2_hello main.c)
+target_link_libraries(mvc2_hello pspdebug pspdisplay pspge)
+create_pbp_file(TARGET mvc2_hello TITLE "MvC2 PSP hello")

@@ -28,40 +28,11 @@ window.BACKLOG = {
    "name": "Release"
   }
  ],
- "completed_ids": [],
+ "completed_ids": [
+  "P01",
+  "P02"
+ ],
  "activities": [
-  {
-   "id": "P01",
-   "order": 1,
-   "phase": "P0",
-   "size": "S",
-   "status": "Ready",
-   "depends": [],
-   "read": [
-    "CONTEXT.md"
-   ],
-   "title": "PSPSDK toolchain",
-   "description": "Install pspdev (psp-gcc, PSPSDK, pack-pbp) outside the repo; document install in port/docs/PSP.md; build a hello-world EBOOT.",
-   "done_when": "Hello-world EBOOT.PBP runs in PPSSPP; PSP.md lists exact install steps."
-  },
-  {
-   "id": "P02",
-   "order": 2,
-   "phase": "P0",
-   "size": "M",
-   "status": "Backlog",
-   "depends": [
-    "P01"
-   ],
-   "read": [
-    "port/docs/PORT_PLAN.md",
-    "port/docs/HOST_BUILD_ISSUES.md",
-    "port/CMakeLists.txt"
-   ],
-   "title": "PSP CMake target",
-   "description": "Add a psp toolchain/target to port/CMakeLists.txt compiling all game TUs for Allegrex (32-bit MIPS, so pointers match).",
-   "done_when": "All TUs compile for PSP; failures, if any, listed as new tickets."
-  },
   {
    "id": "P03",
    "order": 3,
@@ -69,7 +40,8 @@ window.BACKLOG = {
    "size": "M",
    "status": "Backlog",
    "depends": [
-    "P02"
+    "P02",
+    "P05"
    ],
    "read": [
     "port/docs/LINK_NOTES.md",
@@ -280,6 +252,23 @@ window.BACKLOG = {
    "title": "Release packaging",
    "description": "EBOOT icon/title, user guide for supplying own disc data.",
    "done_when": "Installable EBOOT + PSP section in USER_GUIDE.md."
+  },
+  {
+   "id": "P05",
+   "order": 2.5,
+   "phase": "P0",
+   "size": "M",
+   "status": "Ready",
+   "depends": [
+    "P02"
+   ],
+   "read": [
+    "port/docs/PSP.md",
+    "port/cmake/psp-clang.cmake"
+   ],
+   "title": "o32 vs EABI32 call boundary",
+   "description": "Game objects are clang o32; psp-gcc/PSPSDK are EABI32 (args in a0-a7, different float passing). Pick one: build PSP-side code with clang o32 against PSPSDK headers and link with psp-gcc, or wrap every game<->SDK call. Check psp-ld accepts mixed objects.",
+   "done_when": "A test linking a clang o32 object with a psp-gcc EABI object runs correctly in PPSSPP with >4 int args and float args across the boundary; chosen approach in PSP.md."
   }
  ]
 };
