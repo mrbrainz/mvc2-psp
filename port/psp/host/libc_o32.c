@@ -263,3 +263,8 @@ int __wrap_fseeko(FILE *fp, off_t off, int whence) {
     struct psp_fseeko_args a = {fp, off, whence};
     return psp_fseeko_shim(&a);
 }
+
+/* newlib's libm is EABI: a second float argument arrives in $f13, but o32
+ * callers pass it in $f14, so two-float libm calls must be defined here */
+float fminf(float a, float b) { return a != a ? b : b != b ? a : a < b ? a : b; }
+float fmaxf(float a, float b) { return a != a ? b : b != b ? a : a > b ? a : b; }

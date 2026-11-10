@@ -31,4 +31,4 @@ A PSP build of the Marvel vs. Capcom 2 decompilation, as a new platform backend 
 - Ticket `note`s: 1–3 sentences (what changed, how verified, limits). No narration.
 
 ## Status (max 3 lines; replace, never append)
-- P12 done (sceCtrl pad; PRESS= test input). P24 characters draw (attract fight); character select needs P25 meshes. Builds need EMSDK=~/Sites/emsdk-brew.
+- P24 done; P25 renders logo, title, char select and fights but fights run at 43.6 fps (P26). Builds need EMSDK=~/Sites/emsdk-brew.

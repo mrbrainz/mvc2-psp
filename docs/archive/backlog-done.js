@@ -186,6 +186,25 @@ window.BACKLOG_ARCHIVE = [
   "note": "r_gu.c (sceGu) behind unchanged fe_render.c: save-data warning text and ADX logo render correctly in PPSSPP, 0 rejected prims, 59.94 fps (update 0.9-4.2 ms). Title/CAPCOM logo are mesh-drawn, so moved to P25. Affine 2D tris, approx dest-alpha blends."
  },
  {
+  "id": "P24",
+  "order": 5.01,
+  "phase": "P2",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P21",
+   "P25"
+  ],
+  "read": [
+   "port/render/r_char.c",
+   "port/host/fe/fe_char.c"
+  ],
+  "title": "sceGu renderer: characters",
+  "description": "Character drawer (fl_char_*) on the GU backend: tile atlas pages in RAM/VRAM, palettes as CLUTs.",
+  "done_when": "Character select and a fight show characters correctly in PPSSPP.",
+  "note": "r_gu_char.c (T4 atlas pages, 16-colour CLUTs) + upstream fe_char.c. Character select and fights show characters correctly in PPSSPP (scripted PRESS run, screenshots); frame time is P26."
+ },
+ {
   "id": "P12",
   "order": 5.2,
   "phase": "P1",

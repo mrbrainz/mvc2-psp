@@ -18,3 +18,9 @@ void gu_teximage(const GuTexImageArgs *a)
 {
     sceGuTexImage(a->mipmap, a->width, a->height, a->tbw, a->tbp);
 }
+
+void gu_texscale(const GuTexScaleArgs *a)
+{
+    sceGuTexScale(a->su, a->sv);
+    sceGuTexOffset(a->ou, a->ov);
+}

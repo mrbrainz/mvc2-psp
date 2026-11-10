@@ -62,6 +62,9 @@ Rules (verified by `port/psp/abi_test` in PPSSPP 1.20.4, not yet on hardware):
   struct (see `abi_shim.h`). An unshimmed 6-arg call returns garbage.
 - SDK-to-our-code callbacks (threads, exit, audio) follow the same direct-call
   rule; the EABI caller's frame survives an o32 callee.
+- newlib's libm is EABI too: a second float argument goes in `$f13` there but
+  `$f14` in o32, so two-float libm calls (`fminf`, `fmaxf`) return garbage;
+  `libc_o32.c` defines o32 versions. Add any other such function there.
 - `libc_o32.c` defines o32 `snprintf`/`vsnprintf`/`fprintf`/`vfprintf`/`sscanf`
   for the whole link, so EABI code (psp-gcc files, PSPSDK libraries) must not
   call those: use newlib's `sniprintf` or `pspDebugScreenPrintf` there.
@@ -214,6 +217,7 @@ with more than four arguments go through `port/psp/host/psp_gu_shim.c`.
 - Indexed textures use the GE's CLUT (T8 + 256-colour 8888 palette);
   textures live in RAM, padded to powers of two; > 512 is not drawn.
 - Depth as the GS: larger is nearer, cleared to 0, GEQUAL.
+- `sceGuScissor` takes x, y, width, height (not x1, y1).
 - Not reproduced yet: perspective STQ on 2D triangles (affine), destination
   alpha blend factors (the PSP keeps stencil in alpha).
 
@@ -248,3 +252,20 @@ pad; the game's own BUTTON CONFIG then assigns attacks (defaults below).
 PS2 L2/R2/L3/R3 have no PSP button. Player 2 is not connected.
 `PRESS=frame:len:bits,...` in `env.txt` (testing) holds PS2 bits (hex,
 `pad.h`) on player 1, e.g. `PRESS=600:6:8` presses Start at frame 600.
+
+## Renderer: meshes (P25)
+
+`port/render/r_gu_mesh.c` is a PSP copy of `r_mesh.c`'s clay path
+(`fl_clay_*`; POL chunk parsing, VU1 descriptor selection, colour maths);
+upstream `fe_mesh.c` is compiled unchanged on top. The GE transforms: one
+matrix = world * view * projection * the func_003DD5D0 viewport * canvas to
+screen (`r_gu_canvas_to_ge`), so UVs are perspective-correct. Each clay keeps
+its POL vertices and a GE vertex buffer whose colours are recomputed only
+when the 0x66 modulate, the format or a vertex write changes them; lit meshes
+are coloured per draw. The VU1 trivial reject (ADC) is done on the CPU.
+GE clip planes are off: they cull clip-space z < 0, where all of the game's
+geometry lies. Not reproduced: fog (0x8000), UV-matrix cross terms, meshes
+over 65536 vertices.
+
+`DRAWLOG` adds `mesh draws/triangles microseconds`; `MESH_DUMP=N` in
+`env.txt` logs every mesh draw of frame N.

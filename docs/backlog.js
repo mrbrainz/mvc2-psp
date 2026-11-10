@@ -39,7 +39,8 @@ window.BACKLOG = {
   "P10",
   "P11",
   "P12",
-  "P21"
+  "P21",
+  "P24"
  ],
  "activities": [
   {
@@ -211,30 +212,11 @@ window.BACKLOG = {
    "done_when": "High-water figures recorded in PSP.md and a go/no-go on PSP-1000 support."
   },
   {
-   "id": "P24",
-   "order": 5.01,
-   "phase": "P2",
-   "size": "M",
-   "status": "In progress",
-   "depends": [
-    "P21",
-    "P25"
-   ],
-   "read": [
-    "port/render/r_char.c",
-    "port/host/fe/fe_char.c"
-   ],
-   "title": "sceGu renderer: characters",
-   "description": "Character drawer (fl_char_*) on the GU backend: tile atlas pages in RAM/VRAM, palettes as CLUTs.",
-   "done_when": "Character select and a fight show characters correctly in PPSSPP.",
-   "note": "r_gu_char.c (T4 atlas pages, 16-colour CLUTs) + upstream fe_char.c: the attract demo fight draws characters correctly at 59.94 fps. Character select (state 2 1) draws through the mesh path, so its check waits on P25."
-  },
-  {
    "id": "P25",
    "order": 5.02,
    "phase": "P2",
    "size": "L",
-   "status": "Ready",
+   "status": "In progress",
    "depends": [
     "P21"
    ],
@@ -245,7 +227,8 @@ window.BACKLOG = {
    ],
    "title": "sceGu renderer: stage meshes",
    "description": "Mesh path on GU in a separate r_gu_mesh.c (r_mesh.c untouched): model load to GU vertex buffers, transforms, lighting/fog as the GL path does.",
-   "done_when": "CAPCOM logo, title screen and all stages render in PPSSPP, fight at 59.94 fps."
+   "done_when": "CAPCOM logo, title screen and all stages render in PPSSPP, fight at 59.94 fps.",
+   "note": "r_gu_mesh.c + upstream fe_mesh.c: CAPCOM logo, title, attract stages, character select and a fight render in PPSSPP. Fights and character select run at 43.6 fps (render pass 1 20.5 ms, of which the GU mesh path is about 2 ms); all 17 stages not yet checked."
   },
   {
    "id": "P26",

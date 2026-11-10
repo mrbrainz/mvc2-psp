@@ -84,6 +84,7 @@ static struct {
     float sx, sy, ox, oy;    /* game display area -> screen */
 } R;
 
+
 /* ---------------- display list ---------------- */
 static void set_mapping(void)
 {
@@ -101,7 +102,7 @@ static void apply_scissor(void)
     int y1 = (int)ceilf((R.scissor[1] + R.scissor[3]) * R.sy + R.oy);
     if (x1 > SCR_W) x1 = SCR_W;
     if (y1 > SCR_H) y1 = SCR_H;
-    sceGuScissor(x0, y0, x1, y1);
+    sceGuScissor(x0, y0, x1 - x0, y1 - y0);   /* PSPSDK: x, y, width, height */
 }
 
 static void list_open(void)
@@ -223,6 +224,26 @@ static void canvas_bind(void)
 }
 
 static int texture_filter_linear(void) { return (R.state_ad0 & 0x10000) ? 0 : 1; }
+
+/* texture + CLUT + filter/wrap for one record (the mesh path) */
+static void tex_bind(const TexRec *t, int pal)
+{
+    GuTexImageArgs ti = { 0, t->pw, t->ph, t->pw, t->pix };
+    sceGuEnable(GU_TEXTURE_2D);
+    if (t->fmt == FL_TEX_IDX4 || t->fmt == FL_TEX_IDX8) {
+        const uint32_t *clut = (pal >= 0 && pal < MAX_PAL && R.pal[pal].used) ? R.pal[pal].clut : black_clut;
+        sceGuClutMode(GU_PSM_8888, 0, 0xFF, 0);
+        sceGuClutLoad(256 / 8, clut);
+        sceGuTexMode(GU_PSM_T8, 0, 0, 0);
+    } else {
+        sceGuTexMode(GU_PSM_8888, 0, 0, 0);
+    }
+    gu_teximage(&ti);
+    sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
+    sceGuTexFilter((R.state_ad0 & 0x10000) ? GU_NEAREST : GU_LINEAR, (R.state_ad0 & 0x10000) ? GU_NEAREST : GU_LINEAR);
+    sceGuTexWrap((R.state_ad0 & 0x20000) ? GU_CLAMP : GU_REPEAT, (R.state_ad0 & 0x20000) ? GU_CLAMP : GU_REPEAT);
+    sceGuTexFlush();
+}
 
 void r_flush(void)
 {
@@ -900,3 +921,81 @@ int fl_fill_screen(int mode, uint32_t c)
 }
 
 void r_stats(int *d, int *v) { if (d) *d = 0; if (v) *v = 0; }
+
+/* ---------------- mesh path support (r_gu_mesh.c) ---------------- */
+const float *r_matrix(int id) { return (id >= 0 && id < 0x60) ? R.matrices[id] : R.matrices[0x19]; }
+uint32_t r_state_ad0(void) { return R.state_ad0; }
+uint32_t r_state_ad4(void) { return R.state_ad4; }
+uint32_t r_global_mod(void) { return R.global_mod; }
+uint32_t r_material_color(void) { return R.material_color; }
+const uint8_t *r_material_slot(int i) { return R.materials[i & 31]; }
+const uint8_t *r_light(int i) { return R.lights[i < 0 ? 0 : i > 2 ? 2 : i]; }
+void r_viewport(int vi[4], float vf[2]) { memcpy(vi, R.vp_i, 16); memcpy(vf, R.vp_f, 8); }
+uint8_t r_gs_to_unorm(unsigned g) { return gs_to_unorm(g); }
+
+/* before a mesh draw: 2D batches out, list open with room for `bytes` of
+ * sceGuGetMemory (a restart later would overwrite it) */
+void r_gu_begin(unsigned bytes)
+{
+    r_flush();
+    canvas_bind();
+    if (sceGuCheckList() > LIST_BYTES - (int)bytes - 65536) {
+        list_close();
+        list_open();
+        canvas_bind();
+    }
+}
+
+/* canvas NDC (640x480, as r_mesh.c's u_vp output) -> GE clip space for the
+ * 480x272 viewport, so the GE's own 3D path (perspective-correct UVs) draws
+ * meshes where the 2D core puts the same canvas pixels */
+void r_gu_canvas_to_ge(float m[16])
+{
+    const float sx = R.sx * 320.f, sy = R.sy * 240.f;
+    /* gx = ((x + 1) * 320 * R.sx + R.ox - 240) / 240, gy = (136 - ((1 - y) * 240 * R.sy + R.oy)) / 136 */
+    float ax = sx / (SCR_W / 2.f), bx = (sx + R.ox - SCR_W / 2.f) / (SCR_W / 2.f);
+    float ay = sy / (SCR_H / 2.f), by = (SCR_H / 2.f - sy - R.oy) / (SCR_H / 2.f);
+    memset(m, 0, 64);
+    m[0] = ax; m[5] = ay; m[10] = 1.f; m[15] = 1.f;
+    m[12] = bx; m[13] = by;   /* row-major v' = v * M, applied to (x/w, y/w): as w-weighted terms */
+}
+
+/* One indexed 3D draw: GuVtx-layout vertices (u, v, 8888 colour, x, y, z),
+ * transformed by clip (row-major, v' = v * M, GE clip space), textured from
+ * an fl texture handle (0 = untextured) with UVs scaled (su, sv) and offset
+ * (ou, ov) in texture units of the handle's w x h. */
+int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const uint16_t *idx, int count,
+                   float su, float sv, float ou, float ov)
+{
+    static ScePspFMatrix4 ident = { {1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1} };
+    ScePspFMatrix4 proj;
+    int i = (int)(tex & 0xFFFF) - 1, p = (int)(tex >> 16) - 1;
+    if (!R.inited || count <= 0) return 0;
+    r_flush();
+    canvas_bind();
+    if (tex && i >= 0 && i < MAX_TEX && R.tex[i].used && R.tex[i].pw <= 512 && R.tex[i].ph <= 512) {
+        TexRec *t = &R.tex[i];
+        GuTexScaleArgs ts = { su * t->w / t->pw, sv * t->h / t->ph, ou * t->w / t->pw, ov * t->h / t->ph };
+        tex_bind(t, p);
+        gu_texscale(&ts);
+    } else {
+        sceGuDisable(GU_TEXTURE_2D);
+    }
+    apply_blend_depth();
+    memcpy(&proj, clip, sizeof proj);   /* sceGuSetMatrix copies the values into the list */
+    /* GE clip planes cull clip-space z < 0, where the game's depth range
+     * (larger = nearer, as the GS) puts every mesh; the VU1 reject above
+     * (r_gu_mesh.c) stands in for the GS's own guard-band handling */
+    sceGuDisable(GU_CLIP_PLANES);
+    sceGuSetMatrix(GU_PROJECTION, &proj);
+    sceGuSetMatrix(GU_VIEW, &ident);
+    sceGuSetMatrix(GU_MODEL, &ident);
+    {
+        GuDrawArgs d = { GU_TRIANGLES, GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_INDEX_16BIT | GU_TRANSFORM_3D,
+                         count, idx, verts };
+        gu_draw(&d);
+    }
+    R.cur_tex = -1; R.cur_mode = -1;   /* texture state changed: the next 2D batch rebinds */
+    return 1;
+}
+
