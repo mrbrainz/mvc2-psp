@@ -40,7 +40,8 @@ window.BACKLOG = {
   "P11",
   "P12",
   "P21",
-  "P24"
+  "P24",
+  "P26"
  ],
  "activities": [
   {
@@ -228,23 +229,7 @@ window.BACKLOG = {
    "title": "sceGu renderer: stage meshes",
    "description": "Mesh path on GU in a separate r_gu_mesh.c (r_mesh.c untouched): model load to GU vertex buffers, transforms, lighting/fog as the GL path does.",
    "done_when": "CAPCOM logo, title screen and all stages render in PPSSPP, fight at 59.94 fps.",
-   "note": "r_gu_mesh.c + upstream fe_mesh.c: CAPCOM logo, title, attract stages, character select and a fight render in PPSSPP. Fights and character select run at 43.6 fps (render pass 1 20.5 ms, of which the GU mesh path is about 2 ms); all 17 stages not yet checked."
-  },
-  {
-   "id": "P26",
-   "order": 5.03,
-   "phase": "P2",
-   "size": "M",
-   "status": "Ready",
-   "depends": [
-    "P12"
-   ],
-   "read": [
-    "port/docs/PSP.md"
-   ],
-   "title": "Fight and character-select frame time",
-   "description": "Logic update reaches 14-16.5 ms a frame in fights and character select (state 2 1) in PPSSPP and dips below 59.94 fps; attract is 1-4 ms. Profile with PROFILE=1 and cut the top stages.",
-   "done_when": "Fight and character select update under 12 ms a frame in PPSSPP, 59.94 fps with no dips."
+   "note": "r_gu_mesh.c + upstream fe_mesh.c: CAPCOM logo, title, attract stages, character select and a fight render in PPSSPP at 59.94 fps (after P26). All 17 stages not yet checked."
   },
   {
    "id": "P27",

@@ -203,6 +203,15 @@ FCSR is per thread: any thread that runs game code must call
 Verified in PPSSPP only; hardware may differ on denormal inputs and division
 by zero (EE: largest finite), so P42 checks on a device.
 
+Fights and character select (P26): `fe_sync_handle` (upstream fe_render.c)
+hashed about 1 KB of each texture and palette at a stride on every mesh draw
+and texture upload, about 18 ms a frame on the PSP. `host/psp_fe_sync.c`
+wraps it (and `func_003EA660`, which calls it inside its own file) to sync each
+handle once per logic frame. Update, PPSSPP, no profiler: fight 9.7 ms,
+character select 10.0-10.4 ms, 59.94 fps. Of the rest, the game's own VU1
+packet build (`func_003F0500__game`) is about 5 ms and the GU mesh path 2 ms.
+`PROFILE=1` also lists those nested costs.
+
 ## Renderer: 2D core (P21)
 
 `port/render/r_gu.c` implements the `fl_*` API of `render.h` with sceGu, for

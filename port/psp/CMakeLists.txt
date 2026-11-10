@@ -75,7 +75,7 @@ set_source_files_properties("${MVC2_ROOT}/port/host/fe/fe_render.c" "${MVC2_ROOT
 
 add_executable(mvc2_psp ${STUB_SRCS} ${GLUE_SRCS} ${PSP_EABI_OBJS} ${PSP_RENDER_SRCS}
   "${PSP_DIR}/host/psp_main.c" "${PSP_DIR}/host/libc_o32.c" "${PSP_DIR}/host/psp_fpu.c"
-  "${PSP_DIR}/host/psp_prof.c" "${MVC2_ROOT}/port/platform/platform_psp.c"
+  "${PSP_DIR}/host/psp_prof.c" "${PSP_DIR}/host/psp_fe_sync.c" "${MVC2_ROOT}/port/platform/platform_psp.c"
   $<TARGET_OBJECTS:psp_host_core>)
 target_include_directories(mvc2_psp PRIVATE "${MVC2_ROOT}/port/stubs" "${PSP_DIR}/host"
   "${MVC2_ROOT}/port/host" "${MVC2_ROOT}/port/platform" "${GLUE}")
@@ -90,7 +90,10 @@ target_link_options(mvc2_psp PRIVATE -no-pie "@${GLUE}/link_extra.rsp" -Wl,--sor
   -Wl,--wrap=mvc2_frame -Wl,--wrap=func_0012F460 -Wl,--wrap=func_001E42A0
   -Wl,--wrap=func_003D6FF0 -Wl,--wrap=func_00170D30 -Wl,--wrap=func_003D7400
   -Wl,--wrap=func_003D7640 -Wl,--wrap=func_0012DD90 -Wl,--wrap=func_00170D70
-  -Wl,--wrap=func_003ECD00)
+  -Wl,--wrap=func_003ECD00 -Wl,--wrap=func_003F0500 -Wl,--wrap=fl_clay_draw
+  -Wl,--wrap=func_00412260 -Wl,--wrap=func_0041BB30 -Wl,--wrap=fe_sync_state
+  -Wl,--wrap=func_003F0500__game -Wl,--wrap=func_003EA660
+  -Wl,--wrap=fe_sync_handle)
 
 # ---- EBOOT.PBP: fixup imports, strip, SFO (MEMSIZE=1: Slim memory), pack --
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/EBOOT.PBP"

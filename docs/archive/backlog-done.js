@@ -205,6 +205,23 @@ window.BACKLOG_ARCHIVE = [
   "note": "r_gu_char.c (T4 atlas pages, 16-colour CLUTs) + upstream fe_char.c. Character select and fights show characters correctly in PPSSPP (scripted PRESS run, screenshots); frame time is P26."
  },
  {
+  "id": "P26",
+  "order": 5.03,
+  "phase": "P2",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P12"
+  ],
+  "read": [
+   "port/docs/PSP.md"
+  ],
+  "title": "Fight and character-select frame time",
+  "description": "Logic update reaches 14-16.5 ms a frame in fights and character select (state 2 1) in PPSSPP and dips below 59.94 fps; attract is 1-4 ms. Profile with PROFILE=1 and cut the top stages.",
+  "done_when": "Fight and character select update under 12 ms a frame in PPSSPP, 59.94 fps with no dips.",
+  "note": "psp_fe_sync.c syncs each texture/palette handle once per logic frame (upstream re-hashed them on every mesh draw, ~18 ms a frame). PPSSPP, no profiler: fight 9.7 ms, character select 10.0-10.4 ms, 59.94 fps throughout; screenshots unchanged."
+ },
+ {
   "id": "P12",
   "order": 5.2,
   "phase": "P1",
