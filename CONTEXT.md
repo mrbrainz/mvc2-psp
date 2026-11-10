@@ -30,4 +30,4 @@ A PSP build of the Marvel vs. Capcom 2 decompilation, as a new platform backend 
 - Ticket `note`s: 1–3 sentences (what changed, how verified, limits). No narration.
 
 ## Status (max 3 lines; replace, never append)
-- P02 done: game lib builds for mipsel with clang (port/docs/PSP.md). Next: P05 o32 vs EABI32 boundary, then P03 link/boot.
+- P03 done: headless EBOOT runs 600 frames in PPSSPP (port/docs/PSP.md). State differs from wasm from frame 0: P06 next.

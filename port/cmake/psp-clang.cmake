@@ -18,7 +18,15 @@ set(CMAKE_C_COMPILER_TARGET mipsel-unknown-elf)
 set(CMAKE_AR "${PSPDEV}/bin/psp-ar")
 set(CMAKE_RANLIB "${PSPDEV}/bin/psp-ranlib")
 # Allegrex: MIPS II integer core, single-precision FPU (doubles go through
-# libgcc soft-float calls), no small-data section.
-set(CMAKE_C_FLAGS_INIT "-mips2 -mfp32 -msingle-float -mhard-float -G0 -mno-abicalls -fno-pic -DPSP -D__PSP__")
+# libgcc soft-float calls), no small-data section; -mno-gpopt because the
+# source marks EE gp-relative externs section(".sdata") (776 sites), which on
+# the PSP are aliases into the EE image, out of gp range.
+set(CMAKE_C_FLAGS_INIT "-mips2 -mfp32 -msingle-float -mhard-float -G0 -mno-gpopt -mno-abicalls -fno-pic -DPSP -D__PSP__")
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 set(MVC2_PSP ON)
+# Link with psp-gcc (PSPSDK crt0, newlib, libgcc); objects mix o32 and EABI32,
+# see port/docs/PSP.md "o32 / EABI32 boundary".
+set(CMAKE_C_LINK_EXECUTABLE
+  "${PSPDEV}/bin/psp-gcc -L${PSPDEV}/psp/sdk/lib -Wl,--no-warn-mismatch -fno-use-linker-plugin -G0 <CMAKE_C_LINK_FLAGS> <LINK_FLAGS> <OBJECTS> -o <TARGET> <LINK_LIBRARIES>")
+# libc headers for the host side only (game TUs are -nostdlibinc/freestanding)
+set(MVC2_PSP_HOST_INCLUDES "${PSPDEV}/psp/include" "${PSPDEV}/psp/sdk/include")

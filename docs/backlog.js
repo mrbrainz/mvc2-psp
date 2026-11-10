@@ -30,27 +30,11 @@ window.BACKLOG = {
  ],
  "completed_ids": [
   "P01",
-  "P02"
+  "P02",
+  "P03",
+  "P05"
  ],
  "activities": [
-  {
-   "id": "P03",
-   "order": 3,
-   "phase": "P0",
-   "size": "M",
-   "status": "Backlog",
-   "depends": [
-    "P02",
-    "P05"
-   ],
-   "read": [
-    "port/docs/LINK_NOTES.md",
-    "port/docs/BOOT_NOTES.md"
-   ],
-   "title": "Link and headless boot on PSP",
-   "description": "Link with stub platform layer; run N frames headless in PPSSPP and print the logic-state hash.",
-   "done_when": "Frame hashes on PSP match the native build for the same N frames."
-  },
   {
    "id": "P04",
    "order": 4,
@@ -228,7 +212,7 @@ window.BACKLOG = {
    "size": "S",
    "status": "Backlog",
    "depends": [
-    "P03"
+    "P06"
    ],
    "read": [
     "port/docs/ORACLE_FUZZ.md"
@@ -254,21 +238,38 @@ window.BACKLOG = {
    "done_when": "Installable EBOOT + PSP section in USER_GUIDE.md."
   },
   {
-   "id": "P05",
-   "order": 2.5,
+   "id": "P06",
+   "order": 3.5,
    "phase": "P0",
    "size": "M",
    "status": "Ready",
    "depends": [
-    "P02"
+    "P03"
    ],
    "read": [
     "port/docs/PSP.md",
-    "port/cmake/psp-clang.cmake"
+    "port/host/state_dump.c",
+    "port/tools/oracle/compare.py"
    ],
-   "title": "o32 vs EABI32 call boundary",
-   "description": "Game objects are clang o32; psp-gcc/PSPSDK are EABI32 (args in a0-a7, different float passing). Pick one: build PSP-side code with clang o32 against PSPSDK headers and link with psp-gcc, or wrap every game<->SDK call. Check psp-ld accepts mixed objects.",
-   "done_when": "A test linking a clang o32 object with a psp-gcc EABI object runs correctly in PPSSPP with >4 int args and float args across the boundary; chosen approach in PSP.md."
+   "title": "PSP vs wasm state divergence",
+   "description": "Same ISO, 600 frames: compare.py differs at frame 0 in game block words 0x004F4318/40/4C (PSP = wasm - 0x16D6C0 each) and BSS block 0x00626580 from frame 1, more blocks from frame 6. Find the cause (pointer translation in state_dump, glue code-label handles, or real logic/ABI/float divergence).",
+   "done_when": "compare.py PSP vs wasm matches for 600 frames, or each remaining difference is explained as non-gameplay and listed in an ignore file."
+  },
+  {
+   "id": "P07",
+   "order": 3.6,
+   "phase": "P1",
+   "size": "XS",
+   "status": "Backlog",
+   "depends": [
+    "P03"
+   ],
+   "read": [
+    "port/psp/host/libc_o32.c"
+   ],
+   "title": "PSP log newlines",
+   "description": "host_log ends lines with fputc to stderr, which goes to newlib, not psp_log; lines run together in mvc2_psp.log.",
+   "done_when": "mvc2_psp.log has one message per line."
   }
  ]
 };

@@ -33,5 +33,42 @@ window.BACKLOG_ARCHIVE = [
   "description": "Add a psp toolchain/target to port/CMakeLists.txt compiling all game TUs for Allegrex (32-bit MIPS, so pointers match).",
   "done_when": "All TUs compile for PSP; failures, if any, listed as new tickets.",
   "note": "port/cmake/psp-clang.cmake builds all 18,440 game objects with Homebrew clang for mipsel (o32, mips2, single-float); psp-gcc cannot take the clang-only flags or the LLVM-IR float rewrite. Fixed hostify so ps2_compat.h prototypes beat caller-guessed sigs (28 TUs)."
+ },
+ {
+  "id": "P05",
+  "order": 2.5,
+  "phase": "P0",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P02"
+  ],
+  "read": [
+   "port/docs/PSP.md",
+   "port/cmake/psp-clang.cmake"
+  ],
+  "title": "o32 vs EABI32 call boundary",
+  "description": "Game objects are clang o32; psp-gcc/PSPSDK are EABI32 (args in a0-a7, different float passing). Pick one: build PSP-side code with clang o32 against PSPSDK headers and link with psp-gcc, or wrap every game<->SDK call. Check psp-ld accepts mixed objects.",
+  "done_when": "A test linking a clang o32 object with a psp-gcc EABI object runs correctly in PPSSPP with >4 int args and float args across the boundary; chosen approach in PSP.md.",
+  "note": "All our code stays clang o32; psp-ld links the mix with --no-warn-mismatch. Direct SDK calls are fine with <=4 int/ptr args, else a psp-gcc struct-pointer shim. port/psp/abi_test passes 5/5 in PPSSPP (an unshimmed 6-arg call fails as expected); not run on hardware."
+ },
+ {
+  "id": "P03",
+  "order": 3,
+  "phase": "P0",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P02",
+   "P05"
+  ],
+  "read": [
+   "port/docs/LINK_NOTES.md",
+   "port/docs/BOOT_NOTES.md"
+  ],
+  "title": "Link and headless boot on PSP",
+  "description": "Link with stub platform layer; run N frames headless in PPSSPP and print the logic-state hash.",
+  "done_when": "Frame hashes on PSP match the native build for the same N frames.",
+  "note": "mvc2_host links (0 undefined) and runs 600 frames headless in PPSSPP: disc read, 22 MB arena, o32/EABI selftest PASS. Hash match NOT met: ra_state_hash covers host pointers (not portable) and the portable state dump differs from wasm; moved to P06."
  }
 ];

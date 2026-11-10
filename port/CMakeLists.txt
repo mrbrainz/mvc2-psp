@@ -198,11 +198,17 @@ set(_glue_sigs "")
 if(MVC2_SIGS_FILE)
   set(_glue_sigs --sigs "${MVC2_SIGS_FILE}")
 endif()
+set(MVC2_GLUE_ENV "")
+if(MVC2_PSP)
+  # PSP runtime libs in the host catalog; llvm-nm from the clang that builds the game
+  get_filename_component(_llvm_bin "${CMAKE_C_COMPILER}" DIRECTORY)
+  set(MVC2_GLUE_ENV MVC2_PSP=1 "PSPDEV=${PSPDEV}" "PATH=${_llvm_bin}:$ENV{PATH}")
+endif()
 file(GLOB MVC2_STUB_SRCS "${MVC2_ROOT}/port/stubs/*.c")
 add_custom_command(
   OUTPUT ${GLUE_SRCS} "${GLUE}/link_extra.rsp" "${GLUE}/stubs.csv" "${GLUE}/link_glue.csv"
          "${GLUE}/mvc2_host_protos.h"
-  COMMAND ${Python3_EXECUTABLE} "${MVC2_ROOT}/port/tools/gen_link_glue.py" glue
+  COMMAND ${CMAKE_COMMAND} -E env ${MVC2_GLUE_ENV} ${Python3_EXECUTABLE} "${MVC2_ROOT}/port/tools/gen_link_glue.py" glue
           --out "${GLUE}" --target ${_glue_target} ${_glue_sigs} "$<TARGET_FILE:mvc2_game>"
   DEPENDS mvc2_game "${MVC2_ROOT}/port/tools/gen_link_glue.py" "${MVC2_ROOT}/port/tools/link_catalog.py"
           ${MVC2_STUB_SRCS} ${MVC2_SIGS_DEP} "${MVC2_ROOT}/port/host/host_impl.csv"
@@ -224,11 +230,38 @@ endif()
 
 set_source_files_properties(${MVC2_HOST_CORE_SRCS} PROPERTIES OBJECT_DEPENDS "${GLUE}/mvc2_host_protos.h")
 
+if(MVC2_PSP)
+  # PSP: o32 main (port/psp/host) instead of the POSIX runner; the EABI module
+  # entry (psp-gcc) calls it.  See port/docs/PSP.md.
+  list(FILTER MVC2_STUB_SRCS EXCLUDE REGEX "host_main\\.c$")
+  list(APPEND MVC2_STUB_SRCS "${MVC2_ROOT}/port/psp/host/psp_main.c"
+    "${MVC2_ROOT}/port/psp/host/libc_o32.c")
+  target_include_directories(mvc2_host_core SYSTEM PRIVATE ${MVC2_PSP_HOST_INCLUDES})
+  set(MVC2_PSP_ENTRY "${CMAKE_BINARY_DIR}/psp_entry.o")
+  add_custom_command(OUTPUT ${MVC2_PSP_ENTRY}
+    COMMAND ${PSPDEV}/bin/psp-gcc -O2 -G0 -I${PSPDEV}/psp/sdk/include -D_PSP_FW_VERSION=600
+            -c "${MVC2_ROOT}/port/psp/host/psp_entry.c" -o ${MVC2_PSP_ENTRY}
+    DEPENDS "${MVC2_ROOT}/port/psp/host/psp_entry.c" "${MVC2_ROOT}/port/psp/host/psp_entry.h")
+  list(APPEND MVC2_STUB_SRCS ${MVC2_PSP_ENTRY})
+endif()
 add_executable(mvc2_host ${MVC2_STUB_SRCS} ${GLUE_SRCS} $<TARGET_OBJECTS:mvc2_host_core>
   $<TARGET_OBJECTS:mvc2_game_data>)
 target_include_directories(mvc2_host PRIVATE "${MVC2_ROOT}/port/stubs")
 target_compile_options(mvc2_host PRIVATE -fno-common)
 target_link_libraries(mvc2_host PRIVATE mvc2_game)
+if(MVC2_PSP)
+  target_include_directories(mvc2_host SYSTEM PRIVATE ${MVC2_PSP_HOST_INCLUDES} "${MVC2_ROOT}/port/psp/host")
+  target_link_libraries(mvc2_host PRIVATE pspdebug pspdisplay pspge pspctrl)
+  target_link_options(mvc2_host PRIVATE -Wl,--wrap=fseeko)
+  # EBOOT.PBP: fixup imports, strip, SFO, pack (pspdev tools)
+  add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/EBOOT.PBP"
+    COMMAND ${PSPDEV}/bin/psp-fixup-imports -o mvc2_host.elf mvc2_host
+    COMMAND ${PSPDEV}/bin/psp-strip mvc2_host.elf -o mvc2_host.strip.elf
+    COMMAND ${PSPDEV}/bin/mksfoex -d MEMSIZE=1 "MvC2 PSP" PARAM.SFO
+    COMMAND ${PSPDEV}/bin/pack-pbp EBOOT.PBP PARAM.SFO NULL NULL NULL NULL NULL mvc2_host.strip.elf NULL
+    DEPENDS mvc2_host WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+  add_custom_target(mvc2_eboot ALL DEPENDS "${CMAKE_BINARY_DIR}/EBOOT.PBP")
+endif()
 if(EMSCRIPTEN)
   # --fatal-warnings: any call/definition signature mismatch is a link error
   # (hostify R12 is expected to leave none).
