@@ -43,9 +43,32 @@ static void selftest(void) {
     fprintf(stderr, "[host] o32/EABI selftest %s (%s)\n", ok ? "PASS" : "FAIL", b);
 }
 
+#include <stdlib.h>
+
+/* testing: optional KEY=VALUE lines (the PSP has no environment);
+ * FRAMES=N overrides the frame count */
+static int load_env(int frames) {
+    char ln[256];
+    FILE *f = fopen("ms0:/PSP/GAME/mvc2/env.txt", "r");
+    if (!f)
+        return frames;
+    while (fgets(ln, sizeof ln, f)) {
+        char *eq = strchr(ln, '='), *nl = strchr(ln, '\n');
+        if (nl) *nl = 0;
+        if (!eq || ln[0] == '#') continue;
+        *eq = 0;
+        if (!strcmp(ln, "FRAMES")) frames = atoi(eq + 1);
+        else setenv(ln, eq + 1, 1);
+        fprintf(stderr, "[host] env %s=%s\n", ln, eq + 1);
+    }
+    fclose(f);
+    return frames;
+}
+
 int mvc2_psp_run(int frames) {
     char b[96], *p;
     psp_log("[host] mvc2 PSP headless\n");
+    frames = load_env(frames);
     selftest();
     host_state_dump_open("ms0:/PSP/GAME/mvc2/state.bin");   /* compare.py input */
     psp_log("[host] boot\n");

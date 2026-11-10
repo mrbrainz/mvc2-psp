@@ -30,4 +30,4 @@ A PSP build of the Marvel vs. Capcom 2 decompilation, as a new platform backend 
 - Ticket `note`s: 1–3 sentences (what changed, how verified, limits). No narration.
 
 ## Status (max 3 lines; replace, never append)
-- P03 done: headless EBOOT runs 600 frames in PPSSPP (port/docs/PSP.md). State differs from wasm from frame 0: P06 next.
+- P06 done: PSP matches wasm for 600 frames (compare_ports.py, port/docs/PSP.md). Next: P04 memory budget or P11 platform shell.

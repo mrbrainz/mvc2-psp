@@ -32,7 +32,8 @@ window.BACKLOG = {
   "P01",
   "P02",
   "P03",
-  "P05"
+  "P05",
+  "P06"
  ],
  "activities": [
   {
@@ -236,24 +237,6 @@ window.BACKLOG = {
    "title": "Release packaging",
    "description": "EBOOT icon/title, user guide for supplying own disc data.",
    "done_when": "Installable EBOOT + PSP section in USER_GUIDE.md."
-  },
-  {
-   "id": "P06",
-   "order": 3.5,
-   "phase": "P0",
-   "size": "M",
-   "status": "Ready",
-   "depends": [
-    "P03"
-   ],
-   "read": [
-    "port/docs/PSP.md",
-    "port/host/state_dump.c",
-    "port/tools/oracle/compare.py"
-   ],
-   "title": "PSP vs wasm state divergence",
-   "description": "Same ISO, 600 frames: compare.py differs at frame 0 in game block words 0x004F4318/40/4C (PSP = wasm - 0x16D6C0 each) and BSS block 0x00626580 from frame 1, more blocks from frame 6. Find the cause (pointer translation in state_dump, glue code-label handles, or real logic/ABI/float divergence).",
-   "done_when": "compare.py PSP vs wasm matches for 600 frames, or each remaining difference is explained as non-gameplay and listed in an ignore file."
   },
   {
    "id": "P07",

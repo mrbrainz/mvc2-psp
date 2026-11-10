@@ -73,7 +73,21 @@ Run in PPSSPP (memory stick is `~/.config/ppsspp`):
     # output: $G/mvc2_psp.log, $G/state.bin
 
 `ra_state_hash` covers host pointers, so it only compares runs of one binary.
-Cross-platform checks use the state dump.
+
+## PSP vs wasm state check
+
+`compare.py` is for port vs oracle; between two ports its block hashes flag
+pointers neither side can translate (function pointers, host malloc blocks),
+and wasm's `fix()` mistakes integers such as `0x01000000` for heap addresses.
+Use `compare_ports.py`, which reads the whole BSS fixed and raw:
+
+    X=0x004C2580:0x00634380
+    printf 'FRAMES=600\nMVC2_DUMP_EXTRA=%s\nMVC2_DUMP_EXTRA_RAW=1\n' $X > $G/env.txt   # PSP env (psp_main)
+    MVC2_DUMP_EXTRA=$X MVC2_DUMP_EXTRA_RAW=1 MVC2_STATE_DUMP=ref.bin node build/port-em/mvc2_host.js --iso <ISO> --frames 600
+    python3 port/tools/oracle/compare_ports.py $G/state.bin ref.bin --ignore port/tools/oracle/psp_vs_wasm.ignore
+
+About 3 MB per frame per side. Result (title attract, no input): 600 frames,
+0 diverging words; 78 host-pointer words and the boot clock differ.
 
 ## Reference build (wasm, under node)
 

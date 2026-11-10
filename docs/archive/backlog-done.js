@@ -70,5 +70,24 @@ window.BACKLOG_ARCHIVE = [
   "description": "Link with stub platform layer; run N frames headless in PPSSPP and print the logic-state hash.",
   "done_when": "Frame hashes on PSP match the native build for the same N frames.",
   "note": "mvc2_host links (0 undefined) and runs 600 frames headless in PPSSPP: disc read, 22 MB arena, o32/EABI selftest PASS. Hash match NOT met: ra_state_hash covers host pointers (not portable) and the portable state dump differs from wasm; moved to P06."
+ },
+ {
+  "id": "P06",
+  "order": 3.5,
+  "phase": "P0",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P03"
+  ],
+  "read": [
+   "port/docs/PSP.md",
+   "port/host/state_dump.c",
+   "port/tools/oracle/compare.py"
+  ],
+  "title": "PSP vs wasm state divergence",
+  "description": "Same ISO, 600 frames: compare.py differs at frame 0 in game block words 0x004F4318/40/4C (PSP = wasm - 0x16D6C0 each) and BSS block 0x00626580 from frame 1, more blocks from frame 6. Find the cause (pointer translation in state_dump, glue code-label handles, or real logic/ABI/float divergence).",
+  "done_when": "compare.py PSP vs wasm matches for 600 frames, or each remaining difference is explained as non-gameplay and listed in an ignore file.",
+  "note": "No gameplay divergence: 600 frames PSP vs wasm, 0 diverging BSS words. Differences were wasm fix() misreading integers as heap pointers, untranslatable host pointers (78 words) and the boot clock (psp_vs_wasm.ignore). New compare_ports.py + MVC2_DUMP_EXTRA_RAW; attract mode only, no input."
  }
 ];
