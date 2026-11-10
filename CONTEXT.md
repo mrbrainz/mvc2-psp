@@ -30,4 +30,4 @@ A PSP build of the Marvel vs. Capcom 2 decompilation, as a new platform backend 
 - Ticket `note`s: 1–3 sentences (what changed, how verified, limits). No narration.
 
 ## Status (max 3 lines; replace, never append)
-- P04 done: ~38.5 MB, minimum PSP-2000 + MEMSIZE=1 (port/docs/PSP.md). Next: P11 platform shell.
+- P11 done (shell works) but logic is 94-121 ms/frame in PPSSPP vs 16.7 budget: P09 profiling next. Builds need EMSDK=~/Sites/emsdk-brew.

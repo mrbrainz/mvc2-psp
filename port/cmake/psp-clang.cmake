@@ -21,7 +21,7 @@ set(CMAKE_RANLIB "${PSPDEV}/bin/psp-ranlib")
 # libgcc soft-float calls), no small-data section; -mno-gpopt because the
 # source marks EE gp-relative externs section(".sdata") (776 sites), which on
 # the PSP are aliases into the EE image, out of gp range.
-set(CMAKE_C_FLAGS_INIT "-mips2 -mfp32 -msingle-float -mhard-float -G0 -mno-gpopt -mno-abicalls -fno-pic -DPSP -D__PSP__")
+set(CMAKE_C_FLAGS_INIT "-O2 -mips2 -mfp32 -msingle-float -mhard-float -G0 -mno-gpopt -mno-abicalls -fno-pic -DPSP -D__PSP__")
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 set(MVC2_PSP ON)
 # Link with psp-gcc (PSPSDK crt0, newlib, libgcc); objects mix o32 and EABI32,

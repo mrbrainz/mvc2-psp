@@ -65,6 +65,25 @@ static int load_env(int frames) {
     return frames;
 }
 
+#include "../../platform/platform.h"
+
+static long quit_after;   /* env QUIT_AFTER=N: testing, fire the exit callback at frame N */
+
+static void rt_update(void *u)
+{
+    PlatStats st;
+    (void)u;
+    mvc2_frame();
+    if (quit_after && mvc2_host_frame == quit_after)
+        psp_test_exit();
+    if (mvc2_host_frame % 300 == 0) {   /* every 5 s */
+        plat_stats(&st);
+        fprintf(stderr, "[plat] frame %ld: logic %.2f fps, update %.2f ms, slowed %d\n",
+                (long)mvc2_host_frame, st.logic_fps, st.update_ms, st.slowed);
+    }
+}
+static void rt_pause(void *u, int paused) { (void)u; fprintf(stderr, "[plat] %s\n", paused ? "suspend" : "resume"); }
+
 int mvc2_psp_run(int frames) {
     char b[96], *p;
     psp_log("[host] mvc2 PSP headless\n");
@@ -77,17 +96,26 @@ int mvc2_psp_run(int frames) {
         psp_log("[host] no disc image: file loads will fail\n");
     mvc2_boot(1);
     psp_mem_report("after boot");
-    while (mvc2_host_frame < frames) {
-        mvc2_frame();
-        if (mvc2_host_frame % 60 == 0) {
-            p = put_s(b, "frame ");
-            p = put_u(p, (unsigned long)mvc2_host_frame);
-            p = put_s(p, " hash ");
-            p = put_x64(p, ra_state_hash());
-            p = put_s(p, "\n");
-            *p = 0;
-            psp_log(b);
+    if (frames > 0) {   /* headless: exactly N frames, as fast as possible */
+        while (mvc2_host_frame < frames) {
+            mvc2_frame();
+            if (mvc2_host_frame % 60 == 0) {
+                p = put_s(b, "frame ");
+                p = put_u(p, (unsigned long)mvc2_host_frame);
+                p = put_s(p, " hash ");
+                p = put_x64(p, ra_state_hash());
+                p = put_s(p, "\n");
+                *p = 0;
+                psp_log(b);
+            }
         }
+    } else {            /* real time: locked to the 59.94 Hz display */
+        PlatApp app = {0, rt_update, 0, rt_pause};
+        const char *q = getenv("QUIT_AFTER");
+        quit_after = q ? atol(q) : 0;
+        plat_init(0);
+        plat_run(&app);
+        fprintf(stderr, "[host] quit at frame %ld\n", (long)mvc2_host_frame);
     }
     psp_mem_report("end");
     psp_log("[host] done\n");

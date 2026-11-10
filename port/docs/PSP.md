@@ -121,3 +121,29 @@ Almost all of the malloc is the EE heap (`HOST_EE_HEAP`, 28 MB,
 or later, with `MEMSIZE=1`** (about 52 MB user memory, about 13 MB left for
 renderer and audio buffers; VRAM is separate). The PSP-1000 (24 MB user)
 cannot hold the EE heap. `[mem]` lines in `mvc2_psp.log` report malloc use.
+
+## Platform shell (P11)
+
+`port/platform/platform_psp.c` implements the loop and lifecycle parts of
+`platform.h` (input: P12, renderer: P21). Logic steps are locked to the
+59.94 Hz display (the NAOMI's rate): one step per vblank, one more per missed
+vblank after an overrun (vblank counter, not wall clock), capped at
+`plat_set_max_steps`; render frames drop, logic frames do not. HOME -> Exit
+sets a flag the loop polls (3 s fallback), power suspend calls `on_pause`, and
+the CPU runs at 333 MHz. `env.txt`: `FRAMES=N` runs headless; without it the
+runner is real time; `QUIT_AFTER=N` fires the exit callback at frame N
+(PPSSPP has no HOME menu).
+
+Speed (PPSSPP 1.20.4, JIT, cycle-estimated time, attract mode, `-O2`):
+
+| | ms per logic frame |
+|---|---:|
+| `-O0` (no build type) | 300 |
+| `-O2`, 222 MHz | 140-180 |
+| `-O2`, 222 MHz, `MVC2_PS2_FLOAT=OFF` | 129 |
+| `-O2`, 333 MHz | 94-121 |
+
+Budget is 16.7 ms. Not yet profiled or measured on hardware.
+
+Builds now need `EMSDK=~/Sites/emsdk-brew` in the environment: with emcc on
+PATH, the signature pass takes its wasm path.

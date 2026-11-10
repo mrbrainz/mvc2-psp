@@ -34,27 +34,10 @@ window.BACKLOG = {
   "P03",
   "P04",
   "P05",
-  "P06"
+  "P06",
+  "P11"
  ],
  "activities": [
-  {
-   "id": "P11",
-   "order": 5,
-   "phase": "P1",
-   "size": "M",
-   "status": "Backlog",
-   "depends": [
-    "P03"
-   ],
-   "read": [
-    "port/docs/PLATFORM_SURFACE.md",
-    "port/platform/platform.h",
-    "port/platform/platform_sdl.c"
-   ],
-   "title": "PSP platform shell",
-   "description": "platform_psp.c: main loop, vsync 60Hz, exit callback, home-button handling, timing.",
-   "done_when": "Game loop runs at 60Hz in PPSSPP with clean exit via HOME."
-  },
   {
    "id": "P12",
    "order": 6,
@@ -182,7 +165,8 @@ window.BACKLOG = {
    "depends": [
     "P21",
     "P31",
-    "P13"
+    "P13",
+    "P09"
    ],
    "read": [
     "port/docs/ORACLE_FUZZ.md"
@@ -255,6 +239,23 @@ window.BACKLOG = {
    "title": "PSP-1000 feasibility: arena high-water",
    "description": "PSP-1000 has ~24 MB user memory; the 28 MB EE heap (22 MB arena + 6 MB pool) does not fit. Measure the arena and pool high-water over full fights and decide if a smaller arena is possible without changing behaviour.",
    "done_when": "High-water figures recorded in PSP.md and a go/no-go on PSP-1000 support."
+  },
+  {
+   "id": "P09",
+   "order": 4.2,
+   "phase": "P0",
+   "size": "M",
+   "status": "Ready",
+   "depends": [
+    "P11"
+   ],
+   "read": [
+    "port/docs/PSP.md",
+    "port/platform/platform_psp.c"
+   ],
+   "title": "Profile the logic frame on PSP",
+   "description": "A logic frame costs 94-121 ms in PPSSPP at 333 MHz (-O2), budget 16.7 ms; EE float emulation is ~10-25% of it. Find where the time goes (PPSSPP profiler or sampled sceRtc timers around mvc2_frame stages), and measure on real hardware if available. Also re-run compare_ports.py: host_sigs now come from the wasm path, not caller guesses.",
+   "done_when": "Top costs per frame listed in PSP.md with a plan (or no-go) for 60 Hz; compare_ports.py still 0 diverging words."
   }
  ]
 };

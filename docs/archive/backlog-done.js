@@ -106,5 +106,24 @@ window.BACKLOG_ARCHIVE = [
   "description": "Measure heap/static footprint against PSP-1000 (~24MB user) and Slim (~52MB); decide minimum model.",
   "done_when": "Footprint numbers + chosen target model recorded in PSP.md.",
   "note": "~38.5 MB: 9.5 MB static + 28.3 MB malloc (EE heap filled at boot by the 22 MB arena + 6 MB pool; flat over 600 frames). Minimum model PSP-2000 with MEMSIZE=1; PSP-1000 cannot fit. [mem] report in the log; PPSSPP only."
+ },
+ {
+  "id": "P11",
+  "order": 5,
+  "phase": "P1",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P03"
+  ],
+  "read": [
+   "port/docs/PLATFORM_SURFACE.md",
+   "port/platform/platform.h",
+   "port/platform/platform_sdl.c"
+  ],
+  "title": "PSP platform shell",
+  "description": "platform_psp.c: main loop, vsync 60Hz, exit callback, home-button handling, timing.",
+  "done_when": "Game loop runs at 60Hz in PPSSPP with clean exit via HOME.",
+  "note": "platform_psp.c: vblank-locked 59.94 Hz loop with catch-up cap, stats, suspend pause, HOME exit via flag (tested with sceKernelNotifyCallback: clean quit, log closed), 333 MHz, -O2. 60 Hz NOT reached: logic costs 94-121 ms/frame in PPSSPP; moved to P09."
  }
 ];

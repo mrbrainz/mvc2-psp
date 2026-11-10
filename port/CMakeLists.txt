@@ -235,7 +235,7 @@ if(MVC2_PSP)
   # entry (psp-gcc) calls it.  See port/docs/PSP.md.
   list(FILTER MVC2_STUB_SRCS EXCLUDE REGEX "host_main\\.c$")
   list(APPEND MVC2_STUB_SRCS "${MVC2_ROOT}/port/psp/host/psp_main.c"
-    "${MVC2_ROOT}/port/psp/host/libc_o32.c")
+    "${MVC2_ROOT}/port/psp/host/libc_o32.c" "${MVC2_ROOT}/port/platform/platform_psp.c")
   target_include_directories(mvc2_host_core SYSTEM PRIVATE ${MVC2_PSP_HOST_INCLUDES})
   set(MVC2_PSP_ENTRY "${CMAKE_BINARY_DIR}/psp_entry.o")
   add_custom_command(OUTPUT ${MVC2_PSP_ENTRY}
@@ -251,7 +251,7 @@ target_compile_options(mvc2_host PRIVATE -fno-common)
 target_link_libraries(mvc2_host PRIVATE mvc2_game)
 if(MVC2_PSP)
   target_include_directories(mvc2_host SYSTEM PRIVATE ${MVC2_PSP_HOST_INCLUDES} "${MVC2_ROOT}/port/psp/host")
-  target_link_libraries(mvc2_host PRIVATE pspdebug pspdisplay pspge pspctrl)
+  target_link_libraries(mvc2_host PRIVATE pspdebug pspdisplay pspge pspctrl psprtc psppower)
   target_link_options(mvc2_host PRIVATE -Wl,--wrap=fseeko)
   # EBOOT.PBP: fixup imports, strip, SFO, pack (pspdev tools)
   add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/EBOOT.PBP"
