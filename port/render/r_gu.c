@@ -1,0 +1,855 @@
+/* PSP renderer (sceGu): the 2D core of the "fl" render library (render.h),
+ * for the PSP build only.  r_gl.c is the GL implementation and is not used
+ * or changed; the GL-free game logic here (state setter, blend decode,
+ * primitive set-up, texture/palette handle tables) follows it and must be
+ * kept in step with it by hand.  Characters (fl_char_*) and meshes
+ * (fl_model_*, fl_clay_*) are P24/P25.
+ *
+ * Compiled o32 (clang) like the rest of the host; sceGu is EABI, so the calls
+ * with more than four arguments go through port/psp/host/psp_gu_shim.c.
+ *
+ * Differences from the GL path, by design or for now:
+ *  - No 640x480 canvas: primitives are scaled straight into the 480x272 back
+ *    buffer, fitting the displayed area (fl_set_display, 640x448 in game)
+ *    with its aspect ratio kept (P23 owns presentation options).
+ *  - Indexed textures use the GE's own CLUT (T8 + 256-entry 8888 palette),
+ *    so bilinear filtering of them is the GE's (after the lookup), as GL's
+ *    hand-written 4-tap filter also is.
+ *  - 2D vertices are affine (GU_TRANSFORM_2D): the GS's perspective STQ on
+ *    triangles with w != 1 is not reproduced.
+ *  - Destination alpha (blend factors 4/5): the PSP keeps stencil in the
+ *    frame buffer's alpha, so those modes are approximate.
+ *  - Textures wider or taller than 512 are not drawn (logged once each). */
+#include <malloc.h>
+#include <math.h>
+#include <pspgu.h>
+#include <pspdisplay.h>
+#include <pspkernel.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "render.h"
+#include "decode.h"
+#include "../psp/host/psp_gu_shim.h"
+
+/* sceGu calls with > 4 args must go through the EABI shim */
+#define sceGuBlendFunc use_gu_blend
+#define sceGuDrawArray use_gu_draw
+#define sceGuTexImage use_gu_teximage
+
+#define SCR_W 480
+#define SCR_H 272
+#define BUF_W 512
+#define MAX_TEX 4096
+#define MAX_PAL 4096
+#define MAX_VERTS 4096          /* per batch */
+#define LIST_BYTES (1 << 20)    /* display list; restarted mid-frame when nearly full */
+
+enum { RM_FLAT = 0, RM_RGBA = 1, RM_INDEX = 2 };
+
+typedef struct GuVtx { float u, v; uint32_t c; float x, y, z; } GuVtx;   /* TEXTURE_32BITF|COLOR_8888|VERTEX_32BITF */
+#define GU_VTYPE (GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_2D)
+
+typedef struct TexRec { uint8_t *pix; int w, h, fmt, used, pw, ph, warned; } TexRec;
+typedef struct PalRec { uint32_t *clut; int ncolors, used; } PalRec;
+
+static unsigned int __attribute__((aligned(16))) list[LIST_BYTES / 4];
+static uint32_t __attribute__((aligned(16))) black_clut[256];
+
+static struct {
+    int inited, list_open, drawn_since_swap;
+    TexRec tex[MAX_TEX];
+    PalRec pal[MAX_PAL];
+    GuVtx verts[MAX_VERTS];
+    int nverts;
+    /* batch key */
+    int cur_tex, cur_mode, cur_pal;   /* tex/pal: record index, -1 none */
+    /* fl state (func_003DF850) */
+    uint32_t state_ad0, state_ad4, cur_texture, tex_slots[4];
+    uint32_t material_color, fog_color, global_mod, clear_color, state_5f;
+    float fog_a, fog_b;
+    float matrices[0x60][16];
+    uint8_t materials[32][76];
+    uint8_t lights[3][100];
+    int vp_i[4];
+    float vp_f[2];
+    int ztest, zwrite;
+    int blend_ok, bl_op, bl_src, bl_dst;
+    unsigned bl_srcfix, bl_dstfix;
+    int scissor[4];
+    int origin_x, origin_y;
+    int flip_clear, clear_pending, drawn;
+    int disp_w, disp_h;
+    float sx, sy, ox, oy;    /* game display area -> screen */
+} R;
+
+/* ---------------- display list ---------------- */
+static void set_mapping(void)
+{
+    int dw = R.disp_w > 0 ? R.disp_w : FL_SCREEN_W, dh = R.disp_h > 0 ? R.disp_h : FL_SCREEN_H;
+    float s = (float)SCR_W / dw < (float)SCR_H / dh ? (float)SCR_W / dw : (float)SCR_H / dh;
+    R.sx = R.sy = s;
+    R.ox = (SCR_W - dw * s) * 0.5f;
+    R.oy = (SCR_H - dh * s) * 0.5f;
+}
+
+static void apply_scissor(void)
+{
+    int x0 = (int)floorf(R.scissor[0] * R.sx + R.ox), y0 = (int)floorf(R.scissor[1] * R.sy + R.oy);
+    int x1 = (int)ceilf((R.scissor[0] + R.scissor[2]) * R.sx + R.ox);
+    int y1 = (int)ceilf((R.scissor[1] + R.scissor[3]) * R.sy + R.oy);
+    if (x1 > SCR_W) x1 = SCR_W;
+    if (y1 > SCR_H) y1 = SCR_H;
+    sceGuScissor(x0, y0, x1, y1);
+}
+
+static void list_open(void)
+{
+    if (R.list_open) return;
+    sceGuStart(GU_DIRECT, list);
+    R.list_open = 1;
+    sceGuEnable(GU_SCISSOR_TEST);
+    apply_scissor();
+}
+
+static void list_close(void)
+{
+    if (!R.list_open) return;
+    sceGuFinish();
+    sceGuSync(0, 0);
+    R.list_open = 0;
+}
+
+int r_init(void)
+{
+    memset(&R, 0, sizeof R);
+    R.cur_tex = R.cur_pal = -1;
+    R.vp_i[2] = FL_SCREEN_W; R.vp_i[3] = FL_SCREEN_H; R.vp_f[1] = 1.f;
+    for (int i = 0x16; i < 0x39; i++)
+        for (int k = 0; k < 16; k++) R.matrices[i][k] = (k % 5) == 0 ? 1.f : 0.f;
+    R.global_mod = 0xFFFFFFFFu;
+    R.fog_a = R.fog_b = 10000000.f;
+    set_mapping();
+
+    /* VRAM: draw + display 8888 (512x272 each), depth 16-bit */
+    sceGuInit();
+    sceGuStart(GU_DIRECT, list);
+    sceGuDrawBuffer(GU_PSM_8888, (void *)0, BUF_W);
+    sceGuDispBuffer(SCR_W, SCR_H, (void *)(BUF_W * SCR_H * 4), BUF_W);
+    sceGuDepthBuffer((void *)(BUF_W * SCR_H * 8), BUF_W);
+    sceGuOffset(2048 - SCR_W / 2, 2048 - SCR_H / 2);
+    sceGuViewport(2048, 2048, SCR_W, SCR_H);
+    sceGuDepthRange(0, 65535);
+    sceGuScissor(0, 0, SCR_W, SCR_H);
+    sceGuEnable(GU_SCISSOR_TEST);
+    sceGuDisable(GU_CULL_FACE);
+    sceGuShadeModel(GU_SMOOTH);
+    sceGuEnable(GU_ALPHA_TEST);
+    sceGuAlphaFunc(GU_GREATER, 0, 0xFF);   /* GS TEST: alpha != 0 */
+    sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
+    sceGuClutMode(GU_PSM_8888, 0, 0xFF, 0);
+    sceGuClearColor(0);
+    sceGuClearDepth(0);
+    sceGuClear(GU_COLOR_BUFFER_BIT | GU_DEPTH_BUFFER_BIT);
+    sceGuFinish();
+    sceGuSync(0, 0);
+    sceDisplayWaitVblankStart();
+    sceGuDisplay(GU_TRUE);
+    R.inited = 1;
+    fl_default_state();
+    return 0;
+}
+
+void r_shutdown(void)
+{
+    list_close();
+    sceGuTerm();
+    R.inited = 0;
+}
+
+/* The game's display list for this frame is finished: show it.  Called once
+ * per display frame by the PSP runner (the platform's render callback). */
+void r_gu_present(void)
+{
+    if (!R.inited) return;
+    if (R.nverts) {
+        extern void r_flush(void);
+        r_flush();
+    }
+    list_close();
+    if (R.drawn_since_swap) {
+        sceGuSwapBuffers();
+        R.drawn_since_swap = 0;
+    }
+}
+
+/* ---------------- state application ---------------- */
+static void apply_blend_depth(void)
+{
+    if (R.blend_ok) {
+        GuBlendArgs b = { R.bl_op, R.bl_src, R.bl_dst, R.bl_srcfix, R.bl_dstfix };
+        sceGuEnable(GU_BLEND);
+        gu_blend(&b);
+    } else {
+        sceGuDisable(GU_BLEND);
+    }
+    sceGuEnable(GU_DEPTH_TEST);
+    switch (R.ztest) {
+    case 0: sceGuDepthFunc(GU_NEVER); break;
+    case 3: sceGuDepthFunc(GU_GREATER); break;
+    case 7: sceGuDepthFunc(GU_ALWAYS); break;
+    default: sceGuDepthFunc(GU_GEQUAL); break;
+    }
+    sceGuDepthMask(R.zwrite ? GU_FALSE : GU_TRUE);   /* 1 = writes masked */
+}
+
+/* the clear due after a flip, before the first draw of the new frame */
+static void canvas_bind(void)
+{
+    list_open();
+    if (R.clear_pending) {
+        uint32_t c = R.clear_color;
+        sceGuScissor(0, 0, SCR_W, SCR_H);
+        sceGuDepthMask(GU_FALSE);
+        sceGuClearColor(0xFF000000u | (c & 0xFF) << 16 | (c & 0xFF00) | ((c >> 16) & 0xFF));
+        sceGuClearDepth(0);
+        sceGuClear(GU_COLOR_BUFFER_BIT | GU_DEPTH_BUFFER_BIT);
+        apply_scissor();
+        R.clear_pending = 0;
+    }
+    R.drawn = 1;
+    R.drawn_since_swap = 1;
+}
+
+static int texture_filter_linear(void) { return (R.state_ad0 & 0x10000) ? 0 : 1; }
+
+void r_flush(void)
+{
+    GuVtx *v;
+    if (!R.nverts || !R.inited) { R.nverts = 0; return; }
+    canvas_bind();
+    if (sceGuCheckList() > LIST_BYTES - (int)sizeof R.verts - 4096) {   /* nearly full */
+        list_close();
+        list_open();
+    }
+    if (R.cur_mode == RM_FLAT || R.cur_tex < 0) {
+        sceGuDisable(GU_TEXTURE_2D);
+    } else {
+        TexRec *t = &R.tex[R.cur_tex];
+        GuTexImageArgs ti = { 0, t->pw, t->ph, t->pw, t->pix };
+        sceGuEnable(GU_TEXTURE_2D);
+        if (R.cur_mode == RM_INDEX) {
+            const uint32_t *clut = (R.cur_pal >= 0 && R.pal[R.cur_pal].used) ? R.pal[R.cur_pal].clut : black_clut;
+            sceGuClutMode(GU_PSM_8888, 0, 0xFF, 0);
+            sceGuClutLoad(256 / 8, clut);
+            sceGuTexMode(GU_PSM_T8, 0, 0, 0);
+        } else {
+            sceGuTexMode(GU_PSM_8888, 0, 0, 0);
+        }
+        gu_teximage(&ti);
+        sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
+        sceGuTexFilter(texture_filter_linear() ? GU_LINEAR : GU_NEAREST,
+                       texture_filter_linear() ? GU_LINEAR : GU_NEAREST);
+        sceGuTexWrap((R.state_ad0 & 0x20000) ? GU_CLAMP : GU_REPEAT,
+                     (R.state_ad0 & 0x20000) ? GU_CLAMP : GU_REPEAT);
+        sceGuTexFlush();
+    }
+    apply_blend_depth();
+    v = (GuVtx *)sceGuGetMemory(sizeof(GuVtx) * R.nverts);
+    memcpy(v, R.verts, sizeof(GuVtx) * R.nverts);
+    {
+        GuDrawArgs d = { GU_TRIANGLES, GU_VTYPE, R.nverts, 0, v };
+        gu_draw(&d);
+    }
+    R.nverts = 0;
+}
+
+static void use(int tex, int mode, int pal)
+{
+    if (tex != R.cur_tex || mode != R.cur_mode || (mode == RM_INDEX && pal != R.cur_pal)) {
+        r_flush();
+        R.cur_tex = tex;
+        R.cur_mode = mode;
+        R.cur_pal = pal;
+    }
+}
+
+static GuVtx *verts(int n)
+{
+    GuVtx *v;
+    if (R.nverts + n > MAX_VERTS) r_flush();
+    v = &R.verts[R.nverts];
+    R.nverts += n;
+    return v;
+}
+
+/* ---------------- colours, depth, coordinates (as r_gl.c) ---------------- */
+static uint8_t gs_to_unorm(unsigned g) { unsigned v = (g * 255 + 64) / 128; return (uint8_t)(v > 255 ? 255 : v); }
+static unsigned halve(unsigned t) { return t == 0xFF ? 0x80 : t ? ((t >> 1) ? (t >> 1) : 1) : 0; }
+
+static uint32_t color_tex(uint32_t c)
+{
+    return gs_to_unorm(halve((c >> 16) & 0xFF)) | (uint32_t)gs_to_unorm(halve((c >> 8) & 0xFF)) << 8 |
+           (uint32_t)gs_to_unorm(halve(c & 0xFF)) << 16 | (uint32_t)gs_to_unorm(halve(c >> 24)) << 24;
+}
+
+static uint32_t color_flat(uint32_t c)
+{
+    return ((c >> 16) & 0xFF) | (c & 0xFF00) | (c & 0xFF) << 16 | (uint32_t)gs_to_unorm(halve(c >> 24)) << 24;
+}
+
+/* GS: larger Z is nearer; depth buffer cleared to 0, tested GEQUAL. */
+static float depth_of(float z)
+{
+    float d = -z;
+    d = d < -1.f ? -1.f : d > 1.f ? 1.f : d;
+    return (d + 1.f) * 0.5f * 65535.f;
+}
+
+static void put(GuVtx *o, const FlVec4 *v, const float *uv, uint32_t c, int tw, int th)
+{
+    o->x = floorf(v->x - (float)R.origin_x) * R.sx + R.ox;
+    o->y = floorf(v->y - (float)R.origin_y) * R.sy + R.oy;
+    o->z = depth_of(v->z);
+    o->u = uv ? uv[0] * tw : 0.f;
+    o->v = uv ? uv[1] * th : 0.f;
+    o->c = c;
+}
+
+/* ---------------- blend: func_003E06D0 (GU factors) ---------------- */
+static void set_blend_from_state(void)
+{
+    uint32_t f = R.state_ad0;
+    int src = f & 0xF, dst = (f >> 4) & 0xF, ok = 1;
+    int op = GU_ADD, sf = GU_FIX, df = GU_FIX;
+    unsigned sfix = 0, dfix = 0;
+    enum { ONE = -1, ZERO = -2 };
+#define B(o, s, d) do { op = (o); sf = (s); df = (d); } while (0)
+    switch (src) {
+    case 1:
+        switch (dst) {
+        case 1: if ((f & 0xC00) == 0x400) B(GU_SUBTRACT, ONE, ONE); else B(GU_ADD, ONE, ONE); break;
+        case 0: B(GU_ADD, ONE, ZERO); break;
+        case 2: B(GU_ADD, ONE, GU_SRC_ALPHA); break;
+        case 3: B(GU_SUBTRACT, ONE, GU_SRC_ALPHA); break;
+        case 4: B(GU_ADD, ONE, GU_DST_ALPHA); break;
+        case 5: B(GU_SUBTRACT, ONE, GU_DST_ALPHA); break;
+        default: ok = 0;
+        }
+        break;
+    case 0:
+        switch (dst) {
+        case 1: B(GU_ADD, ZERO, ONE); break;
+        case 0: B(GU_ADD, ZERO, ZERO); break;
+        case 2: B(GU_ADD, ZERO, GU_SRC_ALPHA); break;
+        case 3: B(GU_ADD, ZERO, GU_ONE_MINUS_SRC_ALPHA); break;
+        case 4: B(GU_ADD, ZERO, GU_DST_ALPHA); break;
+        case 5: B(GU_ADD, ZERO, GU_ONE_MINUS_DST_ALPHA); break;
+        default: ok = 0;
+        }
+        break;
+    case 2:
+        switch (dst) {
+        case 1: B(GU_ADD, GU_SRC_ALPHA, ONE); break;
+        case 0: B(GU_ADD, GU_SRC_ALPHA, ZERO); break;
+        case 3: B(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA); break;
+        default: ok = 0;
+        }
+        break;
+    case 3:
+        switch (dst) {
+        case 0: B(GU_ADD, GU_ONE_MINUS_SRC_ALPHA, ZERO); break;
+        case 2: B(GU_ADD, GU_ONE_MINUS_SRC_ALPHA, GU_SRC_ALPHA); break;
+        default: ok = 0;
+        }
+        break;
+    case 4:
+        switch (dst) {
+        case 1: B(GU_ADD, GU_DST_ALPHA, ONE); break;
+        case 0: B(GU_ADD, GU_DST_ALPHA, ZERO); break;
+        case 5: B(GU_ADD, GU_DST_ALPHA, GU_ONE_MINUS_DST_ALPHA); break;
+        default: ok = 0;
+        }
+        break;
+    case 5:
+        switch (dst) {
+        case 0: B(GU_ADD, GU_ONE_MINUS_DST_ALPHA, ZERO); break;
+        case 4: B(GU_ADD, GU_ONE_MINUS_DST_ALPHA, GU_DST_ALPHA); break;
+        default: ok = 0;
+        }
+        break;
+    default: ok = 0;
+    }
+#undef B
+    if (!ok) return;   /* rejected pairs keep the previous blend, as on the PS2 */
+    if (sf == ONE) { sf = GU_FIX; sfix = 0xFFFFFF; } else if (sf == ZERO) { sf = GU_FIX; sfix = 0; }
+    if (df == ONE) { df = GU_FIX; dfix = 0xFFFFFF; } else if (df == ZERO) { df = GU_FIX; dfix = 0; }
+    if (R.blend_ok && op == R.bl_op && sf == R.bl_src && df == R.bl_dst && sfix == R.bl_srcfix && dfix == R.bl_dstfix)
+        return;
+    r_flush();
+    R.blend_ok = 1;
+    R.bl_op = op; R.bl_src = sf; R.bl_dst = df; R.bl_srcfix = sfix; R.bl_dstfix = dfix;
+}
+
+/* ---------------- func_003DF850 (as r_gl.c) ---------------- */
+int fl_set_render_state(int id, uintptr_t val)
+{
+    uint32_t v = (uint32_t)val;
+    if (id >= 0x19 && id < 0x39) {
+        if (val) memcpy(R.matrices[id], (const void *)val, 64);
+        return 1;
+    }
+    if (id >= 0x39 && id < 0x59) {
+        if (val) memcpy(R.materials[id - 0x39], (const void *)val, 76);
+        return 1;
+    }
+    if (id >= 0x59 && id < 0x5C) {
+        uint8_t *l = R.lights[id - 0x59];
+        float d[3], n;
+        if (val) memcpy(l, (const void *)val, 100);
+        memcpy(d, l + 0x34, 12);
+        n = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+        if (n > 0.f) { d[0] /= n; d[1] /= n; d[2] /= n; }
+        memcpy(l + 0x34, d, 12);
+        return 1;
+    }
+    switch (id) {
+    case 0xE: R.material_color = v; break;
+    case 0xF: R.fog_color = v; break;
+    case 0x10: memcpy(&R.fog_a, &v, 4); break;
+    case 0x11: memcpy(&R.fog_b, &v, 4); break;
+    case 0x12: R.state_ad4 = (R.state_ad4 & 0xFFFE7FFF) | (v ? 0x8000 : 0); break;
+    case 1:
+        R.state_ad4 &= 0xFFFFFC7F;
+        if (v == 1) R.state_ad4 |= 0x100;
+        else if (v == 2) R.state_ad4 |= 0x80;
+        break;
+    case 2:
+        R.state_ad4 &= 0xFFFFFFF3;
+        if (v == 1) R.state_ad4 |= 4;
+        else if (v == 2) R.state_ad4 |= 8;
+        break;
+    case 0xD:
+        if ((R.state_ad0 & 0xC00) != v) {
+            R.state_ad0 = (R.state_ad0 & 0xFFFFF3FF) | v;
+            set_blend_from_state();
+        }
+        break;
+    case 0x5D:
+        if ((R.state_ad0 & 0xFF) != v) {
+            R.state_ad0 = (R.state_ad0 & 0xFFFFFF00) | v;
+            set_blend_from_state();
+        }
+        break;
+    case 4: case 5: case 6: case 7:
+        if (id == 4) R.cur_texture = v;
+        R.tex_slots[id - 4] = v;
+        break;
+    case 0x14: fl_set_clear_color(v); break;
+    case 0x16: memcpy(R.matrices[0x16], (const void *)val, 64); break;
+    case 0x17: memcpy(R.matrices[0x17], (const void *)val, 64); break;
+    case 0x18:
+        if (val) {
+            const int32_t *q = (const int32_t *)val;
+            memcpy(R.vp_i, q, 16);
+            memcpy(R.vp_f, q + 4, 8);
+            fl_set_scissor(R.vp_i[0], R.vp_i[1], R.vp_i[2], R.vp_i[3]);
+        }
+        break;
+    case 0x15:
+        R.state_ad4 &= 0xFFFFFFFC;
+        if (v == 2) R.state_ad4 |= 2;
+        break;
+    case 0x5C: R.state_ad4 = (R.state_ad4 & 0xFFFFFF) | v; break;
+    case 0x5F: R.state_5f = v; break;
+    case 0x61: R.state_ad4 = (R.state_ad4 & 0xFFFFBFFF) | (v ? 0x4000 : 0); break;
+    case 0x62:
+        if (((R.state_ad0 & 0x10000) != 0) != (v == 0x10000)) r_flush();
+        R.state_ad0 = (R.state_ad0 & 0xFFFEFFFF) | (v == 0x10000 ? 0x10000 : 0);
+        break;
+    case 0x63:
+        if (((R.state_ad0 & 0x20000) != 0) != (v == 0x20000)) r_flush();
+        R.state_ad0 = (R.state_ad0 & 0xFFF9FFFF) | (v == 0x20000 ? 0x20000 : 0);
+        break;
+    case 0x65: R.state_ad4 = (R.state_ad4 & 0xFFFDFFFF) | (v ? 0x20000 : 0); break;
+    case 0x66: R.global_mod = v; break;
+    case 0xC: R.state_ad4 = (R.state_ad4 & 0xFFFFFFBF) | (v == 1 ? 0x40 : 0); break;
+    case 0x6C:
+        if ((v == 0 || v == 1 || v == 3 || v == 7) && R.ztest != (int)v) {
+            r_flush();
+            R.ztest = (int)v;
+        }
+        /* fall through: the original 0x6C runs the Z-write case too */
+    case 0x6B:
+        if (R.zwrite != (v != 0)) r_flush();
+        R.zwrite = v != 0;
+        break;
+    default: break;
+    }
+    return 1;
+}
+
+uintptr_t fl_get_render_state(int id)
+{
+    switch (id) {
+    case 1:
+        switch (R.state_ad4 & 0x380) { case 0x100: return 1; case 0x80: return 2; default: return 0; }
+    case 0x15:
+        switch (R.state_ad4 & 3) { case 0: return 1; case 2: return 2; default: return 0; }
+    case 4: case 5: case 6: case 7: return R.tex_slots[id - 4];
+    case 0x14: return R.clear_color;
+    default:
+        if (id >= 0x16 && id < 0x39) return (uintptr_t)R.matrices[id];
+        if (id >= 0x39 && id < 0x59) return (uintptr_t)R.materials[id - 0x39];
+        return 0;
+    }
+}
+
+void fl_sync_mode_words(uint32_t ad0, uint32_t ad4)
+{
+    if (ad0 == R.state_ad0 && ad4 == R.state_ad4) return;
+    r_flush();
+    R.state_ad0 = ad0;
+    R.state_ad4 = ad4;
+    set_blend_from_state();
+}
+
+void fl_default_state(void)
+{
+    r_flush();
+    R.state_ad4 = 0x102;
+    R.state_ad0 = 0x38B032;
+    R.blend_ok = 0;
+    set_blend_from_state();
+    R.ztest = -1;
+    fl_set_render_state(0x6C, 1);
+    fl_set_render_state(0x62, 0);
+    fl_set_scissor(0, 0, FL_SCREEN_W, FL_SCREEN_H);
+}
+
+void fl_set_scissor(int x, int y, int w, int h)
+{
+    if (x < 0) x = 0;
+    if (x + w > FL_SCREEN_W) w = FL_SCREEN_W - x;
+    if (y < 0) y = 0;
+    if (y + h > FL_SCREEN_H) h = FL_SCREEN_H - y;
+    if (w < 0) w = 0;
+    if (h < 0) h = 0;
+    r_flush();
+    R.scissor[0] = x; R.scissor[1] = y; R.scissor[2] = w; R.scissor[3] = h;
+    if (R.list_open) apply_scissor();
+}
+
+void fl_set_clear_color(uint32_t argb)
+{
+    if (R.flip_clear && argb != R.clear_color && !R.drawn) R.clear_pending = 1;
+    R.clear_color = argb;
+}
+void fl_set_origin(int x, int y) { R.origin_x = x; R.origin_y = y; }
+void fl_set_flip_clear(int on) { R.flip_clear = on != 0; }
+
+void fl_set_display(int w, int h)
+{
+    if (w <= 0 || w > FL_SCREEN_W) w = FL_SCREEN_W;
+    if (h <= 0 || h > FL_SCREEN_H) h = FL_SCREEN_H;
+    if (w == R.disp_w && h == R.disp_h) return;
+    r_flush();
+    R.disp_w = w;
+    R.disp_h = h;
+    set_mapping();
+    if (R.list_open) apply_scissor();
+}
+
+void fl_get_display(int *w, int *h)
+{
+    if (w) *w = R.disp_w > 0 ? R.disp_w : FL_SCREEN_W;
+    if (h) *h = R.disp_h > 0 ? R.disp_h : FL_SCREEN_H;
+}
+
+/* ---------------- frame ---------------- */
+void fl_frame_flip(void)
+{
+    r_flush();
+    R.clear_pending = 1;
+    R.drawn = 0;
+}
+
+void fl_frame_begin(void)
+{
+    r_flush();
+    if (!R.flip_clear) R.clear_pending = 1;
+    fl_set_render_state(0x5D, 0x32);
+    fl_set_render_state(0x62, 0x10000);
+    fl_set_scissor(R.scissor[0], R.scissor[1], R.scissor[2], R.scissor[3]);
+}
+
+void fl_frame_end(void) { r_flush(); }
+
+/* ---------------- palettes ---------------- */
+static uint32_t *clut_new(void)
+{
+    uint32_t *c = (uint32_t *)memalign(16, 256 * 4);
+    if (c) memset(c, 0, 256 * 4);
+    return c;
+}
+
+static void clut_write(uint32_t *clut, int first, int n, const uint8_t *rgba)
+{
+    if (first < 0 || first >= 256) return;
+    if (first + n > 256) n = 256 - first;
+    r_flush();   /* a batched draw may still use the old colours */
+    memcpy(clut + first, rgba, (size_t)n * 4);   /* RGBA bytes = GU 8888 */
+    sceKernelDcacheWritebackRange(clut + first, (unsigned)n * 4);
+}
+
+uint32_t fl_pal_create(int ncolors, const uint8_t *rgba)
+{
+    for (int i = 0; i < MAX_PAL; i++) {
+        if (R.pal[i].used) continue;
+        if (!(R.pal[i].clut = clut_new())) return 0;
+        R.pal[i].used = 1;
+        R.pal[i].ncolors = ncolors;
+        if (rgba) clut_write(R.pal[i].clut, 0, ncolors, rgba);
+        return (uint32_t)(i + 1) << 16;
+    }
+    return 0;
+}
+
+void fl_pal_update(uint32_t handle, int first, int n, const uint8_t *rgba)
+{
+    int i = (int)(handle >> 16) - 1;
+    if (i < 0 || i >= MAX_PAL || !R.pal[i].used) return;
+    clut_write(R.pal[i].clut, first, n, rgba);
+}
+
+int fl_pal_define(uint32_t handle, int ncolors, const uint8_t *rgba)
+{
+    int i = (int)(handle >> 16) - 1;
+    if (i < 0 || i >= MAX_PAL) return -1;
+    if (!R.pal[i].used) {
+        if (!(R.pal[i].clut = clut_new())) return -1;
+        R.pal[i].used = 1;
+    }
+    R.pal[i].ncolors = ncolors;
+    if (rgba) clut_write(R.pal[i].clut, 0, ncolors > 256 ? 256 : ncolors, rgba);
+    return 0;
+}
+
+/* ---------------- textures ---------------- */
+static int pow2(int n, int min) { int p = min; while (p < n) p <<= 1; return p; }
+static int is_index(int fmt) { return fmt == FL_TEX_IDX4 || fmt == FL_TEX_IDX8; }
+
+/* copy w x h pixels into the padded texture at (x, y) */
+static void tex_copy(TexRec *t, int x, int y, int w, int h, const void *pixels)
+{
+    int bpp = is_index(t->fmt) ? 1 : 4;
+    const uint8_t *s = (const uint8_t *)pixels;
+    if (!pixels || !t->pix) return;
+    for (int r = 0; r < h && y + r < t->ph; r++)
+        memcpy(t->pix + ((size_t)(y + r) * t->pw + x) * bpp, s + (size_t)r * w * bpp,
+               (size_t)(x + w <= t->pw ? w : t->pw - x) * bpp);
+    sceKernelDcacheWritebackRange(t->pix, (unsigned)(t->pw * t->ph * bpp));
+}
+
+static int tex_alloc(TexRec *t, int w, int h, int fmt)
+{
+    int bpp = is_index(fmt) ? 1 : 4;
+    memset(t, 0, sizeof *t);
+    t->w = w; t->h = h; t->fmt = fmt;
+    /* buffer width: 16-byte multiple (T8: 16 px, 8888: 4 px) */
+    t->pw = pow2(w, is_index(fmt) ? 16 : 4);
+    t->ph = pow2(h, 1);
+    t->pix = (uint8_t *)memalign(16, (size_t)t->pw * t->ph * bpp);
+    if (!t->pix) return -1;
+    memset(t->pix, 0, (size_t)t->pw * t->ph * bpp);
+    t->used = 1;
+    return 0;
+}
+
+static void tex_free(TexRec *t, int idx)
+{
+    r_flush();
+    if (R.cur_tex == idx) R.cur_tex = -1;
+    free(t->pix);
+    memset(t, 0, sizeof *t);
+}
+
+uint32_t fl_tex_create(int w, int h, int fmt, const void *pixels)
+{
+    for (int i = 0; i < MAX_TEX; i++) {
+        if (R.tex[i].used) continue;
+        if (tex_alloc(&R.tex[i], w, h, fmt)) return 0;
+        tex_copy(&R.tex[i], 0, 0, w, h, pixels);
+        return (uint32_t)(i + 1);
+    }
+    return 0;
+}
+
+int fl_tex_define(uint32_t handle, int w, int h, int fmt, const void *pixels)
+{
+    int i = (int)(handle & 0xFFFF) - 1;
+    TexRec *t;
+    if (i < 0 || i >= MAX_TEX || w <= 0 || h <= 0) return -1;
+    t = &R.tex[i];
+    r_flush();
+    if (!t->used || t->w != w || t->h != h || t->fmt != fmt) {
+        if (t->used) tex_free(t, i);
+        if (tex_alloc(t, w, h, fmt)) return -1;
+    }
+    tex_copy(t, 0, 0, w, h, pixels);
+    return 0;
+}
+
+int fl_tex_defined(uint32_t handle)
+{
+    int i = (int)(handle & 0xFFFF) - 1;
+    return i >= 0 && i < MAX_TEX && R.tex[i].used;
+}
+
+void fl_tex_update(uint32_t handle, int x, int y, int w, int h, const void *pixels)
+{
+    int i = (int)(handle & 0xFFFF) - 1;
+    if (i < 0 || i >= MAX_TEX || !R.tex[i].used) return;
+    r_flush();
+    tex_copy(&R.tex[i], x, y, w, h, pixels);
+}
+
+void fl_tex_release(uint32_t handle)
+{
+    int i = (int)(handle & 0xFFFF) - 1, p = (int)(handle >> 16) - 1;
+    if (i >= 0 && i < MAX_TEX && R.tex[i].used) tex_free(&R.tex[i], i);
+    if (p >= 0 && p < MAX_PAL && R.pal[p].used) {
+        r_flush();
+        if (R.cur_pal == p) R.cur_pal = -1;
+        free(R.pal[p].clut);
+        memset(&R.pal[p], 0, sizeof R.pal[p]);
+    }
+}
+
+int fl_tex_info(uint32_t handle, int *w, int *h, int *fmt)
+{
+    int i = (int)(handle & 0xFFFF) - 1;
+    if (i < 0 || i >= MAX_TEX || !R.tex[i].used) return -1;
+    if (w) *w = R.tex[i].w;
+    if (h) *h = R.tex[i].h;
+    if (fmt) *fmt = R.tex[i].fmt;
+    return 0;
+}
+
+uint32_t fl_tex_load_tim2(const uint8_t *data, size_t size, int pic)
+{
+    Tim2Pic tp;
+    uint32_t h = 0;
+    if (tim2_decode(data, size, pic, &tp)) { tim2_free(&tp); return 0; }
+    if (tp.index) {
+        h = fl_tex_create(tp.w, tp.h, tp.image_type == 4 ? FL_TEX_IDX4 : FL_TEX_IDX8, tp.index);
+        if (h) h |= fl_pal_create(tp.clut_colors ? tp.clut_colors : 16, tp.clut);
+    } else {
+        h = fl_tex_create(tp.w, tp.h, tp.image_type == 1 ? FL_TEX_RGBA16 : tp.image_type == 2 ? FL_TEX_RGBA24 : FL_TEX_RGBA32, tp.rgba);
+    }
+    tim2_free(&tp);
+    return h;
+}
+
+/* ---------------- 2D primitives ---------------- */
+/* Bind state 4 (D_004C2AEC); unknown handles are rejected as the original
+ * rejects textures without a VRAM record. */
+static TexRec *bind_current(void)
+{
+    int i = (int)(R.cur_texture & 0xFFFF) - 1, p = (int)(R.cur_texture >> 16) - 1;
+    TexRec *t;
+    if (i < 0 || i >= MAX_TEX || !R.tex[i].used) return 0;
+    t = &R.tex[i];
+    if (t->pw > 512 || t->ph > 512) {
+        if (!t->warned) fprintf(stderr, "[gu] texture %d is %dx%d (> 512): not drawn\n", i + 1, t->w, t->h);
+        t->warned = 1;
+        return 0;
+    }
+    use(i, is_index(t->fmt) ? RM_INDEX : RM_RGBA, (p >= 0 && p < MAX_PAL && R.pal[p].used) ? p : -1);
+    return t;
+}
+
+int fl_tri_tex(const FlTri *t)
+{
+    TexRec *tx = bind_current();
+    GuVtx *o;
+    if (!tx) return 0;
+    o = verts(3);
+    for (int k = 0; k < 3; k++)
+        put(&o[k], &t->v[k], t->uv[k], color_tex(t->argb[k]), tx->w, tx->h);
+    return 1;
+}
+
+int fl_tri(const FlTri *t)
+{
+    GuVtx *o;
+    use(-1, RM_FLAT, -1);
+    o = verts(3);
+    for (int k = 0; k < 3; k++)
+        put(&o[k], &t->v[k], NULL, color_flat(t->argb[k]), 0, 0);
+    return 1;
+}
+
+int fl_sprite_tex(const FlSprite *s)
+{
+    TexRec *tx = bind_current();
+    GuVtx *o;
+    uint32_t c;
+    FlVec4 a, b, tr, bl;
+    float k, uv0[2], uv1[2], uv_tr[2], uv_bl[2];
+    if (!tx) return 0;
+    c = color_tex(s->argb);
+    a = s->v[0]; b = s->v[1];
+    a.z = b.z;   /* GS SPRITE: Z from the second vertex */
+    k = (a.w != 0.f) ? b.w / a.w : 1.f;   /* one RGBAQ: uv1 * w1 / w0 */
+    uv0[0] = s->uv[0][0]; uv0[1] = s->uv[0][1];
+    uv1[0] = s->uv[1][0] * k; uv1[1] = s->uv[1][1] * k;
+    tr = (FlVec4){ b.x, a.y, b.z, 1.f };
+    bl = (FlVec4){ a.x, b.y, b.z, 1.f };
+    uv_tr[0] = uv1[0]; uv_tr[1] = uv0[1];
+    uv_bl[0] = uv0[0]; uv_bl[1] = uv1[1];
+    o = verts(6);
+    put(&o[0], &a, uv0, c, tx->w, tx->h);
+    put(&o[1], &tr, uv_tr, c, tx->w, tx->h);
+    put(&o[2], &b, uv1, c, tx->w, tx->h);
+    put(&o[3], &a, uv0, c, tx->w, tx->h);
+    put(&o[4], &b, uv1, c, tx->w, tx->h);
+    put(&o[5], &bl, uv_bl, c, tx->w, tx->h);
+    return 1;
+}
+
+int fl_quad_tex(const FlQuad *q)
+{
+    TexRec *tx = bind_current();
+    const FlVec4 *v[4] = { &q->t[0].v[0], &q->t[0].v[1], &q->t[0].v[2], &q->t[1].v[2] };
+    const float *uv[4] = { q->t[0].uv[0], q->t[0].uv[1], q->t[0].uv[2], q->t[1].uv[2] };
+    uint32_t col[4] = { q->t[0].argb[0], q->t[0].argb[1], q->t[0].argb[2], q->t[1].argb[2] };
+    static const int strip[6] = { 0, 1, 2, 1, 3, 2 };
+    GuVtx *o;
+    if (!tx) return 0;
+    o = verts(6);
+    for (int k = 0; k < 6; k++)
+        put(&o[k], v[strip[k]], uv[strip[k]], color_tex(col[strip[k]]), tx->w, tx->h);
+    return 1;
+}
+
+/* func_003ED1C0: mode 0 writes only Z = 0, mode 1 colour (A = 0) and Z;
+ * both within the scissor. */
+int fl_fill_screen(int mode, uint32_t c)
+{
+    if (mode != 0 && mode != 1) return 0;
+    r_flush();
+    if (!R.inited) return 0;
+    canvas_bind();
+    sceGuDepthMask(GU_FALSE);
+    sceGuClearDepth(0);
+    if (mode == 1) {
+        sceGuClearColor((c & 0xFF) << 16 | (c & 0xFF00) | ((c >> 16) & 0xFF));
+        sceGuClear(GU_COLOR_BUFFER_BIT | GU_DEPTH_BUFFER_BIT);
+    } else {
+        sceGuClear(GU_DEPTH_BUFFER_BIT);
+    }
+    return 0;
+}
+
+void r_stats(int *d, int *v) { if (d) *d = 0; if (v) *v = 0; }

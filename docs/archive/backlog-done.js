@@ -163,5 +163,26 @@ window.BACKLOG_ARCHIVE = [
   "description": "platform_psp.c: main loop, vsync 60Hz, exit callback, home-button handling, timing.",
   "done_when": "Game loop runs at 60Hz in PPSSPP with clean exit via HOME.",
   "note": "platform_psp.c: vblank-locked 59.94 Hz loop with catch-up cap, stats, suspend pause, HOME exit via flag (tested with sceKernelNotifyCallback: clean quit, log closed), 333 MHz, -O2. 60 Hz NOT reached: logic costs 94-121 ms/frame in PPSSPP; moved to P09."
+ },
+ {
+  "id": "P21",
+  "order": 5,
+  "phase": "P2",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P11"
+  ],
+  "read": [
+   "port/docs/RENDERER.md",
+   "port/render/render.h",
+   "port/render/r_internal.h",
+   "port/render/r_gl.c",
+   "port/host/fe/fe_render.c"
+  ],
+  "title": "sceGu renderer: 2D core",
+  "description": "New port/render/r_gu.c (r_gl.c untouched; its GL-free logic copied): GU init, batching (r_use/r_verts/r_flush), flat/RGBA/indexed+CLUT textures, blend/depth/scissor state, fl_* 2D prims, TIM2, present scaled to 480x272. PSP target builds fe_render.c + r_char/r_font/decode with it.",
+  "done_when": "Title screen and logos render recognisably in PPSSPP (screenshot), still 59.94 fps.",
+  "note": "r_gu.c (sceGu) behind unchanged fe_render.c: save-data warning text and ADX logo render correctly in PPSSPP, 0 rejected prims, 59.94 fps (update 0.9-4.2 ms). Title/CAPCOM logo are mesh-drawn, so moved to P25. Affine 2D tris, approx dest-alpha blends."
  }
 ];

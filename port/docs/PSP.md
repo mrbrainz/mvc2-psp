@@ -199,3 +199,26 @@ FCSR is per thread: any thread that runs game code must call
 1800-frame attract run (logic 0.24-0.56 ms/frame), and state as below.
 Verified in PPSSPP only; hardware may differ on denormal inputs and division
 by zero (EE: largest finite), so P42 checks on a device.
+
+## Renderer: 2D core (P21)
+
+`port/render/r_gu.c` implements the `fl_*` API of `render.h` with sceGu, for
+the PSP build only; upstream's `fe_render.c` binds the game's render-library
+calls to it unchanged, and `r_gl.c` is not used. Its GL-free logic (state
+setter, blend decode, primitive set-up, texture/palette tables) is a copy of
+`r_gl.c`'s and has to be kept in step by hand. sceGu is EABI; the three calls
+with more than four arguments go through `port/psp/host/psp_gu_shim.c`.
+
+- Primitives are scaled straight into the 480x272 back buffer, fitting the
+  game's displayed area (640x448) with its aspect kept (389x272, centred).
+- Indexed textures use the GE's CLUT (T8 + 256-colour 8888 palette);
+  textures live in RAM, padded to powers of two; > 512 is not drawn.
+- Depth as the GS: larger is nearer, cleared to 0, GEQUAL.
+- Not reproduced yet: perspective STQ on 2D triangles (affine), destination
+  alpha blend factors (the PSP keeps stencil in alpha).
+
+`DRAWLOG=1` in `env.txt` logs the frontend's draw counters per 60 frames.
+Attract run: states 1 8 (save-data warning, ~38 sprites a frame) and 1 13
+(ADX logo) draw correctly with nothing rejected; states 1 1 and 1 2 (CAPCOM
+logo, title, demo fight) draw through the mesh and character paths, P24/P25.
+59.94 fps, update 0.9-4.2 ms a frame (PPSSPP).

@@ -37,7 +37,8 @@ window.BACKLOG = {
   "P06",
   "P09",
   "P10",
-  "P11"
+  "P11",
+  "P21"
  ],
  "activities": [
   {
@@ -89,26 +90,6 @@ window.BACKLOG = {
    "title": "Saves on PSP",
    "description": "Settings/save file on memory stick.",
    "done_when": "Options survive restart."
-  },
-  {
-   "id": "P21",
-   "order": 5,
-   "phase": "P2",
-   "size": "M",
-   "status": "In progress",
-   "depends": [
-    "P11"
-   ],
-   "read": [
-    "port/docs/RENDERER.md",
-    "port/render/render.h",
-    "port/render/r_internal.h",
-    "port/render/r_gl.c",
-    "port/host/fe/fe_render.c"
-   ],
-   "title": "sceGu renderer: 2D core",
-   "description": "New port/render/r_gu.c (r_gl.c untouched; its GL-free logic copied): GU init, batching (r_use/r_verts/r_flush), flat/RGBA/indexed+CLUT textures, blend/depth/scissor state, fl_* 2D prims, TIM2, present scaled to 480x272. PSP target builds fe_render.c + r_char/r_font/decode with it.",
-   "done_when": "Title screen and logos render recognisably in PPSSPP (screenshot), still 59.94 fps."
   },
   {
    "id": "P22",
@@ -250,7 +231,7 @@ window.BACKLOG = {
    "order": 5.01,
    "phase": "P2",
    "size": "M",
-   "status": "Backlog",
+   "status": "Ready",
    "depends": [
     "P21"
    ],
@@ -267,7 +248,7 @@ window.BACKLOG = {
    "order": 5.02,
    "phase": "P2",
    "size": "L",
-   "status": "Backlog",
+   "status": "Ready",
    "depends": [
     "P21"
    ],
@@ -278,7 +259,7 @@ window.BACKLOG = {
    ],
    "title": "sceGu renderer: stage meshes",
    "description": "Mesh path on GU in a separate r_gu_mesh.c (r_mesh.c untouched): model load to GU vertex buffers, transforms, lighting/fog as the GL path does.",
-   "done_when": "All stages render in PPSSPP, fight at 59.94 fps."
+   "done_when": "CAPCOM logo, title screen and all stages render in PPSSPP, fight at 59.94 fps."
   }
  ]
 };

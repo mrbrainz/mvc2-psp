@@ -8,6 +8,7 @@
  *   QUIT_AFTER=N    real time: fire the exit callback at frame N, as
  *                   HOME -> Exit does (PPSSPP has no HOME menu)
  *   PROFILE=1       stage timings (psp_prof.c)
+ *   DRAWLOG=1       draw counters per 60 frames
  *   anything else   setenv, e.g. MVC2_STATE_DUMP / MVC2_STATE_SNAP for
  *                   port/tools/oracle/compare_ports.py, MVC2_PS2FP_OFF=1
  * See port/docs/PSP.md. */
@@ -19,9 +20,13 @@
 #include "../../host/host_loop.h"
 #include "../../host/runahead.h"
 #include "../../platform/platform.h"
+#include "host.h"
 #include "psp_entry.h"
 
 unsigned psp_fpu_init(void);   /* psp_fpu.c */
+int r_init(void);              /* port/render/r_gu.c */
+void r_gu_present(void);
+void fe_render_init(void);     /* port/host/fe/fe_render.c */
 
 /* the o32/EABI boundary items the host relies on (port/docs/PSP.md) */
 static void selftest(void)
@@ -63,11 +68,26 @@ static int load_env(int frames)
 
 static long quit_after;
 
+/* DRAWLOG=1 (testing): the frontend's draw counters (fe_render.c fe_cnt:
+ * tri_tex, tri, sprite, quad, fill, then rejected tri_tex/sprite/quad),
+ * summed over each 60 frames */
+extern int fe_cnt[8];
+static int drawlog = -1;
+
 static void rt_update(void *u)
 {
     PlatStats st;
     (void)u;
+    if (drawlog < 0)
+        drawlog = getenv("DRAWLOG") != NULL;
     mvc2_frame();
+    if (drawlog && mvc2_host_frame % 60 == 0) {
+        const unsigned char *g = (const unsigned char *)EE_BSS_PTR(0x004F4300);
+        fprintf(stderr, "[draw] frame %ld state %d %d %d: tt %d t %d sp %d q %d fill %d | rej tt %d sp %d q %d\n",
+                (long)mvc2_host_frame, g[0], g[1], g[2], fe_cnt[0], fe_cnt[1], fe_cnt[2], fe_cnt[3], fe_cnt[4],
+                fe_cnt[5], fe_cnt[6], fe_cnt[7]);
+        memset(fe_cnt, 0, sizeof fe_cnt);
+    }
     if (quit_after && mvc2_host_frame == quit_after)
         psp_test_exit();
     if (mvc2_host_frame % 300 == 0) {   /* every 5 s */
@@ -75,6 +95,12 @@ static void rt_update(void *u)
         fprintf(stderr, "[plat] frame %ld: logic %.2f fps, update %.2f ms, slowed %d\n",
                 (long)mvc2_host_frame, st.logic_fps, st.update_ms, st.slowed);
     }
+}
+
+static void rt_render(void *u)
+{
+    (void)u;
+    r_gu_present();
 }
 
 static void rt_pause(void *u, int paused)
@@ -95,16 +121,19 @@ int mvc2_psp_run(int frames)
     psp_log("[host] boot\n");
     if (host_disc_open("ms0:/PSP/GAME/mvc2/mvc2.iso") != 0)
         psp_log("[host] no disc image: file loads will fail\n");
+    if (r_init() == 0)
+        fe_render_init();   /* the game's render-library calls draw with sceGu */
     mvc2_boot(1);
     psp_mem_report("after boot");
     if (frames > 0) {
         while (mvc2_host_frame < frames) {
             mvc2_frame();
+            r_gu_present();
             if (mvc2_host_frame % 60 == 0)
                 fprintf(stderr, "frame %ld hash %016llx\n", (long)mvc2_host_frame, ra_state_hash());
         }
     } else {
-        PlatApp app = {0, rt_update, 0, rt_pause};
+        PlatApp app = {0, rt_update, rt_render, rt_pause};
         const char *q = getenv("QUIT_AFTER");
         quit_after = q ? atol(q) : 0;
         plat_init(0);

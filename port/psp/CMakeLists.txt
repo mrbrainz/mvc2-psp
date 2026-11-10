@@ -49,12 +49,16 @@ target_include_directories(psp_host_core SYSTEM PRIVATE ${PSP_INC})
 target_compile_options(psp_host_core PRIVATE -fno-common -Wall -Wno-unused-function)
 set_source_files_properties(${HOST_CORE_SRCS} PROPERTIES OBJECT_DEPENDS "${GLUE}/mvc2_host_protos.h")
 
-# ---- module entry: psp-gcc (EABI32); everything else is clang o32 ----------
-set(PSP_ENTRY "${CMAKE_BINARY_DIR}/psp_entry.o")
-add_custom_command(OUTPUT ${PSP_ENTRY}
-  COMMAND ${PSPDEV}/bin/psp-gcc -O2 -G0 -I${PSPDEV}/psp/sdk/include -D_PSP_FW_VERSION=600
-          -c "${PSP_DIR}/host/psp_entry.c" -o ${PSP_ENTRY}
-  DEPENDS "${PSP_DIR}/host/psp_entry.c" "${PSP_DIR}/host/psp_entry.h")
+# ---- psp-gcc (EABI32) objects: module entry, sceGu shims; the rest is o32 --
+set(PSP_EABI_OBJS "")
+foreach(f psp_entry psp_gu_shim)
+  set(_o "${CMAKE_BINARY_DIR}/${f}.o")
+  add_custom_command(OUTPUT ${_o}
+    COMMAND ${PSPDEV}/bin/psp-gcc -O2 -G0 -Wall -I${PSPDEV}/psp/sdk/include -D_PSP_FW_VERSION=600
+            -c "${PSP_DIR}/host/${f}.c" -o ${_o}
+    DEPENDS "${PSP_DIR}/host/${f}.c" "${PSP_DIR}/host/psp_entry.h" "${PSP_DIR}/host/psp_gu_shim.h")
+  list(APPEND PSP_EABI_OBJS ${_o})
+endforeach()
 
 # The ~16k EE data units go in through an archive (their paths overflow the
 # command line collect2 builds), whole: every unit is kept, as upstream links
@@ -62,15 +66,22 @@ add_custom_command(OUTPUT ${PSP_ENTRY}
 add_library(psp_game_data STATIC $<TARGET_OBJECTS:mvc2_game_data>)
 set_target_properties(psp_game_data PROPERTIES LINKER_LANGUAGE C)
 
-add_executable(mvc2_psp ${STUB_SRCS} ${GLUE_SRCS} ${PSP_ENTRY}
+# Renderer: r_gu.c (sceGu) behind upstream's frontend binding fe_render.c,
+# which is compiled unchanged; decode.c (TIM2) is GL-free.
+set(PSP_RENDER_SRCS "${MVC2_ROOT}/port/render/r_gu.c" "${MVC2_ROOT}/port/render/decode.c"
+  "${MVC2_ROOT}/port/host/fe/fe_render.c")
+set_source_files_properties("${MVC2_ROOT}/port/host/fe/fe_render.c" PROPERTIES OBJECT_DEPENDS "${GLUE}/mvc2_host_protos.h")
+
+add_executable(mvc2_psp ${STUB_SRCS} ${GLUE_SRCS} ${PSP_EABI_OBJS} ${PSP_RENDER_SRCS}
   "${PSP_DIR}/host/psp_main.c" "${PSP_DIR}/host/libc_o32.c" "${PSP_DIR}/host/psp_fpu.c"
   "${PSP_DIR}/host/psp_prof.c" "${MVC2_ROOT}/port/platform/platform_psp.c"
   $<TARGET_OBJECTS:psp_host_core>)
-target_include_directories(mvc2_psp PRIVATE "${MVC2_ROOT}/port/stubs" "${PSP_DIR}/host")
+target_include_directories(mvc2_psp PRIVATE "${MVC2_ROOT}/port/stubs" "${PSP_DIR}/host"
+  "${MVC2_ROOT}/port/host" "${MVC2_ROOT}/port/platform" "${GLUE}")
 target_include_directories(mvc2_psp SYSTEM PRIVATE ${PSP_INC})
 target_compile_options(mvc2_psp PRIVATE -fno-common)
 target_link_libraries(mvc2_psp PRIVATE "-Wl,--whole-archive" psp_game_data "-Wl,--no-whole-archive"
-  mvc2_game pspdebug pspdisplay pspge pspctrl psprtc psppower m)
+  mvc2_game pspgu pspdebug pspdisplay pspge pspctrl psprtc psppower m)
 # --sort-section=name: the .data.ee_<address> sections in EE order (R18).
 # --wrap: o32 replacements and PSP-side hooks (port/psp/host).
 target_link_options(mvc2_psp PRIVATE -no-pie "@${GLUE}/link_extra.rsp" -Wl,--sort-section=name
