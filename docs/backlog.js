@@ -35,6 +35,7 @@ window.BACKLOG = {
   "P04",
   "P05",
   "P06",
+  "P09",
   "P11"
  ],
  "activities": [
@@ -241,21 +242,23 @@ window.BACKLOG = {
    "done_when": "High-water figures recorded in PSP.md and a go/no-go on PSP-1000 support."
   },
   {
-   "id": "P09",
-   "order": 4.2,
+   "id": "P10",
+   "order": 4.3,
    "phase": "P0",
-   "size": "M",
+   "size": "S",
    "status": "Ready",
    "depends": [
-    "P11"
+    "P09"
    ],
    "read": [
     "port/docs/PSP.md",
-    "port/platform/platform_psp.c"
+    "port/cmake/psp-clang.cmake",
+    "port/psp/host/psp_main.c",
+    "port/host/ps2_float.c"
    ],
-   "title": "Profile the logic frame on PSP",
-   "description": "A logic frame costs 94-121 ms in PPSSPP at 333 MHz (-O2), budget 16.7 ms; EE float emulation is ~10-25% of it. Find where the time goes (PPSSPP profiler or sampled sceRtc timers around mvc2_frame stages), and measure on real hardware if available. Also re-run compare_ports.py: host_sigs now come from the wasm path, not caller guesses.",
-   "done_when": "Top costs per frame listed in PSP.md with a plan (or no-go) for 60 Hz; compare_ports.py still 0 diverging words."
+   "title": "PSP: EE floats on the native FPU",
+   "description": "Make PSP builds default to MVC2_PS2_FLOAT=OFF and set FCSR RZ+FS at start-up (and in any thread that runs game code); ps2_float_set_nearest (arcade.float_round) switches RM. Drop the FPU_RZ test switch.",
+   "done_when": "Default PSP build: compare_ports.py 0 diverging words vs wasm over 600 frames, attract fight demo under 16.7 ms/frame in PPSSPP."
   }
  ]
 };

@@ -6,7 +6,6 @@
 #include "../../host/runahead.h"
 #include "psp_entry.h"
 
-void host_state_dump_open(const char *path);   /* port/host/state_dump.c */
 
 /* no varargs across o32/EABI: format here */
 static char *put_s(char *p, const char *s) { while (*s) *p++ = *s++; return p; }
@@ -67,12 +66,45 @@ static int load_env(int frames) {
 
 #include "../../platform/platform.h"
 
+/* env PROFILE=1: time per mvc2_frame stage (game_loop.c mvc2_step_hook),
+ * reported every 300 frames as average ms per frame */
+#include <psprtc.h>
+#define NPROF 24
+static struct { const char *name; unsigned long long us; } prof[NPROF];
+static const char *prof_cur;
+static unsigned long long prof_t0;
+static int prof_frames;
+extern void (*mvc2_step_hook)(const char *name);
+
+static void prof_hook(const char *name)
+{
+    u64 t = 0;
+    int i;
+    sceRtcGetCurrentTick(&t);
+    if (prof_cur) {
+        for (i = 0; i < NPROF && prof[i].name && prof[i].name != prof_cur; i++) {}
+        if (i < NPROF) { prof[i].name = prof_cur; prof[i].us += t - prof_t0; }
+    }
+    prof_cur = name;
+    prof_t0 = t;
+    if (!name && ++prof_frames == 300) {
+        for (i = 0; i < NPROF && prof[i].name; i++) {
+            if (prof[i].us / 300 >= 100)   /* >= 0.1 ms */
+                fprintf(stderr, "[prof] %6.2f ms  %s\n", prof[i].us / 300 / 1000.0, prof[i].name);
+            prof[i].us = 0;
+        }
+        prof_frames = 0;
+    }
+}
+
 static long quit_after;   /* env QUIT_AFTER=N: testing, fire the exit callback at frame N */
 
 static void rt_update(void *u)
 {
     PlatStats st;
     (void)u;
+    if (mvc2_step_hook)
+        mvc2_step_hook("mvc2_frame top (unlock, hp cap, dump hooks)");
     mvc2_frame();
     if (quit_after && mvc2_host_frame == quit_after)
         psp_test_exit();
@@ -84,12 +116,26 @@ static void rt_update(void *u)
 }
 static void rt_pause(void *u, int paused) { (void)u; fprintf(stderr, "[plat] %s\n", paused ? "suspend" : "resume"); }
 
+/* EE single-precision semantics on the Allegrex FPU itself: round toward
+ * zero (FCSR RM = 1) and flush denormals (FS, bit 24).  For builds without
+ * the ps2_float.c rewrite (MVC2_PS2_FLOAT=OFF); env FPU_RZ=1 (testing). */
+static unsigned fpu_rz(void)
+{
+    unsigned fcsr;
+    __asm__ volatile("cfc1 %0, $31" : "=r"(fcsr));
+    fcsr = (fcsr & ~3u) | 1u | (1u << 24);
+    __asm__ volatile("ctc1 %0, $31" : : "r"(fcsr));
+    __asm__ volatile("cfc1 %0, $31" : "=r"(fcsr));
+    return fcsr;
+}
+
 int mvc2_psp_run(int frames) {
     char b[96], *p;
     psp_log("[host] mvc2 PSP headless\n");
     frames = load_env(frames);
+    if (getenv("FPU_RZ"))
+        fprintf(stderr, "[host] FPU round-to-zero + flush: FCSR %08x\n", fpu_rz());
     selftest();
-    host_state_dump_open("ms0:/PSP/GAME/mvc2/state.bin");   /* compare.py input */
     psp_mem_report("before boot");
     psp_log("[host] boot\n");
     if (host_disc_open("ms0:/PSP/GAME/mvc2/mvc2.iso") != 0)
@@ -113,6 +159,8 @@ int mvc2_psp_run(int frames) {
         PlatApp app = {0, rt_update, 0, rt_pause};
         const char *q = getenv("QUIT_AFTER");
         quit_after = q ? atol(q) : 0;
+        if (getenv("PROFILE"))
+            mvc2_step_hook = prof_hook;
         plat_init(0);
         plat_run(&app);
         fprintf(stderr, "[host] quit at frame %ld\n", (long)mvc2_host_frame);

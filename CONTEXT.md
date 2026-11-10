@@ -30,4 +30,4 @@ A PSP build of the Marvel vs. Capcom 2 decompilation, as a new platform backend 
 - Ticket `note`s: 1–3 sentences (what changed, how verified, limits). No narration.
 
 ## Status (max 3 lines; replace, never append)
-- P11 done (shell works) but logic is 94-121 ms/frame in PPSSPP vs 16.7 budget: P09 profiling next. Builds need EMSDK=~/Sites/emsdk-brew.
+- P09 done: logic cost was a stray dump + EE float helpers; native FPU in RZ mode matches and runs ~0.5 ms/frame. Next: P10 make it the default. Builds need EMSDK=~/Sites/emsdk-brew.

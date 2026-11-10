@@ -108,6 +108,24 @@ window.BACKLOG_ARCHIVE = [
   "note": "~38.5 MB: 9.5 MB static + 28.3 MB malloc (EE heap filled at boot by the 22 MB arena + 6 MB pool; flat over 600 frames). Minimum model PSP-2000 with MEMSIZE=1; PSP-1000 cannot fit. [mem] report in the log; PPSSPP only."
  },
  {
+  "id": "P09",
+  "order": 4.2,
+  "phase": "P0",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P11"
+  ],
+  "read": [
+   "port/docs/PSP.md",
+   "port/platform/platform_psp.c"
+  ],
+  "title": "Profile the logic frame on PSP",
+  "description": "A logic frame costs 94-121 ms in PPSSPP at 333 MHz (-O2), budget 16.7 ms; EE float emulation is ~10-25% of it. Find where the time goes (PPSSPP profiler or sampled sceRtc timers around mvc2_frame stages), and measure on real hardware if available. Also re-run compare_ports.py: host_sigs now come from the wasm path, not caller guesses.",
+  "done_when": "Top costs per frame listed in PSP.md with a plan (or no-go) for 60 Hz; compare_ports.py still 0 diverging words.",
+  "note": "94-121 ms was an always-on BSS state dump (removed) plus the ps2_float.c helpers (double = soft-float on PSP: 6-38 ms). Native FPU with FCSR RZ+flush matches wasm for 600 frames (0 words; round-to-nearest control: 47) at ~0.5 ms/frame. PPSSPP only."
+ },
+ {
   "id": "P11",
   "order": 5,
   "phase": "P1",

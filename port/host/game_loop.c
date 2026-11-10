@@ -111,7 +111,10 @@ static void cpu_hp_cap(void)
     }
 }
 
-#define STEP(name, call) do { mvc2_host_step = name; call; } while (0)
+/* profiling (testing): called with each step's name before it runs, and with
+ * NULL when mvc2_frame ends; NULL hook = off */
+void (*mvc2_step_hook)(const char *name);
+#define STEP(name, call) do { mvc2_host_step = name; if (mvc2_step_hook) mvc2_step_hook(name); call; } while (0)
 
 int mvc2_boot(int run_platform_init)
 {
@@ -183,6 +186,8 @@ void mvc2_frame(void)
     STEP("func_0012DD90 file loader tick", func_0012DD90());
     STEP("func_00170D70 end scene", func_00170D70());
     STEP("func_003ECD00 vsync/flip", func_003ECD00());
+    if (mvc2_step_hook)
+        mvc2_step_hook(0);
     mvc2_host_frame++;
 }
 

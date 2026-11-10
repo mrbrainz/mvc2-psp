@@ -73,7 +73,7 @@ Run in PPSSPP (memory stick is `~/.config/ppsspp`):
     cp build/port-psp/EBOOT.PBP $G/
     ln -sf "$PWD/<your ISO>" $G/mvc2.iso     # never copied into git
     /Applications/PPSSPPSDL.app/Contents/MacOS/PPSSPPSDL $G/EBOOT.PBP
-    # output: $G/mvc2_psp.log, $G/state.bin
+    # output: $G/mvc2_psp.log (state.bin only with MVC2_STATE_DUMP in env.txt)
 
 `ra_state_hash` covers host pointers, so it only compares runs of one binary.
 
@@ -85,7 +85,7 @@ and wasm's `fix()` mistakes integers such as `0x01000000` for heap addresses.
 Use `compare_ports.py`, which reads the whole BSS fixed and raw:
 
     X=0x004C2580:0x00634380
-    printf 'FRAMES=600\nMVC2_DUMP_EXTRA=%s\nMVC2_DUMP_EXTRA_RAW=1\n' $X > $G/env.txt   # PSP env (psp_main)
+    printf 'FRAMES=600\nMVC2_STATE_DUMP=ms0:/PSP/GAME/mvc2/state.bin\nMVC2_DUMP_EXTRA=%s\nMVC2_DUMP_EXTRA_RAW=1\n' $X > $G/env.txt
     MVC2_DUMP_EXTRA=$X MVC2_DUMP_EXTRA_RAW=1 MVC2_STATE_DUMP=ref.bin node build/port-em/mvc2_host.js --iso <ISO> --frames 600
     python3 port/tools/oracle/compare_ports.py $G/state.bin ref.bin --ignore port/tools/oracle/psp_vs_wasm.ignore
 
@@ -147,3 +147,32 @@ Budget is 16.7 ms. Not yet profiled or measured on hardware.
 
 Builds now need `EMSDK=~/Sites/emsdk-brew` in the environment: with emcc on
 PATH, the signature pass takes its wasm path.
+
+## Logic frame profile (P09)
+
+`PROFILE=1` in `env.txt` logs the average ms per `mvc2_frame` stage every 300
+frames (`mvc2_step_hook` in `port/host/game_loop.c`). Attract mode, 333 MHz,
+PPSSPP:
+
+| | title/logos | attract scenes | attract fight demo |
+|---|---:|---:|---:|
+| with `ps2_float.c` helpers | 6.8 ms | up to 33 ms (render pass 1) | 26-38 ms (game update) |
+| native FPU (`MVC2_PS2_FLOAT=OFF`) | 0.5 ms | 0.3 ms | 0.3-0.6 ms |
+
+(The earlier 94-121 ms included an always-on state dump of the whole BSS
+every frame, now only with `MVC2_STATE_DUMP` in `env.txt`.)
+
+The helpers compute in double, which on the PSP is libgcc soft-float, so they
+are almost the whole cost. Their semantics (round toward zero, denormals to
+zero, overflow to the largest finite) are what the Allegrex FPU gives with
+FCSR RM = 1 and FS = 1. `FPU_RZ=1` in `env.txt` sets that at start-up:
+
+| PSP variant vs wasm (helpers on), 600 frames | diverging words |
+|---|---:|
+| helpers | 0 |
+| native FPU, RZ + flush (`FCSR 01000e01`) | 0 |
+| native FPU, round to nearest (control) | 47, from frame 0 |
+
+Plan: PSP builds use the native FPU in RZ + flush mode instead of the
+rewrite (P10). Verified in PPSSPP only; hardware may differ on denormal
+inputs and division by zero (EE: largest finite), so P42 checks on a device.
