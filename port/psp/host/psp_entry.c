@@ -3,11 +3,12 @@
 #include <pspdebug.h>
 #include <pspdisplay.h>
 #include <stdio.h>
+#include <malloc.h>
 #include "psp_entry.h"
 
 PSP_MODULE_INFO("mvc2", 0, 1, 0);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
-PSP_HEAP_SIZE_KB(-1024);
+PSP_HEAP_SIZE_KB(-1024);   /* all user memory but 1 MB (kernel free below = what is left) */
 
 #ifndef MVC2_PSP_FRAMES
 #define MVC2_PSP_FRAMES 600
@@ -23,6 +24,16 @@ void psp_log(const char *s) {
 /* newlib's fseeko; o32 callers reach __wrap_fseeko (libc_o32.c, --wrap) */
 int __real_fseeko(FILE *, off_t, int);
 int psp_fseeko_shim(const struct psp_fseeko_args *a) { return __real_fseeko(a->f, a->off, a->whence); }
+
+void psp_mem_report(const char *when) {
+    char b[160];
+    struct mallinfo mi = mallinfo();
+    /* sniprintf: newlib's own (EABI); snprintf is libc_o32.c's o32 one */
+    sniprintf(b, sizeof b, "[mem] %s: kernel free %u KB (largest %u KB), malloc arena %u KB, in use %u KB\n",
+             when, sceKernelTotalFreeMemSize() / 1024, sceKernelMaxFreeMemSize() / 1024,
+             (unsigned)mi.arena / 1024, (unsigned)mi.uordblks / 1024);
+    psp_log(b);
+}
 
 static int exit_cb(int a, int b, void *c) { sceKernelExitGame(); return 0; }
 static int cb_thread(SceSize a, void *b) {

@@ -89,5 +89,22 @@ window.BACKLOG_ARCHIVE = [
   "description": "Same ISO, 600 frames: compare.py differs at frame 0 in game block words 0x004F4318/40/4C (PSP = wasm - 0x16D6C0 each) and BSS block 0x00626580 from frame 1, more blocks from frame 6. Find the cause (pointer translation in state_dump, glue code-label handles, or real logic/ABI/float divergence).",
   "done_when": "compare.py PSP vs wasm matches for 600 frames, or each remaining difference is explained as non-gameplay and listed in an ignore file.",
   "note": "No gameplay divergence: 600 frames PSP vs wasm, 0 diverging BSS words. Differences were wasm fix() misreading integers as heap pointers, untranslatable host pointers (78 words) and the boot clock (psp_vs_wasm.ignore). New compare_ports.py + MVC2_DUMP_EXTRA_RAW; attract mode only, no input."
+ },
+ {
+  "id": "P04",
+  "order": 4,
+  "phase": "P0",
+  "size": "S",
+  "status": "Done",
+  "depends": [
+   "P03"
+  ],
+  "read": [
+   "port/docs/PORT_PLAN.md"
+  ],
+  "title": "Memory budget",
+  "description": "Measure heap/static footprint against PSP-1000 (~24MB user) and Slim (~52MB); decide minimum model.",
+  "done_when": "Footprint numbers + chosen target model recorded in PSP.md.",
+  "note": "~38.5 MB: 9.5 MB static + 28.3 MB malloc (EE heap filled at boot by the 22 MB arena + 6 MB pool; flat over 600 frames). Minimum model PSP-2000 with MEMSIZE=1; PSP-1000 cannot fit. [mem] report in the log; PPSSPP only."
  }
 ];

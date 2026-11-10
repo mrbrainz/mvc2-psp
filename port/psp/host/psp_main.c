@@ -71,10 +71,12 @@ int mvc2_psp_run(int frames) {
     frames = load_env(frames);
     selftest();
     host_state_dump_open("ms0:/PSP/GAME/mvc2/state.bin");   /* compare.py input */
+    psp_mem_report("before boot");
     psp_log("[host] boot\n");
     if (host_disc_open("ms0:/PSP/GAME/mvc2/mvc2.iso") != 0)
         psp_log("[host] no disc image: file loads will fail\n");
     mvc2_boot(1);
+    psp_mem_report("after boot");
     while (mvc2_host_frame < frames) {
         mvc2_frame();
         if (mvc2_host_frame % 60 == 0) {
@@ -87,6 +89,7 @@ int mvc2_psp_run(int frames) {
             psp_log(b);
         }
     }
+    psp_mem_report("end");
     psp_log("[host] done\n");
     return 0;
 }

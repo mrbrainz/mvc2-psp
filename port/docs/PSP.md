@@ -48,6 +48,9 @@ Rules (verified by `port/psp/abi_test` in PPSSPP 1.20.4, not yet on hardware):
   struct (see `abi_shim.h`). An unshimmed 6-arg call returns garbage.
 - SDK-to-our-code callbacks (threads, exit, audio) follow the same direct-call
   rule; the EABI caller's frame survives an o32 callee.
+- `libc_o32.c` defines o32 `snprintf`/`vsnprintf`/`fprintf`/`vfprintf`/`sscanf`
+  for the whole link, so EABI code (psp-gcc files, PSPSDK libraries) must not
+  call those: use newlib's `sniprintf` or `pspDebugScreenPrintf` there.
 
     psp-cmake -S port/psp/abi_test -B build/psp-abi && cmake --build build/psp-abi
 
@@ -100,3 +103,21 @@ About 3 MB per frame per side. Result (title attract, no input): 600 frames,
     EMSDK=$E ninja -C build/port-em mvc2_host
     MVC2_STATE_DUMP=ref.bin node build/port-em/mvc2_host.js --iso <ISO> --frames 600 [--hash-every 60]
     python3 port/tools/oracle/compare.py $G/state.bin ref.bin
+
+## Memory budget (P04)
+
+Measured in PPSSPP (model PSP-2000+, `MEMSIZE=1`), attract mode, 600 frames:
+
+| | MB |
+|---|---:|
+| static image (`.text` 5.8, `.data` 0.6, `.bss` 3.05) | 9.5 |
+| malloc after boot | 28.2 |
+| malloc after 600 frames | 28.3 |
+| total with stacks | ~38.5 |
+
+Almost all of the malloc is the EE heap (`HOST_EE_HEAP`, 28 MB,
+`port/host/boot.c`), which the game fills at boot with its 22 MB arena and
+6 MB handle pool, so play does not grow it. **Minimum model: PSP-2000 (Slim)
+or later, with `MEMSIZE=1`** (about 52 MB user memory, about 13 MB left for
+renderer and audio buffers; VRAM is separate). The PSP-1000 (24 MB user)
+cannot hold the EE heap. `[mem]` lines in `mvc2_psp.log` report malloc use.

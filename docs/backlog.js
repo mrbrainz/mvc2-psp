@@ -32,26 +32,11 @@ window.BACKLOG = {
   "P01",
   "P02",
   "P03",
+  "P04",
   "P05",
   "P06"
  ],
  "activities": [
-  {
-   "id": "P04",
-   "order": 4,
-   "phase": "P0",
-   "size": "S",
-   "status": "Backlog",
-   "depends": [
-    "P03"
-   ],
-   "read": [
-    "port/docs/PORT_PLAN.md"
-   ],
-   "title": "Memory budget",
-   "description": "Measure heap/static footprint against PSP-1000 (~24MB user) and Slim (~52MB); decide minimum model.",
-   "done_when": "Footprint numbers + chosen target model recorded in PSP.md."
-  },
   {
    "id": "P11",
    "order": 5,
@@ -253,6 +238,23 @@ window.BACKLOG = {
    "title": "PSP log newlines",
    "description": "host_log ends lines with fputc to stderr, which goes to newlib, not psp_log; lines run together in mvc2_psp.log.",
    "done_when": "mvc2_psp.log has one message per line."
+  },
+  {
+   "id": "P08",
+   "order": 4.5,
+   "phase": "P4",
+   "size": "M",
+   "status": "Backlog",
+   "depends": [
+    "P04"
+   ],
+   "read": [
+    "port/docs/PSP.md",
+    "port/host/boot.c"
+   ],
+   "title": "PSP-1000 feasibility: arena high-water",
+   "description": "PSP-1000 has ~24 MB user memory; the 28 MB EE heap (22 MB arena + 6 MB pool) does not fit. Measure the arena and pool high-water over full fights and decide if a smaller arena is possible without changing behaviour.",
+   "done_when": "High-water figures recorded in PSP.md and a go/no-go on PSP-1000 support."
   }
  ]
 };

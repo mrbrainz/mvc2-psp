@@ -30,4 +30,4 @@ A PSP build of the Marvel vs. Capcom 2 decompilation, as a new platform backend 
 - Ticket `note`s: 1–3 sentences (what changed, how verified, limits). No narration.
 
 ## Status (max 3 lines; replace, never append)
-- P06 done: PSP matches wasm for 600 frames (compare_ports.py, port/docs/PSP.md). Next: P04 memory budget or P11 platform shell.
+- P04 done: ~38.5 MB, minimum PSP-2000 + MEMSIZE=1 (port/docs/PSP.md). Next: P11 platform shell.
