@@ -246,6 +246,38 @@ window.BACKLOG = {
    "title": "sceGu renderer: stage meshes",
    "description": "Mesh path on GU in a separate r_gu_mesh.c (r_mesh.c untouched): model load to GU vertex buffers, transforms, lighting/fog as the GL path does.",
    "done_when": "CAPCOM logo, title screen and all stages render in PPSSPP, fight at 59.94 fps."
+  },
+  {
+   "id": "P26",
+   "order": 5.03,
+   "phase": "P2",
+   "size": "M",
+   "status": "Ready",
+   "depends": [
+    "P12"
+   ],
+   "read": [
+    "port/docs/PSP.md"
+   ],
+   "title": "Fight and character-select frame time",
+   "description": "Logic update reaches 14-16.5 ms a frame in fights and character select (state 2 1) in PPSSPP and dips below 59.94 fps; attract is 1-4 ms. Profile with PROFILE=1 and cut the top stages.",
+   "done_when": "Fight and character select update under 12 ms a frame in PPSSPP, 59.94 fps with no dips."
+  },
+  {
+   "id": "P27",
+   "order": 5.04,
+   "phase": "P2",
+   "size": "M",
+   "status": "Ready",
+   "depends": [
+    "P24"
+   ],
+   "read": [
+    "port/docs/PSP.md"
+   ],
+   "title": "RAM headroom for meshes",
+   "description": "After a fight about 0.7 MB of the 31 MB malloc arena and 764 KB of kernel memory are free; character atlases take up to 1 MB per bank. Find the large users and cut them so P25's meshes and textures fit.",
+   "done_when": "At least 4 MB free in a 3v3 fight on MEMSIZE=1, by the [mem] log line."
   }
  ]
 };
