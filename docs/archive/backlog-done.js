@@ -205,6 +205,25 @@ window.BACKLOG_ARCHIVE = [
   "note": "r_gu_char.c (T4 atlas pages, 16-colour CLUTs) + upstream fe_char.c. Character select and fights show characters correctly in PPSSPP (scripted PRESS run, screenshots); frame time is P26."
  },
  {
+  "id": "P25",
+  "order": 5.02,
+  "phase": "P2",
+  "size": "L",
+  "status": "Done",
+  "depends": [
+   "P21"
+  ],
+  "read": [
+   "port/render/r_mesh.c",
+   "port/host/fe/fe_mesh.c",
+   "port/docs/MESH_NOTES.md"
+  ],
+  "title": "sceGu renderer: stage meshes",
+  "description": "Mesh path on GU in a separate r_gu_mesh.c (r_mesh.c untouched): model load to GU vertex buffers, transforms, lighting/fog as the GL path does.",
+  "done_when": "CAPCOM logo, title screen and all stages render in PPSSPP, fight at 59.94 fps.",
+  "note": "r_gu_mesh.c + upstream fe_mesh.c: CAPCOM logo, title, character select and all 17 stages (STAGE=N test switch) render in PPSSPP, fights at 59.94 fps (5.9-10.9 ms). Not reproduced: fog, UV-matrix cross terms, meshes over 65536 vertices."
+ },
+ {
   "id": "P26",
   "order": 5.03,
   "phase": "P2",

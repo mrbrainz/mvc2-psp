@@ -93,7 +93,7 @@ target_link_options(mvc2_psp PRIVATE -no-pie "@${GLUE}/link_extra.rsp" -Wl,--sor
   -Wl,--wrap=func_003ECD00 -Wl,--wrap=func_003F0500 -Wl,--wrap=fl_clay_draw
   -Wl,--wrap=func_00412260 -Wl,--wrap=func_0041BB30 -Wl,--wrap=fe_sync_state
   -Wl,--wrap=func_003F0500__game -Wl,--wrap=func_003EA660
-  -Wl,--wrap=fe_sync_handle)
+  -Wl,--wrap=fe_sync_handle -Wl,--wrap=func_00170170)
 
 # ---- EBOOT.PBP: fixup imports, strip, SFO (MEMSIZE=1: Slim memory), pack --
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/EBOOT.PBP"

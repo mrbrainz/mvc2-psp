@@ -76,6 +76,24 @@ extern int r_gu_char_cnt[3];
 extern int r_gu_mesh_cnt[3];     /* r_gu_mesh.c: mesh draws, triangles */   /* r_gu_char.c: draws, parts, tile decodes */
 static int drawlog = -1;
 
+/* STAGE=N (testing, 0-16): every stage load (func_00170170 mode 1) loads
+ * stage N, and the stage id (D_004C27D0, also the BGM id) is set to it */
+void __real_func_00170170(int a, int b);
+void __wrap_func_00170170(int a, int b)
+{
+    static int stage = -2;
+    if (stage == -2) {
+        const char *e = getenv("STAGE");
+        stage = e ? atoi(e) : -1;
+        if (stage > 16) stage = -1;
+    }
+    if (stage >= 0 && a == 1) {
+        b = stage;
+        EE_BSS(unsigned char, 0x004C27D0) = (unsigned char)stage;
+    }
+    __real_func_00170170(a, b);
+}
+
 /* PRESS=frame:len:bits,... (testing): hold PS2 pad bits (hex, pad.h) on
  * player 1 for len frames from frame, on top of the PSP pad */
 static uint16_t press_bits(long f)

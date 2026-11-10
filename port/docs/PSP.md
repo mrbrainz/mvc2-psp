@@ -283,5 +283,9 @@ GE clip planes are off: they cull clip-space z < 0, where all of the game's
 geometry lies. Not reproduced: fog (0x8000), UV-matrix cross terms, meshes
 over 65536 vertices.
 
+`STAGE=N` in `env.txt` (testing, 0-16) makes every stage load stage N.
+All 17 stages (P25, scripted PRESS + STAGE runs): render in PPSSPP at 59.94
+fps, fight update 5.9-10.9 ms.
+
 `DRAWLOG` adds `mesh draws/triangles microseconds`; `MESH_DUMP=N` in
 `env.txt` logs every mesh draw of frame N.

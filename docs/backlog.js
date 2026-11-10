@@ -41,6 +41,7 @@ window.BACKLOG = {
   "P12",
   "P21",
   "P24",
+  "P25",
   "P26",
   "P27"
  ],
@@ -212,25 +213,6 @@ window.BACKLOG = {
    "title": "PSP-1000 feasibility: arena high-water",
    "description": "PSP-1000 has ~24 MB user memory; the 28 MB EE heap (22 MB arena + 6 MB pool) does not fit. Measure the arena and pool high-water over full fights and decide if a smaller arena is possible without changing behaviour.",
    "done_when": "High-water figures recorded in PSP.md and a go/no-go on PSP-1000 support."
-  },
-  {
-   "id": "P25",
-   "order": 5.02,
-   "phase": "P2",
-   "size": "L",
-   "status": "In progress",
-   "depends": [
-    "P21"
-   ],
-   "read": [
-    "port/render/r_mesh.c",
-    "port/host/fe/fe_mesh.c",
-    "port/docs/MESH_NOTES.md"
-   ],
-   "title": "sceGu renderer: stage meshes",
-   "description": "Mesh path on GU in a separate r_gu_mesh.c (r_mesh.c untouched): model load to GU vertex buffers, transforms, lighting/fog as the GL path does.",
-   "done_when": "CAPCOM logo, title screen and all stages render in PPSSPP, fight at 59.94 fps.",
-   "note": "r_gu_mesh.c + upstream fe_mesh.c: CAPCOM logo, title, attract stages, character select and a fight render in PPSSPP at 59.94 fps (after P26). All 17 stages not yet checked."
   }
  ]
 };
