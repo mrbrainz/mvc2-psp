@@ -32,6 +32,20 @@ void ps2_float_set_nearest(int on)
 {
     const char *e = getenv("MVC2_PS2FP_OFF");
     fp_off = on || (e && *e && *e != '0');
+#if defined(__mips__)
+    /* PSP (MVC2_PS2_FLOAT=OFF, no rewrite): the Allegrex FPU gives the EE's
+     * results itself with FCSR RM = 1 (toward zero) and FS = 1 (denormals to
+     * zero); overflow under RZ is the largest finite.  0 diverging words
+     * against the helpers over 600 frames (port/docs/PSP.md).  Rounding to
+     * nearest is RM = 0.  FCSR is per thread: call this on the thread that
+     * runs the game. */
+    {
+        unsigned fcsr;
+        __asm__ volatile("cfc1 %0, $31" : "=r"(fcsr));
+        fcsr = (fcsr & ~3u) | (fp_off ? 0u : 1u) | (1u << 24);
+        __asm__ volatile("ctc1 %0, $31" : : "r"(fcsr));
+    }
+#endif
 }
 static inline int off(void)
 {

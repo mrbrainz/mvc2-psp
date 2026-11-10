@@ -24,6 +24,9 @@ set(CMAKE_RANLIB "${PSPDEV}/bin/psp-ranlib")
 set(CMAKE_C_FLAGS_INIT "-O2 -mips2 -mfp32 -msingle-float -mhard-float -G0 -mno-gpopt -mno-abicalls -fno-pic -DPSP -D__PSP__")
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 set(MVC2_PSP ON)
+# EE float rounding on the FPU itself (FCSR, port/host/ps2_float.c), not the
+# ps2_fp_rewrite helpers, which run in soft-float double here (6-38 ms/frame)
+set(MVC2_PS2_FLOAT OFF CACHE BOOL "EE single-precision rounding for the game code")
 # Link with psp-gcc (PSPSDK crt0, newlib, libgcc); objects mix o32 and EABI32,
 # see port/docs/PSP.md "o32 / EABI32 boundary".
 set(CMAKE_C_LINK_EXECUTABLE

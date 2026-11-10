@@ -126,6 +126,26 @@ window.BACKLOG_ARCHIVE = [
   "note": "94-121 ms was an always-on BSS state dump (removed) plus the ps2_float.c helpers (double = soft-float on PSP: 6-38 ms). Native FPU with FCSR RZ+flush matches wasm for 600 frames (0 words; round-to-nearest control: 47) at ~0.5 ms/frame. PPSSPP only."
  },
  {
+  "id": "P10",
+  "order": 4.3,
+  "phase": "P0",
+  "size": "S",
+  "status": "Done",
+  "depends": [
+   "P09"
+  ],
+  "read": [
+   "port/docs/PSP.md",
+   "port/cmake/psp-clang.cmake",
+   "port/psp/host/psp_main.c",
+   "port/host/ps2_float.c"
+  ],
+  "title": "PSP: EE floats on the native FPU",
+  "description": "Make PSP builds default to MVC2_PS2_FLOAT=OFF and set FCSR RZ+FS at start-up (and in any thread that runs game code); ps2_float_set_nearest (arcade.float_round) switches RM. Drop the FPU_RZ test switch.",
+  "done_when": "Default PSP build: compare_ports.py 0 diverging words vs wasm over 600 frames, attract fight demo under 16.7 ms/frame in PPSSPP.",
+  "note": "PSP defaults to MVC2_PS2_FLOAT=OFF; ps2_float_set_nearest programs FCSR on MIPS (RM 1, or 0 with MVC2_PS2FP_OFF; FS on). 0 diverging words vs wasm (600 frames), 59.94 fps through 1800 attract frames (0.24-0.56 ms). PPSSPP only."
+ },
+ {
   "id": "P11",
   "order": 5,
   "phase": "P1",

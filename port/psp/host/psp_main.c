@@ -116,25 +116,19 @@ static void rt_update(void *u)
 }
 static void rt_pause(void *u, int paused) { (void)u; fprintf(stderr, "[plat] %s\n", paused ? "suspend" : "resume"); }
 
-/* EE single-precision semantics on the Allegrex FPU itself: round toward
- * zero (FCSR RM = 1) and flush denormals (FS, bit 24).  For builds without
- * the ps2_float.c rewrite (MVC2_PS2_FLOAT=OFF); env FPU_RZ=1 (testing). */
-static unsigned fpu_rz(void)
-{
-    unsigned fcsr;
-    __asm__ volatile("cfc1 %0, $31" : "=r"(fcsr));
-    fcsr = (fcsr & ~3u) | 1u | (1u << 24);
-    __asm__ volatile("ctc1 %0, $31" : : "r"(fcsr));
-    __asm__ volatile("cfc1 %0, $31" : "=r"(fcsr));
-    return fcsr;
-}
+/* port/host/ps2_float.c: on MIPS also sets FCSR (EE rounding on the FPU) */
+void ps2_float_set_nearest(int on);
 
 int mvc2_psp_run(int frames) {
     char b[96], *p;
     psp_log("[host] mvc2 PSP headless\n");
     frames = load_env(frames);
-    if (getenv("FPU_RZ"))
-        fprintf(stderr, "[host] FPU round-to-zero + flush: FCSR %08x\n", fpu_rz());
+    ps2_float_set_nearest(0);   /* EE rounding (MVC2_PS2FP_OFF=1: to nearest) */
+    {
+        unsigned fcsr;
+        __asm__ volatile("cfc1 %0, $31" : "=r"(fcsr));
+        fprintf(stderr, "[host] FCSR %08x (RM %u)\n", fcsr, fcsr & 3);
+    }
     selftest();
     psp_mem_report("before boot");
     psp_log("[host] boot\n");

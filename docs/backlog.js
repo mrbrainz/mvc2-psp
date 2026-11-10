@@ -36,6 +36,7 @@ window.BACKLOG = {
   "P05",
   "P06",
   "P09",
+  "P10",
   "P11"
  ],
  "activities": [
@@ -240,25 +241,6 @@ window.BACKLOG = {
    "title": "PSP-1000 feasibility: arena high-water",
    "description": "PSP-1000 has ~24 MB user memory; the 28 MB EE heap (22 MB arena + 6 MB pool) does not fit. Measure the arena and pool high-water over full fights and decide if a smaller arena is possible without changing behaviour.",
    "done_when": "High-water figures recorded in PSP.md and a go/no-go on PSP-1000 support."
-  },
-  {
-   "id": "P10",
-   "order": 4.3,
-   "phase": "P0",
-   "size": "S",
-   "status": "Ready",
-   "depends": [
-    "P09"
-   ],
-   "read": [
-    "port/docs/PSP.md",
-    "port/cmake/psp-clang.cmake",
-    "port/psp/host/psp_main.c",
-    "port/host/ps2_float.c"
-   ],
-   "title": "PSP: EE floats on the native FPU",
-   "description": "Make PSP builds default to MVC2_PS2_FLOAT=OFF and set FCSR RZ+FS at start-up (and in any thread that runs game code); ps2_float_set_nearest (arcade.float_round) switches RM. Drop the FPU_RZ test switch.",
-   "done_when": "Default PSP build: compare_ports.py 0 diverging words vs wasm over 600 frames, attract fight demo under 16.7 ms/frame in PPSSPP."
   }
  ]
 };

@@ -165,7 +165,7 @@ every frame, now only with `MVC2_STATE_DUMP` in `env.txt`.)
 The helpers compute in double, which on the PSP is libgcc soft-float, so they
 are almost the whole cost. Their semantics (round toward zero, denormals to
 zero, overflow to the largest finite) are what the Allegrex FPU gives with
-FCSR RM = 1 and FS = 1. `FPU_RZ=1` in `env.txt` sets that at start-up:
+FCSR RM = 1 and FS = 1. The comparison (with a test switch, since removed):
 
 | PSP variant vs wasm (helpers on), 600 frames | diverging words |
 |---|---:|
@@ -173,6 +173,12 @@ FCSR RM = 1 and FS = 1. `FPU_RZ=1` in `env.txt` sets that at start-up:
 | native FPU, RZ + flush (`FCSR 01000e01`) | 0 |
 | native FPU, round to nearest (control) | 47, from frame 0 |
 
-Plan: PSP builds use the native FPU in RZ + flush mode instead of the
-rewrite (P10). Verified in PPSSPP only; hardware may differ on denormal
-inputs and division by zero (EE: largest finite), so P42 checks on a device.
+PSP builds now do this by default (P10): `psp-clang.cmake` sets
+`MVC2_PS2_FLOAT=OFF`, and `ps2_float_set_nearest()` (port/host/ps2_float.c)
+programs FCSR on MIPS: RM = 1 (EE) or RM = 0 (`MVC2_PS2FP_OFF=1`, the arcade
+round-to-nearest setting), FS = 1 always. The runner calls it at start-up and
+logs `FCSR ... (RM n)`. FCSR is per thread: any thread that runs game code
+must call it. Default build: 0 diverging words vs wasm over 600 frames, and
+59.94 fps through the 1800-frame attract run (logic 0.24-0.56 ms/frame).
+Verified in PPSSPP only; hardware may differ on denormal inputs and division
+by zero (EE: largest finite), so P42 checks on a device.
