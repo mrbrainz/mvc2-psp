@@ -42,10 +42,10 @@ window.BACKLOG = {
  "activities": [
   {
    "id": "P12",
-   "order": 6,
+   "order": 5.2,
    "phase": "P1",
    "size": "S",
-   "status": "Backlog",
+   "status": "Ready",
    "depends": [
     "P11"
    ],
@@ -59,10 +59,10 @@ window.BACKLOG = {
   },
   {
    "id": "P13",
-   "order": 7,
+   "order": 5.3,
    "phase": "P1",
    "size": "M",
-   "status": "Backlog",
+   "status": "Ready",
    "depends": [
     "P11"
    ],
@@ -76,10 +76,10 @@ window.BACKLOG = {
   },
   {
    "id": "P14",
-   "order": 8,
+   "order": 5.4,
    "phase": "P1",
    "size": "S",
-   "status": "Backlog",
+   "status": "Ready",
    "depends": [
     "P11"
    ],
@@ -92,21 +92,23 @@ window.BACKLOG = {
   },
   {
    "id": "P21",
-   "order": 9,
+   "order": 5,
    "phase": "P2",
-   "size": "L",
-   "status": "Backlog",
+   "size": "M",
+   "status": "In progress",
    "depends": [
     "P11"
    ],
    "read": [
     "port/docs/RENDERER.md",
-    "port/docs/RENDER_PATH.md",
-    "port/render/"
+    "port/render/render.h",
+    "port/render/r_internal.h",
+    "port/render/r_gl.c",
+    "port/host/fe/fe_render.c"
    ],
-   "title": "sceGu renderer backend",
-   "description": "Implement the renderer API on sceGu: state setter, 2D prims, character drawer, stage meshes.",
-   "done_when": "Title, select and a fight render correctly in PPSSPP."
+   "title": "sceGu renderer: 2D core",
+   "description": "New port/render/r_gu.c (r_gl.c untouched; its GL-free logic copied): GU init, batching (r_use/r_verts/r_flush), flat/RGBA/indexed+CLUT textures, blend/depth/scissor state, fl_* 2D prims, TIM2, present scaled to 480x272. PSP target builds fe_render.c + r_char/r_font/decode with it.",
+   "done_when": "Title screen and logos render recognisably in PPSSPP (screenshot), still 59.94 fps."
   },
   {
    "id": "P22",
@@ -115,7 +117,8 @@ window.BACKLOG = {
    "size": "M",
    "status": "Backlog",
    "depends": [
-    "P21"
+    "P21",
+    "P24"
    ],
    "read": [
     "port/docs/RENDERER.md"
@@ -142,10 +145,10 @@ window.BACKLOG = {
   },
   {
    "id": "P31",
-   "order": 12,
+   "order": 5.1,
    "phase": "P3",
    "size": "M",
-   "status": "Backlog",
+   "status": "Ready",
    "depends": [
     "P11"
    ],
@@ -165,7 +168,7 @@ window.BACKLOG = {
    "size": "L",
    "status": "Backlog",
    "depends": [
-    "P21",
+    "P25",
     "P31",
     "P13",
     "P09"
@@ -211,10 +214,10 @@ window.BACKLOG = {
   },
   {
    "id": "P07",
-   "order": 3.6,
+   "order": 5.5,
    "phase": "P1",
    "size": "XS",
-   "status": "Backlog",
+   "status": "Ready",
    "depends": [
     "P03"
    ],
@@ -227,10 +230,10 @@ window.BACKLOG = {
   },
   {
    "id": "P08",
-   "order": 4.5,
+   "order": 5.6,
    "phase": "P4",
    "size": "M",
-   "status": "Backlog",
+   "status": "Ready",
    "depends": [
     "P04"
    ],
@@ -241,6 +244,41 @@ window.BACKLOG = {
    "title": "PSP-1000 feasibility: arena high-water",
    "description": "PSP-1000 has ~24 MB user memory; the 28 MB EE heap (22 MB arena + 6 MB pool) does not fit. Measure the arena and pool high-water over full fights and decide if a smaller arena is possible without changing behaviour.",
    "done_when": "High-water figures recorded in PSP.md and a go/no-go on PSP-1000 support."
+  },
+  {
+   "id": "P24",
+   "order": 5.01,
+   "phase": "P2",
+   "size": "M",
+   "status": "Backlog",
+   "depends": [
+    "P21"
+   ],
+   "read": [
+    "port/render/r_char.c",
+    "port/host/fe/fe_char.c"
+   ],
+   "title": "sceGu renderer: characters",
+   "description": "Character drawer (fl_char_*) on the GU backend: tile atlas pages in RAM/VRAM, palettes as CLUTs.",
+   "done_when": "Character select and a fight show characters correctly in PPSSPP."
+  },
+  {
+   "id": "P25",
+   "order": 5.02,
+   "phase": "P2",
+   "size": "L",
+   "status": "Backlog",
+   "depends": [
+    "P21"
+   ],
+   "read": [
+    "port/render/r_mesh.c",
+    "port/host/fe/fe_mesh.c",
+    "port/docs/MESH_NOTES.md"
+   ],
+   "title": "sceGu renderer: stage meshes",
+   "description": "Mesh path on GU in a separate r_gu_mesh.c (r_mesh.c untouched): model load to GU vertex buffers, transforms, lighting/fog as the GL path does.",
+   "done_when": "All stages render in PPSSPP, fight at 59.94 fps."
   }
  ]
 };

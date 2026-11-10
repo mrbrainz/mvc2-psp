@@ -1,31 +1,31 @@
-/* o32 side of the PSP headless runner: the same sequence as
- * port/stubs/host_main.c (boot, then N frames), printing the logic-state hash
- * (ra_state_hash) every 60 frames for comparison with the native build. */
+/* o32 side of the PSP runner (called from psp_entry.c, EABI).
+ *
+ * Real time by default: boot, then the 59.94 Hz loop of platform_psp.c until
+ * HOME -> Exit.  Testing switches come from ms0:/PSP/GAME/mvc2/env.txt
+ * (KEY=VALUE lines; the PSP has no environment):
+ *   FRAMES=N        headless: exactly N frames as fast as possible, with the
+ *                   logic hash (ra_state_hash) every 60 frames
+ *   QUIT_AFTER=N    real time: fire the exit callback at frame N, as
+ *                   HOME -> Exit does (PPSSPP has no HOME menu)
+ *   PROFILE=1       stage timings (psp_prof.c)
+ *   anything else   setenv, e.g. MVC2_STATE_DUMP / MVC2_STATE_SNAP for
+ *                   port/tools/oracle/compare_ports.py, MVC2_PS2FP_OFF=1
+ * See port/docs/PSP.md. */
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "mvc2_stubs.h"
 #include "../../host/host_loop.h"
 #include "../../host/runahead.h"
+#include "../../platform/platform.h"
 #include "psp_entry.h"
 
+unsigned psp_fpu_init(void);   /* psp_fpu.c */
 
-/* no varargs across o32/EABI: format here */
-static char *put_s(char *p, const char *s) { while (*s) *p++ = *s++; return p; }
-static char *put_u(char *p, unsigned long v) {
-    char t[12]; int n = 0;
-    do t[n++] = '0' + v % 10; while (v /= 10);
-    while (n) *p++ = t[--n];
-    return p;
-}
-static char *put_x64(char *p, unsigned long long v) {
-    for (int i = 60; i >= 0; i -= 4) *p++ = "0123456789abcdef"[(v >> i) & 15];
-    return p;
-}
-
-#include <math.h>
-#include <stdio.h>
-#include <string.h>
-
-/* the o32/EABI boundary items mvc2_host relies on (port/docs/PSP.md) */
-static void selftest(void) {
+/* the o32/EABI boundary items the host relies on (port/docs/PSP.md) */
+static void selftest(void)
+{
     char b[128], w[8] = "";
     int x = 0, y = 0, ok;
     volatile double d = 2.0;
@@ -42,11 +42,8 @@ static void selftest(void) {
     fprintf(stderr, "[host] o32/EABI selftest %s (%s)\n", ok ? "PASS" : "FAIL", b);
 }
 
-#include <stdlib.h>
-
-/* testing: optional KEY=VALUE lines (the PSP has no environment);
- * FRAMES=N overrides the frame count */
-static int load_env(int frames) {
+static int load_env(int frames)
+{
     char ln[256];
     FILE *f = fopen("ms0:/PSP/GAME/mvc2/env.txt", "r");
     if (!f)
@@ -64,47 +61,12 @@ static int load_env(int frames) {
     return frames;
 }
 
-#include "../../platform/platform.h"
-
-/* env PROFILE=1: time per mvc2_frame stage (game_loop.c mvc2_step_hook),
- * reported every 300 frames as average ms per frame */
-#include <psprtc.h>
-#define NPROF 24
-static struct { const char *name; unsigned long long us; } prof[NPROF];
-static const char *prof_cur;
-static unsigned long long prof_t0;
-static int prof_frames;
-extern void (*mvc2_step_hook)(const char *name);
-
-static void prof_hook(const char *name)
-{
-    u64 t = 0;
-    int i;
-    sceRtcGetCurrentTick(&t);
-    if (prof_cur) {
-        for (i = 0; i < NPROF && prof[i].name && prof[i].name != prof_cur; i++) {}
-        if (i < NPROF) { prof[i].name = prof_cur; prof[i].us += t - prof_t0; }
-    }
-    prof_cur = name;
-    prof_t0 = t;
-    if (!name && ++prof_frames == 300) {
-        for (i = 0; i < NPROF && prof[i].name; i++) {
-            if (prof[i].us / 300 >= 100)   /* >= 0.1 ms */
-                fprintf(stderr, "[prof] %6.2f ms  %s\n", prof[i].us / 300 / 1000.0, prof[i].name);
-            prof[i].us = 0;
-        }
-        prof_frames = 0;
-    }
-}
-
-static long quit_after;   /* env QUIT_AFTER=N: testing, fire the exit callback at frame N */
+static long quit_after;
 
 static void rt_update(void *u)
 {
     PlatStats st;
     (void)u;
-    if (mvc2_step_hook)
-        mvc2_step_hook("mvc2_frame top (unlock, hp cap, dump hooks)");
     mvc2_frame();
     if (quit_after && mvc2_host_frame == quit_after)
         psp_test_exit();
@@ -114,21 +76,20 @@ static void rt_update(void *u)
                 (long)mvc2_host_frame, st.logic_fps, st.update_ms, st.slowed);
     }
 }
-static void rt_pause(void *u, int paused) { (void)u; fprintf(stderr, "[plat] %s\n", paused ? "suspend" : "resume"); }
 
-/* port/host/ps2_float.c: on MIPS also sets FCSR (EE rounding on the FPU) */
-void ps2_float_set_nearest(int on);
+static void rt_pause(void *u, int paused)
+{
+    (void)u;
+    fprintf(stderr, "[plat] %s\n", paused ? "suspend" : "resume");
+}
 
-int mvc2_psp_run(int frames) {
-    char b[96], *p;
-    psp_log("[host] mvc2 PSP headless\n");
+int mvc2_psp_run(int frames)
+{
+    unsigned fcsr;
+    psp_log("[host] mvc2 PSP\n");
     frames = load_env(frames);
-    ps2_float_set_nearest(0);   /* EE rounding (MVC2_PS2FP_OFF=1: to nearest) */
-    {
-        unsigned fcsr;
-        __asm__ volatile("cfc1 %0, $31" : "=r"(fcsr));
-        fprintf(stderr, "[host] FCSR %08x (RM %u)\n", fcsr, fcsr & 3);
-    }
+    fcsr = psp_fpu_init();
+    fprintf(stderr, "[host] FCSR %08x (RM %u)\n", fcsr, fcsr & 3);
     selftest();
     psp_mem_report("before boot");
     psp_log("[host] boot\n");
@@ -136,25 +97,16 @@ int mvc2_psp_run(int frames) {
         psp_log("[host] no disc image: file loads will fail\n");
     mvc2_boot(1);
     psp_mem_report("after boot");
-    if (frames > 0) {   /* headless: exactly N frames, as fast as possible */
+    if (frames > 0) {
         while (mvc2_host_frame < frames) {
             mvc2_frame();
-            if (mvc2_host_frame % 60 == 0) {
-                p = put_s(b, "frame ");
-                p = put_u(p, (unsigned long)mvc2_host_frame);
-                p = put_s(p, " hash ");
-                p = put_x64(p, ra_state_hash());
-                p = put_s(p, "\n");
-                *p = 0;
-                psp_log(b);
-            }
+            if (mvc2_host_frame % 60 == 0)
+                fprintf(stderr, "frame %ld hash %016llx\n", (long)mvc2_host_frame, ra_state_hash());
         }
-    } else {            /* real time: locked to the 59.94 Hz display */
+    } else {
         PlatApp app = {0, rt_update, 0, rt_pause};
         const char *q = getenv("QUIT_AFTER");
         quit_after = q ? atol(q) : 0;
-        if (getenv("PROFILE"))
-            mvc2_step_hook = prof_hook;
         plat_init(0);
         plat_run(&app);
         fprintf(stderr, "[host] quit at frame %ld\n", (long)mvc2_host_frame);

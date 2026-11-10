@@ -1,3 +1,4 @@
 # compare_ports.py --ignore: words that differ between any two runs, not gameplay
 0x004C2A40 4   # sceCdReadClock (func_0010FC98): wall-clock time at boot, BCD
 0x004C2A78 4   # EE timer T0_COUNT for the performance meter (as ra_state_hash skips)
+0x01C3439C 4   # game heap: a newlib malloc chunk size (size|PREV_INUSE) that differs run to run on both PSP and wasm (0xAE9/0xB69 vs 0x069/0x2A9 at frame 99)

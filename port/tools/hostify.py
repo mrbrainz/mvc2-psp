@@ -2383,14 +2383,6 @@ def configure(sigs_path=None):
     SIGS = json.load(open(sigs_path)) if sigs_path else None
     if SIGS is not None:
         import link_catalog as L
-        # ps2_compat.h's own prototypes win over a canon guessed from callers
-        # (no emcc/wasi-libc when the sigs were made: string args pass as int).
-        import re
-        compat = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                   "..", "include", "ps2_compat.h")).read()
-        for n in set(re.findall(r"\b(\w+)\s*\(", compat)) & set(SIGS["canon"]):
-            if (SIGS["canon"][n].get("from") or "").startswith("callers"):
-                del SIGS["canon"][n]
         L.apply_host_sig_overrides(SIGS["canon"])
         # every declaration of an overridden function must take the new type
         over = [n for n, r in L.host_impl().items() if (r.get("ret") or "").strip()]

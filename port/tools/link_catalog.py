@@ -300,14 +300,7 @@ def host_runtime_names():
     emsdk = os.environ.get("EMSDK", "/home/user/emsdk")
     nm = shutil.which("llvm-nm") or os.path.join(emsdk, "upstream/bin/llvm-nm")
     out = set()
-    libs = list(HOST_LIBS)
-    if os.environ.get("MVC2_PSP"):
-        # PSP (port/cmake/psp-clang.cmake): pspdev newlib, libm, libgcc
-        import glob
-        psp = os.environ.get("PSPDEV", os.path.expanduser("~/Sites/pspdev"))
-        libs += [f"{psp}/psp/lib/libc.a", f"{psp}/psp/lib/libm.a"]
-        libs += glob.glob(f"{psp}/lib/gcc/psp/*/libgcc.a")
-    for lib in libs:
+    for lib in HOST_LIBS:
         p = lib.format(emsdk=emsdk)
         if not os.path.exists(p):
             continue

@@ -6,7 +6,6 @@
  * the same sequence step by step, with the frame loop bounded:
  *
  *   mvc2_host [--iso DISC.iso] [--frames N] [--init-only] [--skip-platform-init] [--timeout S] [-v]
- *             [--hash-every K]  (logic-state hash every K frames, as the PSP runner prints)
  *   (MVC2_FRAMES=N in the environment works too; default N = 0)
  *
  * --timeout S (default 10, 0 = off; native builds only) is a watchdog: the
@@ -25,7 +24,6 @@
 #include "mvc2_stubs.h"
 
 #include "../host/host_loop.h"
-#include "../host/runahead.h"
 
 #define STEP(name, call) do { fprintf(stderr, "[host] %s\n", name); call; } while (0)
 
@@ -55,7 +53,7 @@ extern unsigned char mvc2_ee_bss[];
 
 int main(int argc, char **argv)
 {
-    long frames = 0, hash_every = 0;
+    long frames = 0;
     int init_only = 0, skip_platform = 0, i;
     long timeout = 10;
     const char *e = getenv("MVC2_FRAMES");
@@ -65,8 +63,6 @@ int main(int argc, char **argv)
     for (i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--frames") && i + 1 < argc)
             frames = strtol(argv[++i], 0, 0);
-        else if (!strcmp(argv[i], "--hash-every") && i + 1 < argc)
-            hash_every = strtol(argv[++i], 0, 0);
         else if (!strcmp(argv[i], "--init-only"))
             init_only = 1;
         else if (!strcmp(argv[i], "--skip-platform-init"))
@@ -103,11 +99,8 @@ int main(int argc, char **argv)
         fprintf(stderr, "[host] no disc image (--iso PATH or MVC2_ISO): file loads will fail\n");
     STEP("boot (func_00170C30 init calls)", mvc2_boot(!skip_platform));
     if (!init_only) {
-        while (mvc2_host_frame < frames) {
+        while (mvc2_host_frame < frames)
             mvc2_frame();
-            if (hash_every > 0 && mvc2_host_frame % hash_every == 0)
-                fprintf(stderr, "frame %ld hash %016llx\n", (long)mvc2_host_frame, ra_state_hash());
-        }
         fprintf(stderr, "[host] ran %ld frame(s)\n", frames);
     }
     mvc2_host_step = (const char *)"done";

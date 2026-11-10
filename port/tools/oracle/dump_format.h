@@ -42,13 +42,11 @@
  * BSS range, as given to the dump (after fix), after the block hashes, so a
  * comparison can see the words of an area the hashes only flag. */
 static uint32_t oracle_extra_lo, oracle_extra_hi;
-static int oracle_extra_init, oracle_extra_raw;   /* MVC2_DUMP_EXTRA_RAW=1: raw copy too */
-static uint8_t *oracle_extra_rawbuf;
+static int oracle_extra_init;
 static void oracle_extra_parse(void)
 {
     const char *e = getenv("MVC2_DUMP_EXTRA");
     oracle_extra_init = 1;
-    oracle_extra_raw = getenv("MVC2_DUMP_EXTRA_RAW") != NULL;
     if (e) {
         char *c;
         unsigned long lo = strtoul(e, &c, 0), hi = *c == ':' ? strtoul(c + 1, NULL, 0) : 0;
@@ -170,16 +168,6 @@ static void oracle_dump_record(FILE *f, uint32_t frame, uint16_t b0, uint16_t b1
     static uint8_t raw[ORACLE_REGION_HI - ORACLE_REGION_LO];
     rd(ORACLE_HASH_LO, oracle_ram_buf, ORACLE_HASH_HI - ORACLE_HASH_LO);
     memcpy(raw, oracle_ram_buf + (ORACLE_REGION_LO - ORACLE_HASH_LO), sizeof raw);
-    if (!oracle_extra_init)
-        oracle_extra_parse();
-    if (oracle_extra_raw && oracle_extra_hi > oracle_extra_lo) {
-        /* the extra range as stored, before fix (testing: port vs port) */
-        if (!oracle_extra_rawbuf)
-            oracle_extra_rawbuf = (uint8_t *)malloc(oracle_extra_hi - oracle_extra_lo);
-        if (oracle_extra_rawbuf)
-            memcpy(oracle_extra_rawbuf, oracle_ram_buf + (oracle_extra_lo - ORACLE_HASH_LO),
-                   oracle_extra_hi - oracle_extra_lo);
-    }
     if (fix)
         for (i = 0; i + 4 <= sizeof oracle_ram_buf; i += 4) {
             uint32_t w;
@@ -216,8 +204,6 @@ static void oracle_dump_record(FILE *f, uint32_t frame, uint16_t b0, uint16_t b1
         oracle_extra_parse();
     if (oracle_extra_hi > oracle_extra_lo)
         fwrite(oracle_ram_buf + (oracle_extra_lo - ORACLE_HASH_LO), 1, oracle_extra_hi - oracle_extra_lo, f);
-    if (oracle_extra_rawbuf && oracle_extra_hi > oracle_extra_lo)
-        fwrite(oracle_extra_rawbuf, 1, oracle_extra_hi - oracle_extra_lo, f);
     fflush(f);
 }
 

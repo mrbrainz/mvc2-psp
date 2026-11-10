@@ -21,18 +21,32 @@ The toolchain lives outside the repo and is never committed.
     psp-cmake -S port/psp/hello -B build/psp-hello && cmake --build build/psp-hello
     /Applications/PPSSPPSDL.app/Contents/MacOS/PPSSPPSDL build/psp-hello/EBOOT.PBP
 
-## Game library
+## Build
 
-The game TUs need clang (clang-only flags; the EE float rewrite works on LLVM
-IR), so they build with Homebrew LLVM's mipsel backend (`brew install llvm`):
+The PSP build is its own CMake project, `port/psp/CMakeLists.txt`, so no
+upstream file changes. It includes `port/CMakeLists.txt` unchanged for the
+game targets (`mvc2_game`, `mvc2_game_data`) and builds the glue, host core
+and EBOOT itself. The game TUs need clang (clang-only flags; the EE float
+rewrite works on LLVM IR), so they build with Homebrew LLVM's mipsel backend
+(`brew install llvm`). `EMSDK` must point at the Emscripten layout below (the
+signature pass takes its wasm path when emcc is installed):
 
-    cmake -S port -B build/port-psp -G Ninja \
-          -DCMAKE_TOOLCHAIN_FILE=$PWD/port/cmake/psp-clang.cmake -DMVC2_APP=OFF
-    ninja -C build/port-psp mvc2_game
+    export EMSDK=~/Sites/emsdk-brew
+    cmake -S port/psp -B build/port-psp -G Ninja -DCMAKE_TOOLCHAIN_FILE=$PWD/port/cmake/psp-clang.cmake
+    ninja -C build/port-psp mvc2_eboot
 
-All 18,440 objects compile (MIPS II, single-float FPU, `-G0`). clang emits the
-o32 ABI; psp-gcc and the PSP SDK use EABI32, so calls across that boundary
-must be reconciled before linking.
+All 18,440 game objects compile (MIPS II, single-float FPU, `-G0`,
+`-mno-gpopt`: the source's `section(".sdata")` externs are aliases into the
+EE image, out of gp range). PSP-side pieces, all in `port/psp/`:
+
+- `tools/psp_glue.py`: runs upstream `gen_link_glue.py` with pspdev's newlib,
+  libm and libgcc added to `link_catalog.HOST_LIBS`.
+- `host/psp_entry.c` (psp-gcc, EABI): module entry, exit/power callbacks.
+- `host/psp_main.c`, `libc_o32.c`, `psp_fpu.c`, `psp_prof.c` (clang o32).
+- `port/platform/platform_psp.c`: loop and lifecycle.
+- Link: psp-gcc, `-fno-use-linker-plugin -G0 --no-warn-mismatch`; the EE data
+  units go in as a whole archive (their paths overflow the command line);
+  `--wrap` for `fseeko`, `ps2_float_set_nearest` and the profiler stages.
 
 ## o32 / EABI32 boundary
 
@@ -54,18 +68,12 @@ Rules (verified by `port/psp/abi_test` in PPSSPP 1.20.4, not yet on hardware):
 
     psp-cmake -S port/psp/abi_test -B build/psp-abi && cmake --build build/psp-abi
 
-## Headless EBOOT (mvc2_host)
+## Runner
 
-    ninja -C build/port-psp mvc2_eboot     # after the cmake line above
-
-`port/psp/host/psp_entry.c` (psp-gcc) is the module entry; it calls the o32
-runner `psp_main.c`: boundary self-test, boot, 600 frames, a logic hash every
-60 frames, and a state dump for `port/tools/oracle/compare.py`.
-`libc_o32.c` replaces the newlib functions that cannot cross the boundary
-(printf/scanf family, `fmaf`, `fseeko` via `--wrap`). Other link details:
-`-mno-gpopt` (the source's `section(".sdata")` externs), psp-gcc links with
-`-fno-use-linker-plugin -G0`, and gen_link_glue reads pspdev's libs when
-`MVC2_PSP=1` (set by CMake).
+`psp_main.c` runs real time by default (boot, then the platform loop until
+HOME -> Exit). `env.txt` next to the EBOOT holds testing switches, one
+`KEY=VALUE` per line: `FRAMES=N` (headless, logic hash every 60 frames),
+`QUIT_AFTER=N`, `PROFILE=1`, and any `MVC2_*` variable (setenv).
 
 Run in PPSSPP (memory stick is `~/.config/ppsspp`):
 
@@ -82,15 +90,26 @@ Run in PPSSPP (memory stick is `~/.config/ppsspp`):
 `compare.py` is for port vs oracle; between two ports its block hashes flag
 pointers neither side can translate (function pointers, host malloc blocks),
 and wasm's `fix()` mistakes integers such as `0x01000000` for heap addresses.
-Use `compare_ports.py`, which reads the whole BSS fixed and raw:
+`compare_ports.py` compares a word only when both its translated and raw
+values differ, using upstream's outputs: the per-frame dump (player records
+and game block, every frame) and `MVC2_STATE_SNAP` snapshots (BSS and heap,
+translated + `.raw`, up to 8 frames per run, ~52 MB each):
 
-    X=0x004C2580:0x00634380
-    printf 'FRAMES=600\nMVC2_STATE_DUMP=ms0:/PSP/GAME/mvc2/state.bin\nMVC2_DUMP_EXTRA=%s\nMVC2_DUMP_EXTRA_RAW=1\n' $X > $G/env.txt
-    MVC2_DUMP_EXTRA=$X MVC2_DUMP_EXTRA_RAW=1 MVC2_STATE_DUMP=ref.bin node build/port-em/mvc2_host.js --iso <ISO> --frames 600
-    python3 port/tools/oracle/compare_ports.py $G/state.bin ref.bin --ignore port/tools/oracle/psp_vs_wasm.ignore
+    FR="99 199 299 399 499 599"
+    PS=$(for f in $FR; do printf "$f:ms0:/PSP/GAME/mvc2/snap/s$f.bin,"; done)
+    RS=$(for f in $FR; do printf "$f:ref/s$f.bin,"; done)
+    mkdir -p $G/snap ref
+    printf "FRAMES=600\nMVC2_STATE_DUMP=ms0:/PSP/GAME/mvc2/snap/dump.bin\nMVC2_STATE_SNAP=${PS%,}\n" > $G/env.txt
+    MVC2_STATE_DUMP=ref/dump.bin MVC2_STATE_SNAP=${RS%,} node build/port-em/mvc2_host.js --iso <ISO> --frames 600
+    python3 port/tools/oracle/compare_ports.py $G/snap/dump.bin ref/dump.bin \
+        $(for f in $FR; do printf -- "--snap $G/snap/s$f.bin ref/s$f.bin "; done) \
+        --ignore port/tools/oracle/psp_vs_wasm.ignore
 
-About 3 MB per frame per side. Result (title attract, no input): 600 frames,
-0 diverging words; 78 host-pointer words and the boot clock differ.
+Result (attract mode, no input): 600 frames of player records and game block
+plus six 26 MB snapshots, 0 diverging words. 77 words differ as host
+pointers, 31 as host pointers with the EE uncached segment bits the game ORs
+on for DMA (`0x20000000`/`0x30000000`), and 3 ignore-listed words that vary
+between any two runs (boot clock, timer, one malloc chunk size).
 
 ## Reference build (wasm, under node)
 
@@ -101,8 +120,6 @@ About 3 MB per frame per side. Result (title attract, no input): 600 frames,
     mkdir -p $E/upstream; ln -sfn $L/llvm/bin $E/upstream/bin; ln -sfn $L $E/upstream/emscripten
     EMSDK=$E emcmake cmake -S port -B build/port-em -G Ninja -DMVC2_APP=OFF
     EMSDK=$E ninja -C build/port-em mvc2_host
-    MVC2_STATE_DUMP=ref.bin node build/port-em/mvc2_host.js --iso <ISO> --frames 600 [--hash-every 60]
-    python3 port/tools/oracle/compare.py $G/state.bin ref.bin
 
 ## Memory budget (P04)
 
@@ -151,7 +168,7 @@ PATH, the signature pass takes its wasm path.
 ## Logic frame profile (P09)
 
 `PROFILE=1` in `env.txt` logs the average ms per `mvc2_frame` stage every 300
-frames (`mvc2_step_hook` in `port/host/game_loop.c`). Attract mode, 333 MHz,
+frames (`psp_prof.c`: the stage calls are wrapped at link time). Attract mode, 333 MHz,
 PPSSPP:
 
 | | title/logos | attract scenes | attract fight demo |
@@ -173,12 +190,12 @@ FCSR RM = 1 and FS = 1. The comparison (with a test switch, since removed):
 | native FPU, RZ + flush (`FCSR 01000e01`) | 0 |
 | native FPU, round to nearest (control) | 47, from frame 0 |
 
-PSP builds now do this by default (P10): `psp-clang.cmake` sets
-`MVC2_PS2_FLOAT=OFF`, and `ps2_float_set_nearest()` (port/host/ps2_float.c)
-programs FCSR on MIPS: RM = 1 (EE) or RM = 0 (`MVC2_PS2FP_OFF=1`, the arcade
-round-to-nearest setting), FS = 1 always. The runner calls it at start-up and
-logs `FCSR ... (RM n)`. FCSR is per thread: any thread that runs game code
-must call it. Default build: 0 diverging words vs wasm over 600 frames, and
-59.94 fps through the 1800-frame attract run (logic 0.24-0.56 ms/frame).
+PSP builds do this by default (P10): `psp-clang.cmake` sets
+`MVC2_PS2_FLOAT=OFF`, and `psp_fpu.c` programs FCSR at start-up: RM = 1 (EE)
+or RM = 0 (`MVC2_PS2FP_OFF=1`), FS = 1 always. The arcade round-to-nearest
+setting (`ps2_float_set_nearest`) is wrapped at link time to switch it too.
+FCSR is per thread: any thread that runs game code must call
+`psp_fpu_init()`. Result (separated build): 59.94 fps through the
+1800-frame attract run (logic 0.24-0.56 ms/frame), and state as below.
 Verified in PPSSPP only; hardware may differ on denormal inputs and division
 by zero (EE: largest finite), so P42 checks on a device.

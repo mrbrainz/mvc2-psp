@@ -2,9 +2,9 @@
 # The game code needs clang (MVC2_HOST_OPTIONS, the EE float rewrite in
 # ps2fp-cc.pl works on LLVM IR), so it is compiled with LLVM's mipsel backend;
 # the PSP SDK side (platform shell, link, EBOOT) uses pspdev's psp-gcc.
-#   cmake -S port -B build/port-psp -G Ninja \
-#         -DCMAKE_TOOLCHAIN_FILE=$PWD/port/cmake/psp-clang.cmake -DMVC2_APP=OFF
-#   ninja -C build/port-psp mvc2_game
+#   EMSDK=~/Sites/emsdk-brew cmake -S port/psp -B build/port-psp -G Ninja \
+#         -DCMAKE_TOOLCHAIN_FILE=$PWD/port/cmake/psp-clang.cmake
+#   EMSDK=~/Sites/emsdk-brew ninja -C build/port-psp mvc2_eboot
 # Needs: Homebrew llvm (clang with the Mips target), PSPDEV (port/docs/PSP.md).
 set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_SYSTEM_PROCESSOR mipsel)
@@ -31,5 +31,3 @@ set(MVC2_PS2_FLOAT OFF CACHE BOOL "EE single-precision rounding for the game cod
 # see port/docs/PSP.md "o32 / EABI32 boundary".
 set(CMAKE_C_LINK_EXECUTABLE
   "${PSPDEV}/bin/psp-gcc -L${PSPDEV}/psp/sdk/lib -Wl,--no-warn-mismatch -fno-use-linker-plugin -G0 <CMAKE_C_LINK_FLAGS> <LINK_FLAGS> <OBJECTS> -o <TARGET> <LINK_LIBRARIES>")
-# libc headers for the host side only (game TUs are -nostdlibinc/freestanding)
-set(MVC2_PSP_HOST_INCLUDES "${PSPDEV}/psp/include" "${PSPDEV}/psp/sdk/include")
