@@ -31,4 +31,4 @@ A PSP build of the Marvel vs. Capcom 2 decompilation, as a new platform backend 
 - Ticket `note`s: 1–3 sentences (what changed, how verified, limits). No narration.
 
 ## Status (max 3 lines; replace, never append)
-- P26 done (fights 9.7 ms, 59.94 fps). P25 open: all 17 stages still to check. Builds need EMSDK=~/Sites/emsdk-brew.
+- P26, P27 done (fights 9.7 ms at 59.94 fps, 14 MB heap free). P25 open: all 17 stages still to check. Builds need EMSDK=~/Sites/emsdk-brew.

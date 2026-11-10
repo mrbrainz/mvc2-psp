@@ -41,7 +41,8 @@ window.BACKLOG = {
   "P12",
   "P21",
   "P24",
-  "P26"
+  "P26",
+  "P27"
  ],
  "activities": [
   {
@@ -230,22 +231,6 @@ window.BACKLOG = {
    "description": "Mesh path on GU in a separate r_gu_mesh.c (r_mesh.c untouched): model load to GU vertex buffers, transforms, lighting/fog as the GL path does.",
    "done_when": "CAPCOM logo, title screen and all stages render in PPSSPP, fight at 59.94 fps.",
    "note": "r_gu_mesh.c + upstream fe_mesh.c: CAPCOM logo, title, attract stages, character select and a fight render in PPSSPP at 59.94 fps (after P26). All 17 stages not yet checked."
-  },
-  {
-   "id": "P27",
-   "order": 5.04,
-   "phase": "P2",
-   "size": "M",
-   "status": "Ready",
-   "depends": [
-    "P24"
-   ],
-   "read": [
-    "port/docs/PSP.md"
-   ],
-   "title": "RAM headroom for meshes",
-   "description": "After a fight about 0.7 MB of the 31 MB malloc arena and 764 KB of kernel memory are free; character atlases take up to 1 MB per bank. Find the large users and cut them so P25's meshes and textures fit.",
-   "done_when": "At least 4 MB free in a 3v3 fight on MEMSIZE=1, by the [mem] log line."
   }
  ]
 };

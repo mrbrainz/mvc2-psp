@@ -40,7 +40,8 @@ int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const 
                    float su, float sv, float ou, float ov);
 
 int r_gu_mesh_cnt[3];   /* DRAWLOG: mesh draws, triangles, microseconds in fl_clay_draw */
-int fl_mesh_debug;      /* fe_mesh.c sets it (MVC2_MESH_DUMP); r_mesh.c logs with it, unused here */
+int fl_mesh_debug;
+int r_gu_mesh_bytes;   /* clay buffers held */      /* fe_mesh.c sets it (MVC2_MESH_DUMP); r_mesh.c logs with it, unused here */
 
 typedef struct MVtx { float pos[3], nrm[3]; float col[4]; float uv[2]; } MVtx;   /* = FlMeshVtx */
 typedef struct GVtx { float u, v; uint32_t c; float x, y, z; } GVtx;               /* GE vertex */
@@ -255,6 +256,7 @@ static void build_mesh(MMesh *me, const Pol *p, size_t mo)
     wb(me->idx, nidx * sizeof *me->idx);
     me->nverts = nv;
     me->nidx = (int)nidx;
+    r_gu_mesh_bytes += nv * (int)(sizeof(MVtx) + sizeof(GVtx)) + (int)nidx * 2 + (me->nrange + 1) * (int)sizeof(MRange);
     me->dirty = 1;
     me->cvalid = 0;
 }
@@ -263,7 +265,8 @@ static void build_mesh(MMesh *me, const Pol *p, size_t mo)
 static void clay_free(int h)
 {
     MMesh *me = &CLAY[h];
-    if (me->gv || me->idx) r_gu_sync();   /* queued draws may still read them */
+    if (me->gv || me->idx) r_gu_sync();
+    if (me->gv) r_gu_mesh_bytes -= me->nverts * (int)(sizeof(MVtx) + sizeof(GVtx)) + me->nidx * 2 + (me->nrange + 1) * (int)sizeof(MRange);   /* queued draws may still read them */
     free(me->cpu);
     free(me->gv);
     free(me->idx);

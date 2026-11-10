@@ -123,6 +123,20 @@ static void rt_update(void *u)
     }
     if (quit_after && mvc2_host_frame == quit_after)
         psp_test_exit();
+    if (drawlog && mvc2_host_frame % 600 == 0) {
+        extern void r_gu_mem_log(void);
+        r_gu_mem_log();
+        psp_mem_report("now");
+        {   /* heap headroom: the largest block malloc can still give (64 KB steps) */
+            unsigned lo = 0, hi = 64u << 20;
+            while (hi - lo > (64u << 10)) {
+                unsigned mid = lo + (hi - lo) / 2;
+                char *volatile p = (char *)malloc(mid);   /* volatile: clang drops an unused malloc/free pair */
+                if (p) { p[0] = 1; free(p); lo = mid; } else hi = mid;
+            }
+            fprintf(stderr, "[mem] heap: largest free block %u KB\n", lo >> 10);
+        }
+    }
     if (mvc2_host_frame % 300 == 0) {   /* every 5 s */
         plat_stats(&st);
         fprintf(stderr, "[plat] frame %ld: logic %.2f fps, update %.2f ms, slowed %d\n",

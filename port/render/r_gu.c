@@ -85,6 +85,8 @@ static struct {
 } R;
 
 
+static int mem_tex, mem_ntex;   /* texture pixel bytes held, count */
+
 /* ---------------- display list ---------------- */
 static void set_mapping(void)
 {
@@ -729,15 +731,27 @@ static int tex_alloc(TexRec *t, int w, int h, int fmt)
     t->ph = pow2(h, 1);
     t->pix = (uint8_t *)memalign(16, (size_t)t->pw * t->ph * bpp);
     if (!t->pix) return -1;
+    mem_tex += t->pw * t->ph * bpp; mem_ntex++;
     memset(t->pix, 0, (size_t)t->pw * t->ph * bpp);
     t->used = 1;
     return 0;
+}
+
+/* DRAWLOG memory report: bytes held by the renderer (r_gu_mem_log) */
+void r_gu_mem_log(void)
+{
+    extern int r_gu_char_bytes, r_gu_mesh_bytes;
+    int pal = 0;
+    for (int i = 0; i < MAX_PAL; i++) pal += R.pal[i].used ? 1024 : 0;
+    fprintf(stderr, "[mem] renderer: textures %d KB (%d), cluts %d KB, char pages %d KB, meshes %d KB\n",
+            mem_tex >> 10, mem_ntex, pal >> 10, r_gu_char_bytes >> 10, r_gu_mesh_bytes >> 10);
 }
 
 static void tex_free(TexRec *t, int idx)
 {
     r_flush();
     if (R.cur_tex == idx) R.cur_tex = -1;
+    if (t->pix) { mem_tex -= t->pw * t->ph * (is_index(t->fmt) ? 1 : 4); mem_ntex--; }
     free(t->pix);
     memset(t, 0, sizeof *t);
 }

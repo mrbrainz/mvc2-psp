@@ -222,6 +222,23 @@ window.BACKLOG_ARCHIVE = [
   "note": "psp_fe_sync.c syncs each texture/palette handle once per logic frame (upstream re-hashed them on every mesh draw, ~18 ms a frame). PPSSPP, no profiler: fight 9.7 ms, character select 10.0-10.4 ms, 59.94 fps throughout; screenshots unchanged."
  },
  {
+  "id": "P27",
+  "order": 5.04,
+  "phase": "P2",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P24"
+  ],
+  "read": [
+   "port/docs/PSP.md"
+  ],
+  "title": "RAM headroom for meshes",
+  "description": "After a fight about 0.7 MB of the 31 MB malloc arena and 764 KB of kernel memory are free; character atlases take up to 1 MB per bank. Find the large users and cut them so P25's meshes and textures fit.",
+  "done_when": "At least 4 MB free in a 3v3 fight on MEMSIZE=1, by the [mem] log line.",
+  "note": "The 0.7 MB figure was newlib's malloc arena slack, not the heap: a malloc probe (DRAWLOG, every 600 frames) shows 14 MB free in a 3v3 fight in PPSSPP. Renderer holds textures 2.5 MB, char atlases 0.6 MB, meshes 0.8 MB; nothing was cut."
+ },
+ {
   "id": "P12",
   "order": 5.2,
   "phase": "P1",

@@ -25,7 +25,8 @@ float r_gu_snap_x(float x);
 float r_gu_snap_y(float y);
 float r_gu_depth(float z);
 
-int r_gu_char_cnt[3];   /* DRAWLOG: draws, parts, tile decodes */
+int r_gu_char_cnt[3];
+int r_gu_char_bytes;   /* atlas pages held */   /* DRAWLOG: draws, parts, tile decodes */
 
 typedef struct CharTile {
     int16_t page;       /* -1 = not decoded yet */
@@ -83,7 +84,7 @@ void fl_char_bank_destroy(FlCharBank *b)
 {
     if (!b) return;
     r_gu_sync();
-    for (int i = 0; i < b->n_pages; i++) free(b->pages[i]);
+    for (int i = 0; i < b->n_pages; i++) { free(b->pages[i]); r_gu_char_bytes -= PAGE * PAGE / 2; }
     free(b->tiles);
     free(b->clut);
     free(b);
@@ -123,7 +124,7 @@ static void atlas_reset(FlCharBank *b)
     for (int i = 0; i < b->n_tiles; i++) b->tiles[i].page = -1;
     for (int i = 0; i < b->n_pages; i++) memset(b->pages[i], 0, PAGE * PAGE / 2);
     b->n_pages = b->n_pages ? 1 : 0;   /* keep page 0, free the rest */
-    for (int i = 1; i < PAGES_MAX; i++) { free(b->pages[i]); b->pages[i] = NULL; }
+    for (int i = 1; i < PAGES_MAX; i++) { if (b->pages[i]) r_gu_char_bytes -= PAGE * PAGE / 2; free(b->pages[i]); b->pages[i] = NULL; }
     b->shelf_x = b->shelf_y = b->shelf_h = 0;
 }
 
@@ -156,6 +157,7 @@ static int ensure_tile(FlCharBank *b, int ti)
             if (!np) return -1;
             memset(np, 0, PAGE * PAGE / 2);   /* index 0 = transparent */
             b->pages[b->n_pages++] = np;
+            r_gu_char_bytes += PAGE * PAGE / 2;
         }
         b->shelf_x = b->shelf_y = b->shelf_h = 0;
     }

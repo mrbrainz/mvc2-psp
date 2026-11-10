@@ -140,7 +140,14 @@ Almost all of the malloc is the EE heap (`HOST_EE_HEAP`, 28 MB,
 6 MB handle pool, so play does not grow it. **Minimum model: PSP-2000 (Slim)
 or later, with `MEMSIZE=1`** (about 52 MB user memory, about 13 MB left for
 renderer and audio buffers; VRAM is separate). The PSP-1000 (24 MB user)
-cannot hold the EE heap. `[mem]` lines in `mvc2_psp.log` report malloc use.
+cannot hold the EE heap. `[mem]` lines in `mvc2_psp.log` report malloc use;
+"malloc arena" is newlib's arena so far (it grows on demand), not the heap
+limit, and "kernel free" is what `PSP_HEAP_SIZE_KB(-1024)` leaves outside the
+heap. With `DRAWLOG=1`, every 600 frames: renderer bytes by user and the
+largest block malloc can still give. 3v3 fight in PPSSPP (P27): textures
+2.5 MB, character atlases 0.6 MB, mesh buffers 0.8 MB, CLUTs 0.1 MB, **14 MB
+of heap still free**. Six different characters at the 1 MB atlas cap would
+add about 5 MB.
 
 ## Platform shell (P11)
 
