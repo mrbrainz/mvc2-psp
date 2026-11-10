@@ -12,6 +12,7 @@
  * Every SDK call here takes <= 4 int/pointer args (port/docs/PSP.md).
  * Lifecycle: the HOME-menu exit and the power callbacks run on an EABI thread
  * (port/psp/host/psp_entry.c) and only set flags read here. */
+#include <pspctrl.h>
 #include <pspdisplay.h>
 #include <psprtc.h>
 #include <string.h>
@@ -64,8 +65,46 @@ int plat_fullscreen(void) { return 1; }
 void plat_request_render(void) { P.force_render = 1; }
 void plat_stats(PlatStats *s) { *s = P.st; }
 
-/* input arrives with P12 */
-void plat_poll_input(void) {}
+/* Controls (P12): the PSP's own pad is player 1, mapped 1:1 onto the PS2 pad
+ * the game reads, so the game's BUTTON CONFIG applies as on the PS2. With its
+ * default config the six attacks are SQUARE LP, TRIANGLE HP, CROSS LK,
+ * CIRCLE HK, L A1, R A2 (PSP L/R = PS2 L1/R1). The analog stick is the PS2
+ * left stick (used by the game when the d-pad is idle). PS2 L2/R2/L3/R3 have
+ * no PSP button. Player 2 is not connected. */
+static void pad_read(PadRaw *p)
+{
+    static const struct { unsigned psp; uint16_t ps2; } map[] = {
+        { PSP_CTRL_UP, PS2_UP }, { PSP_CTRL_DOWN, PS2_DOWN },
+        { PSP_CTRL_LEFT, PS2_LEFT }, { PSP_CTRL_RIGHT, PS2_RIGHT },
+        { PSP_CTRL_SQUARE, PS2_SQUARE }, { PSP_CTRL_TRIANGLE, PS2_TRIANGLE },
+        { PSP_CTRL_CROSS, PS2_CROSS }, { PSP_CTRL_CIRCLE, PS2_CIRCLE },
+        { PSP_CTRL_LTRIGGER, PS2_L1 }, { PSP_CTRL_RTRIGGER, PS2_R1 },
+        { PSP_CTRL_START, PS2_START }, { PSP_CTRL_SELECT, PS2_SELECT },
+    };
+    SceCtrlData d;
+    uint16_t b = 0;
+    if (sceCtrlPeekBufferPositive(&d, 1) <= 0)
+        return;
+    for (unsigned i = 0; i < sizeof map / sizeof map[0]; i++)
+        if (d.Buttons & map[i].psp) b |= map[i].ps2;
+    p->buttons = b;
+    p->lx = d.Lx;
+    p->ly = d.Ly;
+    p->rx = p->ry = 0x80;
+    p->connected = 1;
+    p->analog = 1;
+}
+
+void plat_poll_input(void)
+{
+    static int init;
+    if (!init) {
+        sceCtrlSetSamplingCycle(0);
+        sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
+        init = 1;
+    }
+    pad_read(&no_pad[0]);
+}
 const PadRaw *plat_pad(int player) { return &no_pad[player < 0 || player >= PLAT_MAX_PADS ? 0 : player]; }
 int plat_pad_connected(int slot) { return slot == 0; }
 

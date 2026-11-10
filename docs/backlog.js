@@ -38,26 +38,10 @@ window.BACKLOG = {
   "P09",
   "P10",
   "P11",
+  "P12",
   "P21"
  ],
  "activities": [
-  {
-   "id": "P12",
-   "order": 5.2,
-   "phase": "P1",
-   "size": "S",
-   "status": "Ready",
-   "depends": [
-    "P11"
-   ],
-   "read": [
-    "port/platform/pad.c",
-    "port/platform/input.c"
-   ],
-   "title": "PSP controls",
-   "description": "Map sceCtrl to game pads; default arcade-style layout for 6 buttons on PSP face/shoulder buttons.",
-   "done_when": "All game inputs reachable; layout documented."
-  },
   {
    "id": "P13",
    "order": 5.3,
@@ -231,9 +215,10 @@ window.BACKLOG = {
    "order": 5.01,
    "phase": "P2",
    "size": "M",
-   "status": "Ready",
+   "status": "In progress",
    "depends": [
-    "P21"
+    "P21",
+    "P25"
    ],
    "read": [
     "port/render/r_char.c",
@@ -241,7 +226,8 @@ window.BACKLOG = {
    ],
    "title": "sceGu renderer: characters",
    "description": "Character drawer (fl_char_*) on the GU backend: tile atlas pages in RAM/VRAM, palettes as CLUTs.",
-   "done_when": "Character select and a fight show characters correctly in PPSSPP."
+   "done_when": "Character select and a fight show characters correctly in PPSSPP.",
+   "note": "r_gu_char.c (T4 atlas pages, 16-colour CLUTs) + upstream fe_char.c: the attract demo fight draws characters correctly at 59.94 fps. Character select (state 2 1) draws through the mesh path, so its check waits on P25."
   },
   {
    "id": "P25",

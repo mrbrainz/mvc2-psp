@@ -184,5 +184,23 @@ window.BACKLOG_ARCHIVE = [
   "description": "New port/render/r_gu.c (r_gl.c untouched; its GL-free logic copied): GU init, batching (r_use/r_verts/r_flush), flat/RGBA/indexed+CLUT textures, blend/depth/scissor state, fl_* 2D prims, TIM2, present scaled to 480x272. PSP target builds fe_render.c + r_char/r_font/decode with it.",
   "done_when": "Title screen and logos render recognisably in PPSSPP (screenshot), still 59.94 fps.",
   "note": "r_gu.c (sceGu) behind unchanged fe_render.c: save-data warning text and ADX logo render correctly in PPSSPP, 0 rejected prims, 59.94 fps (update 0.9-4.2 ms). Title/CAPCOM logo are mesh-drawn, so moved to P25. Affine 2D tris, approx dest-alpha blends."
+ },
+ {
+  "id": "P12",
+  "order": 5.2,
+  "phase": "P1",
+  "size": "S",
+  "status": "Done",
+  "depends": [
+   "P11"
+  ],
+  "read": [
+   "port/platform/pad.c",
+   "port/platform/input.c"
+  ],
+  "title": "PSP controls",
+  "description": "Map sceCtrl to game pads; default arcade-style layout for 6 buttons on PSP face/shoulder buttons.",
+  "done_when": "All game inputs reachable; layout documented.",
+  "note": "platform_psp.c reads sceCtrl (analog) into player 1's PS2 pad 1:1 (layout in PSP.md \"Controls (P12)\"); psp_main.c hands it to the game, plus a PRESS= test switch. Start drives attract -> menus -> character select in PPSSPP; PS2 L2/R2/L3/R3 have no PSP button."
  }
 ];

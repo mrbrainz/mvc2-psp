@@ -31,4 +31,4 @@ A PSP build of the Marvel vs. Capcom 2 decompilation, as a new platform backend 
 - Ticket `note`s: 1–3 sentences (what changed, how verified, limits). No narration.
 
 ## Status (max 3 lines; replace, never append)
-- P21 done: sceGu 2D core renders the warning text and ADX logo. Next: P24 characters, P25 meshes (title is mesh-drawn). Builds need EMSDK=~/Sites/emsdk-brew.
+- P12 done (sceCtrl pad; PRESS= test input). P24 characters draw (attract fight); character select needs P25 meshes. Builds need EMSDK=~/Sites/emsdk-brew.

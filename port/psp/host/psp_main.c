@@ -72,7 +72,30 @@ static long quit_after;
  * tri_tex, tri, sprite, quad, fill, then rejected tri_tex/sprite/quad),
  * summed over each 60 frames */
 extern int fe_cnt[8];
+extern int r_gu_char_cnt[3];   /* r_gu_char.c: draws, parts, tile decodes */
 static int drawlog = -1;
+
+/* PRESS=frame:len:bits,... (testing): hold PS2 pad bits (hex, pad.h) on
+ * player 1 for len frames from frame, on top of the PSP pad */
+static uint16_t press_bits(long f)
+{
+    static const char *list;
+    static int init;
+    const char *p;
+    uint16_t b = 0;
+    if (!init) { list = getenv("PRESS"); init = 1; }
+    for (p = list; p && *p;) {
+        long at = strtol(p, (char **)&p, 10), len = 0;
+        unsigned long bits = 0;
+        if (*p == ':') len = strtol(p + 1, (char **)&p, 10);
+        if (*p == ':') bits = strtoul(p + 1, (char **)&p, 16);
+        if (f >= at && f < at + len) b |= (uint16_t)bits;
+        while (*p && *p != ',') p++;
+        if (*p) p++;
+    }
+    return b;
+}
+
 
 static void rt_update(void *u)
 {
@@ -80,13 +103,21 @@ static void rt_update(void *u)
     (void)u;
     if (drawlog < 0)
         drawlog = getenv("DRAWLOG") != NULL;
+    {
+        PadRaw p0 = *plat_pad(0), p1 = *plat_pad(1);
+        p0.buttons |= press_bits(mvc2_host_frame);
+        p0.connected = p1.connected = 1;
+        host_pad_set(0, &p0);
+        host_pad_set(1, &p1);
+    }
     mvc2_frame();
     if (drawlog && mvc2_host_frame % 60 == 0) {
         const unsigned char *g = (const unsigned char *)EE_BSS_PTR(0x004F4300);
-        fprintf(stderr, "[draw] frame %ld state %d %d %d: tt %d t %d sp %d q %d fill %d | rej tt %d sp %d q %d\n",
+        fprintf(stderr, "[draw] frame %ld state %d %d %d: tt %d t %d sp %d q %d fill %d | rej tt %d sp %d q %d | char %d/%d dec %d\n",
                 (long)mvc2_host_frame, g[0], g[1], g[2], fe_cnt[0], fe_cnt[1], fe_cnt[2], fe_cnt[3], fe_cnt[4],
-                fe_cnt[5], fe_cnt[6], fe_cnt[7]);
+                fe_cnt[5], fe_cnt[6], fe_cnt[7], r_gu_char_cnt[0], r_gu_char_cnt[1], r_gu_char_cnt[2]);
         memset(fe_cnt, 0, sizeof fe_cnt);
+        memset(r_gu_char_cnt, 0, sizeof r_gu_char_cnt);
     }
     if (quit_after && mvc2_host_frame == quit_after)
         psp_test_exit();

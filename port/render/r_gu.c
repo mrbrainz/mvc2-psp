@@ -45,7 +45,7 @@
 #define MAX_VERTS 4096          /* per batch */
 #define LIST_BYTES (1 << 20)    /* display list; restarted mid-frame when nearly full */
 
-enum { RM_FLAT = 0, RM_RGBA = 1, RM_INDEX = 2 };
+enum { RM_FLAT = 0, RM_RGBA = 1, RM_INDEX = 2, RM_RAW4 = 3 };
 
 typedef struct GuVtx { float u, v; uint32_t c; float x, y, z; } GuVtx;   /* TEXTURE_32BITF|COLOR_8888|VERTEX_32BITF */
 #define GU_VTYPE (GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_2D)
@@ -64,6 +64,7 @@ static struct {
     int nverts;
     /* batch key */
     int cur_tex, cur_mode, cur_pal;   /* tex/pal: record index, -1 none */
+    const void *raw_pix; const uint32_t *raw_clut; int raw_w, raw_h;   /* RM_RAW4 (r_gu_char.c) */
     /* fl state (func_003DF850) */
     uint32_t state_ad0, state_ad4, cur_texture, tex_slots[4];
     uint32_t material_color, fog_color, global_mod, clear_color, state_5f;
@@ -232,13 +233,19 @@ void r_flush(void)
         list_close();
         list_open();
     }
-    if (R.cur_mode == RM_FLAT || R.cur_tex < 0) {
+    if (R.cur_mode == RM_FLAT || (R.cur_tex < 0 && R.cur_mode != RM_RAW4)) {
         sceGuDisable(GU_TEXTURE_2D);
     } else {
-        TexRec *t = &R.tex[R.cur_tex];
+        TexRec *t = R.cur_mode == RM_RAW4 ? &R.tex[0] : &R.tex[R.cur_tex];
         GuTexImageArgs ti = { 0, t->pw, t->ph, t->pw, t->pix };
         sceGuEnable(GU_TEXTURE_2D);
-        if (R.cur_mode == RM_INDEX) {
+        if (R.cur_mode == RM_RAW4) {
+            GuTexImageArgs ri = { 0, R.raw_w, R.raw_h, R.raw_w, R.raw_pix };
+            ti = ri;
+            sceGuClutMode(GU_PSM_8888, 0, 0x0F, 0);
+            sceGuClutLoad(16 / 8, R.raw_clut);
+            sceGuTexMode(GU_PSM_T4, 0, 0, 0);
+        } else if (R.cur_mode == RM_INDEX) {
             const uint32_t *clut = (R.cur_pal >= 0 && R.pal[R.cur_pal].used) ? R.pal[R.cur_pal].clut : black_clut;
             sceGuClutMode(GU_PSM_8888, 0, 0xFF, 0);
             sceGuClutLoad(256 / 8, clut);
@@ -272,6 +279,46 @@ static void use(int tex, int mode, int pal)
         R.cur_mode = mode;
         R.cur_pal = pal;
     }
+}
+
+static float depth_of(float z);
+
+/* Character path (r_gu_char.c): one T4 page + 16-colour CLUT, quad given in
+ * game display coordinates (already snapped), depth as r_gl's r_depth_of. */
+void r_gu_char_quad(const void *pix, int pw, int ph, const uint32_t *clut,
+                    const float x[4], const float y[4], const float u[4], const float v[4],
+                    uint32_t rgba, float z)
+{
+    static const int idx[6] = { 0, 1, 2, 0, 2, 3 };
+    GuVtx *o;
+    if (R.cur_mode != RM_RAW4 || R.raw_pix != pix || R.raw_clut != clut) {
+        r_flush();
+        R.cur_tex = -2; R.cur_mode = RM_RAW4; R.cur_pal = -1;
+        R.raw_pix = pix; R.raw_clut = clut; R.raw_w = pw; R.raw_h = ph;
+    }
+    if (R.nverts + 6 > MAX_VERTS) r_flush();
+    o = &R.verts[R.nverts];
+    R.nverts += 6;
+    for (int k = 0; k < 6; k++) {
+        int i = idx[k];
+        o[k].x = x[i] * R.sx + R.ox;
+        o[k].y = y[i] * R.sy + R.oy;
+        o[k].z = z;
+        o[k].u = u[i];
+        o[k].v = v[i];
+        o[k].c = rgba;
+    }
+}
+
+float r_gu_snap_x(float x) { return floorf(x - (float)R.origin_x); }
+float r_gu_snap_y(float y) { return floorf(y - (float)R.origin_y); }
+float r_gu_depth(float z) { return depth_of(z); }
+/* finish everything queued so far (before reusing texture memory) */
+void r_gu_sync(void)
+{
+    int was = R.list_open;
+    r_flush();
+    if (was) { list_close(); list_open(); }
 }
 
 static GuVtx *verts(int n)

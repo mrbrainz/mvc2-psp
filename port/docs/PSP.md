@@ -222,3 +222,29 @@ Attract run: states 1 8 (save-data warning, ~38 sprites a frame) and 1 13
 (ADX logo) draw correctly with nothing rejected; states 1 1 and 1 2 (CAPCOM
 logo, title, demo fight) draw through the mesh and character paths, P24/P25.
 59.94 fps, update 0.9-4.2 ms a frame (PPSSPP).
+
+## Renderer: characters (P24)
+
+`port/render/r_gu_char.c` is a PSP copy of `r_char.c`'s `fl_char_*` (kept in
+step by hand); upstream `fe_char.c` is compiled unchanged on top. Tiles decode
+on first use into 512x512 T4 pages in RAM (128 KB, at most 8 per bank; a full
+bank clears its atlas); each bank's 16 palettes are 16-colour 8888 CLUTs,
+drawn through `r_gu.c`'s `RM_RAW4` batch. `DRAWLOG` adds `char draws/parts dec
+tile-decodes`.
+
+## Controls (P12)
+
+`plat_poll_input` (platform_psp.c) maps the PSP pad 1:1 onto player 1's PS2
+pad; the game's own BUTTON CONFIG then assigns attacks (defaults below).
+
+| PSP | PS2 | default |
+|---|---|---|
+| D-pad / analog stick | D-pad / left stick | move |
+| Square / Triangle | Square / Triangle | LP / HP |
+| Cross / Circle | Cross / Circle | LK / HK |
+| L / R | L1 / R1 | A1 / A2 |
+| Start / Select | Start / Select | |
+
+PS2 L2/R2/L3/R3 have no PSP button. Player 2 is not connected.
+`PRESS=frame:len:bits,...` in `env.txt` (testing) holds PS2 bits (hex,
+`pad.h`) on player 1, e.g. `PRESS=600:6:8` presses Start at frame 600.

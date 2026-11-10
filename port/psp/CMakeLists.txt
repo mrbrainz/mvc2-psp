@@ -69,8 +69,8 @@ set_target_properties(psp_game_data PROPERTIES LINKER_LANGUAGE C)
 # Renderer: r_gu.c (sceGu) behind upstream's frontend binding fe_render.c,
 # which is compiled unchanged; decode.c (TIM2) is GL-free.
 set(PSP_RENDER_SRCS "${MVC2_ROOT}/port/render/r_gu.c" "${MVC2_ROOT}/port/render/decode.c"
-  "${MVC2_ROOT}/port/host/fe/fe_render.c")
-set_source_files_properties("${MVC2_ROOT}/port/host/fe/fe_render.c" PROPERTIES OBJECT_DEPENDS "${GLUE}/mvc2_host_protos.h")
+  "${MVC2_ROOT}/port/render/r_gu_char.c" "${MVC2_ROOT}/port/host/fe/fe_render.c" "${MVC2_ROOT}/port/host/fe/fe_char.c")
+set_source_files_properties("${MVC2_ROOT}/port/host/fe/fe_render.c" "${MVC2_ROOT}/port/host/fe/fe_char.c" PROPERTIES OBJECT_DEPENDS "${GLUE}/mvc2_host_protos.h")
 
 add_executable(mvc2_psp ${STUB_SRCS} ${GLUE_SRCS} ${PSP_EABI_OBJS} ${PSP_RENDER_SRCS}
   "${PSP_DIR}/host/psp_main.c" "${PSP_DIR}/host/libc_o32.c" "${PSP_DIR}/host/psp_fpu.c"
