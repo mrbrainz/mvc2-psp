@@ -1,0 +1,3 @@
+# packed EBOOTs hold the player's game data: never commit them
+pack/out/
+pack/EBOOT.PBP

@@ -293,5 +293,40 @@ window.BACKLOG_ARCHIVE = [
   "description": "Map sceCtrl to game pads; default arcade-style layout for 6 buttons on PSP face/shoulder buttons.",
   "done_when": "All game inputs reachable; layout documented.",
   "note": "platform_psp.c reads sceCtrl (analog) into player 1's PS2 pad 1:1 (layout in PSP.md \"Controls (P12)\"); psp_main.c hands it to the game, plus a PRESS= test switch. Start drives attract -> menus -> character select in PPSSPP; PS2 L2/R2/L3/R3 have no PSP button."
+ },
+ {
+  "id": "P13",
+  "order": 5.3,
+  "phase": "P1",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P11"
+  ],
+  "read": [
+   "port/platform/fs.c",
+   "port/docs/ASSET_LOADING.md"
+  ],
+  "title": "Disc intake on PSP",
+  "description": "Read the player-supplied PS2 ISO from ms0:/ (or pre-converted data); AFS reads via sceIo.",
+  "done_when": "Game assets load from memory stick; nothing copyrighted bundled.",
+  "note": "psp_disc.c + psp_disc_io.c (EABI): ISO from DISC=, ms0:/PSP/GAME/mvc2/ or ms0:/ISO/, read with sceIoRead (no stdio buffer, sequential reads skip the seek). 3060-frame fight in PPSSPP loads everything (~97 MB/s emulated); ms0:/ISO fallback checked. Real Memory Stick speed not measured."
+ },
+ {
+  "id": "P33",
+  "order": 5.31,
+  "phase": "P1",
+  "size": "S",
+  "status": "Done",
+  "depends": [
+   "P13"
+  ],
+  "read": [
+   "port/psp/host/psp_disc.c"
+  ],
+  "title": "Pack game data into the EBOOT",
+  "description": "bash / PowerShell script that takes the player's own ISO and writes an EBOOT.PBP holding only the data the PSP build reads, so no ISO is needed on the memory stick.",
+  "done_when": "A packed EBOOT plays a fight in PPSSPP with no ISO present; nothing copyrighted committed.",
+  "note": "port/psp/pack: psp_pack.py (+ .sh/.ps1 wrappers) writes /PS2/AFS00-03.AFS (the only files read in a full run) as a minimal ISO into DATA.PSAR, 193 MB; psp_disc.c reads it from argv[0]. 3060-frame fight with the ISO removed: 0 underruns, 59.94 fps. .ps1 not run (no PowerShell here)."
  }
 ];

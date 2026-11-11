@@ -9,5 +9,6 @@ struct psp_fseeko_args { FILE *f; off_t off; int whence; };
 int psp_fseeko_shim(const struct psp_fseeko_args *a);  /* EABI */
 void psp_mem_report(const char *when);  /* EABI: kernel free memory to the log */
 void psp_test_exit(void);            /* EABI: testing, as HOME -> Exit */
+extern const char *psp_eboot_path;  /* argv[0], set by the EABI main */
 int mvc2_psp_run(int frames);       /* o32: boot + N frames */
 #endif

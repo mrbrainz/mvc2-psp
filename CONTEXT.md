@@ -31,4 +31,4 @@ A PSP build of the Marvel vs. Capcom 2 decompilation, as a new platform backend 
 - Ticket `note`s: 1–3 sentences (what changed, how verified, limits). No narration.
 
 ## Status (max 3 lines; replace, never append)
-- P12, P24-P27, P31 done: menus, all 17 stages and audio (0 underruns) at 59.94 fps in PPSSPP. Next: P32 SFX balance, P28 stage glitches, P13/P14, P23. Builds need EMSDK=~/Sites/emsdk-brew.
+- P12, P13, P24-P27, P31 done: disc from memory stick, menus, all 17 stages and audio at 59.94 fps in PPSSPP. Next: P32 SFX balance, P28 stage glitches, P14, P23. Builds need EMSDK=~/Sites/emsdk-brew.

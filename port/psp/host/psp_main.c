@@ -28,6 +28,8 @@ int r_init(void);              /* port/render/r_gu.c */
 void r_gu_present(void);
 void fe_render_init(void);     /* port/host/fe/fe_render.c */
 int psp_audio_init(void);      /* psp_audio.c */
+int psp_disc_open(void);       /* psp_disc.c */
+void psp_disc_report(void);
 #include "psp_audio_hw.h"
 
 /* the o32/EABI boundary items the host relies on (port/docs/PSP.md) */
@@ -162,6 +164,7 @@ static void rt_update(void *u)
         fprintf(stderr, "[plat] frame %ld: logic %.2f fps, update %.2f ms, slowed %d\n",
                 (long)mvc2_host_frame, st.logic_fps, st.update_ms, st.slowed);
         psp_audio_hw_report();
+        psp_disc_report();
         { extern void psp_audio_cmp_report(void); psp_audio_cmp_report(); }
     }
 }
@@ -188,8 +191,8 @@ int mvc2_psp_run(int frames)
     selftest();
     psp_mem_report("before boot");
     psp_log("[host] boot\n");
-    if (host_disc_open("ms0:/PSP/GAME/mvc2/mvc2.iso") != 0)
-        psp_log("[host] no disc image: file loads will fail\n");
+    if (psp_disc_open() != 0)
+        psp_log("[host] file loads will fail\n");
     if (r_init() == 0)
         fe_render_init();   /* the game's render-library calls draw with sceGu */
     psp_audio_init();

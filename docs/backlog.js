@@ -39,31 +39,16 @@ window.BACKLOG = {
   "P10",
   "P11",
   "P12",
+  "P13",
   "P21",
   "P24",
   "P25",
   "P26",
   "P27",
-  "P31"
+  "P31",
+  "P33"
  ],
  "activities": [
-  {
-   "id": "P13",
-   "order": 5.3,
-   "phase": "P1",
-   "size": "M",
-   "status": "Ready",
-   "depends": [
-    "P11"
-   ],
-   "read": [
-    "port/platform/fs.c",
-    "port/docs/ASSET_LOADING.md"
-   ],
-   "title": "Disc intake on PSP",
-   "description": "Read the player-supplied PS2 ISO from ms0:/ (or pre-converted data); AFS reads via sceIo.",
-   "done_when": "Game assets load from memory stick; nothing copyrighted bundled."
-  },
   {
    "id": "P14",
    "order": 5.4,

@@ -51,12 +51,12 @@ set_source_files_properties(${HOST_CORE_SRCS} PROPERTIES OBJECT_DEPENDS "${GLUE}
 
 # ---- psp-gcc (EABI32) objects: module entry, sceGu shims; the rest is o32 --
 set(PSP_EABI_OBJS "")
-foreach(f psp_entry psp_gu_shim psp_audio_hw)
+foreach(f psp_entry psp_gu_shim psp_audio_hw psp_disc_io)
   set(_o "${CMAKE_BINARY_DIR}/${f}.o")
   add_custom_command(OUTPUT ${_o}
     COMMAND ${PSPDEV}/bin/psp-gcc -O2 -G0 -Wall -I${PSPDEV}/psp/sdk/include -D_PSP_FW_VERSION=600
             -c "${PSP_DIR}/host/${f}.c" -o ${_o}
-    DEPENDS "${PSP_DIR}/host/${f}.c" "${PSP_DIR}/host/psp_entry.h" "${PSP_DIR}/host/psp_gu_shim.h" "${PSP_DIR}/host/psp_audio_hw.h")
+    DEPENDS "${PSP_DIR}/host/${f}.c" "${PSP_DIR}/host/psp_entry.h" "${PSP_DIR}/host/psp_gu_shim.h" "${PSP_DIR}/host/psp_audio_hw.h" "${PSP_DIR}/host/psp_disc_io.h")
   list(APPEND PSP_EABI_OBJS ${_o})
 endforeach()
 
@@ -82,7 +82,7 @@ set_source_files_properties("${MVC2_ROOT}/port/host/fe/fe_render.c" "${MVC2_ROOT
 
 add_executable(mvc2_psp ${STUB_SRCS} ${GLUE_SRCS} ${PSP_EABI_OBJS} ${PSP_RENDER_SRCS} ${PSP_AUDIO_SRCS}
   "${PSP_DIR}/host/psp_main.c" "${PSP_DIR}/host/libc_o32.c" "${PSP_DIR}/host/psp_fpu.c"
-  "${PSP_DIR}/host/psp_prof.c" "${PSP_DIR}/host/psp_fe_sync.c" "${MVC2_ROOT}/port/platform/platform_psp.c"
+  "${PSP_DIR}/host/psp_prof.c" "${PSP_DIR}/host/psp_fe_sync.c" "${PSP_DIR}/host/psp_disc.c" "${MVC2_ROOT}/port/platform/platform_psp.c"
   $<TARGET_OBJECTS:psp_host_core>)
 target_include_directories(mvc2_psp PRIVATE "${MVC2_ROOT}/port/stubs" "${PSP_DIR}/host"
   "${MVC2_ROOT}/port/host" "${MVC2_ROOT}/port/platform" "${GLUE}")

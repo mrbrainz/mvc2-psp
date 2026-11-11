@@ -68,7 +68,10 @@ static int cb_thread(SceSize a, void *b) {
     return 0;
 }
 
-int main(void) {
+const char *psp_eboot_path;   /* argv[0]: the EBOOT.PBP that was started */
+
+int main(int argc, char **argv) {
+    psp_eboot_path = argc > 0 ? argv[0] : NULL;
     int t = sceKernelCreateThread("cb", cb_thread, 0x11, 0x1000, 0, 0);
     if (t >= 0) sceKernelStartThread(t, 0, 0);
     scePowerSetClockFrequency(333, 333, 166);   /* full speed (default 222 MHz) */

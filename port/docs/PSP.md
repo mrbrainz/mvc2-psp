@@ -86,6 +86,20 @@ Run in PPSSPP (memory stick is `~/.config/ppsspp`):
     /Applications/PPSSPPSDL.app/Contents/MacOS/PPSSPPSDL $G/EBOOT.PBP
     # output: $G/mvc2_psp.log (state.bin only with MVC2_STATE_DUMP in env.txt)
 
+The game data comes from the player's own PS2 disc, read through sceIo
+(`psp_disc.c`, `psp_disc_io.c`): `DISC=path` in `env.txt`, else the data
+packed into the EBOOT, else `ms0:/PSP/GAME/mvc2/mvc2.iso`, else
+`ms0:/ISO/mvc2.iso`. To pack it (Python 3; only `/PS2/AFS00-03.AFS`, 193 MB,
+the PSP build reads nothing else, as a minimal ISO in DATA.PSAR):
+
+    port/psp/pack/pack_eboot.sh [your .iso] [EBOOT.PBP in] [out]
+    # defaults: "Marvel vs. Capcom 2 - New Age of Heroes (USA).iso" in the
+    # project root, build/port-psp/EBOOT.PBP -> build/port-psp/packed/EBOOT.PBP
+    # (any OS: python3 port/psp/pack/psp_pack.py <iso> <in> <out>)
+
+A packed EBOOT holds copyrighted data: never commit or share it. `[disc]` lines log
+KB read and throughput every 5 s.
+
 `ra_state_hash` covers host pointers, so it only compares runs of one binary.
 
 ## PSP vs wasm state check
