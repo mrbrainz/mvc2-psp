@@ -28,8 +28,6 @@ static const HostAdxtOps ops = {
 
 int psp_audio_init(void)
 {
-    extern int psp_mixcmp;
-    psp_mixcmp = getenv("MIXCMP") != NULL;
     if (getenv("NO_AUDIO"))
         return 0;
     if (audio_init(1) != 0) {
@@ -40,12 +38,4 @@ int psp_audio_init(void)
     audio_set_loader(afs_loader, NULL);
     host_adxt_ops = &ops;
     return 0;
-}
-
-void psp_audio_cmp_report(void)
-{
-    extern int psp_mixcmp;
-    extern double psp_mixcmp_e[2];
-    if (psp_mixcmp)
-        host_log("[audio] mixcmp: upstream energy %.1f, psp %.1f", psp_mixcmp_e[0], psp_mixcmp_e[1]);
 }

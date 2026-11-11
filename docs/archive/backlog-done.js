@@ -382,6 +382,22 @@ window.BACKLOG_ARCHIVE = [
   "note": "Cause: fe_render.c sprite/tri/quad/render-state paths call fe_sync_handle in-file, bypassing the PSP per-frame memo (~21 ms in Abyss fights, ~39 ms in the ending); psp_fe_sync.c now routes them through it. Full arcade run in PPSSPP: every fight and the ending under 16.7 ms (only the two 7 MB load windows reach 17.7 ms). Char atlas capped at 4 pages; heap low-water 1.4 MB, filed as P53."
  },
  {
+  "id": "P53",
+  "order": 10.25,
+  "phase": "P2",
+  "size": "M",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/render/r_gu_char.c",
+   "port/docs/PSP.md"
+  ],
+  "title": "PSP heap fragmentation: keep a 2 MB free block",
+  "description": "Full arcade run (SCRIPT= + DRAWLOG=1): ~4.5 MB of the heap is free at the low point but the largest block is 1.4 MB, fragmented by 128 KB character atlas pages, textures and mesh buffers allocated and freed between fights. Try a fixed pool for atlas pages (or textures) reserved at boot so they stop splitting the heap.",
+  "done_when": "A full arcade run keeps >= 2 MB largest free block, with fights still under 16.7 ms.",
+  "note": "Sound effects stay ADPCM and are decoded per voice in the mixer (vag_psp.c, --wrap; native test: sample-identical to vag.c), freeing ~5 MB of PCM. Full arcade run: largest free block >= 3136 KB (was 1408), no 300-frame window over 16.7 ms, no audio underruns. Reserved pools for atlas pages or textures made it worse and were dropped."
+ },
+ {
   "id": "P23",
   "order": 11,
   "phase": "P2",

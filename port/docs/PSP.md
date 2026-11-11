@@ -163,6 +163,14 @@ largest block malloc can still give. 3v3 fight in PPSSPP (P27): textures
 of heap still free**. Six different characters at the 1 MB atlas cap would
 add about 5 MB.
 
+Sound effects stay as SPU2 ADPCM in the loaded bank (`port/audio/vag_psp.c`,
+`--wrap` of `vag_decode`/`vag_free`/`dcse_apply`): `mix_psp.c` decodes each
+voice's blocks as it plays, sample-identical to `vag.c`, instead of holding
+~5 MB of 16-bit PCM. Only the samples the Dreamcast set replaces become PCM.
+Full arcade run (P53): largest free block never below 3.1 MB.
+`-DMVC2_PSP_HEAPMAP=ON` logs free gaps and live bytes by caller with
+`DRAWLOG=1`.
+
 ## Platform shell (P11)
 
 `port/platform/platform_psp.c` implements the loop and lifecycle parts of

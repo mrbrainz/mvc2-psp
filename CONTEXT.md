@@ -31,4 +31,4 @@ A PSP build of the Marvel vs. Capcom 2 decompilation, as a new platform backend 
 - Ticket `note`s: 1–3 sentences (what changed, how verified, limits). No narration.
 
 ## Status (max 3 lines; replace, never append)
-- P12, P13, P22-P28, P31, P33, P35 done: full arcade run to the credits plays in PPSSPP from a packed EBOOT, fights under 16.7 ms. Next: P32 SFX balance, P34 legal text, P53 heap fragmentation, P52, P14.
+- P12, P13, P22-P28, P31, P33, P35, P53 done: full arcade run plays in PPSSPP from a packed EBOOT, fights under 16.7 ms, >= 3 MB heap headroom (SFX kept ADPCM). Next: P32 SFX balance, P34 legal text, P52, P14.

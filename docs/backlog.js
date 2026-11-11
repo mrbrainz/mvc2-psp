@@ -50,25 +50,10 @@ window.BACKLOG = {
   "P28",
   "P31",
   "P33",
-  "P35"
+  "P35",
+  "P53"
  ],
  "activities": [
-  {
-   "id": "P53",
-   "order": 10.25,
-   "phase": "P2",
-   "size": "M",
-   "status": "Ready",
-   "depends": [],
-   "read": [
-    "port/render/r_gu_char.c",
-    "port/docs/PSP.md"
-   ],
-   "title": "PSP heap fragmentation: keep a 2 MB free block",
-   "description": "Full arcade run (SCRIPT= + DRAWLOG=1): ~4.5 MB of the heap is free at the low point but the largest block is 1.4 MB, fragmented by 128 KB character atlas pages, textures and mesh buffers allocated and freed between fights. Try a fixed pool for atlas pages (or textures) reserved at boot so they stop splitting the heap.",
-   "done_when": "A full arcade run keeps >= 2 MB largest free block, with fights still under 16.7 ms.",
-   "note": "Reserved pools fail: atlas pages (0.5-0.8 MB low point) and a small-texture zone (1 MB: spills, low 1.0 MB; 1.5 MB: low 1.0 MB; 4 MB all textures <=256 KB: low 1.1 MB). Heap map (-DMVC2_PSP_HEAPMAP=ON): the arena has <0.5 MB free in fights and texture allocs (~4.5 MB churned, nearly all <=64 KB) split the rest, so headroom, not placement, is the limit; next lever is peak use, e.g. vag_decode PCM (~5 MB, port/audio, upstream)."
-  },
   {
    "id": "P52",
    "order": 10.15,

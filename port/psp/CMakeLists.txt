@@ -65,7 +65,7 @@ set_target_properties(psp_game_data PROPERTIES LINKER_LANGUAGE C)
 set(PSP_AUDIO_SRCS "${MVC2_ROOT}/port/audio/audio_psp.c" "${MVC2_ROOT}/port/audio/adx.c"
   "${MVC2_ROOT}/port/audio/dcse.c" "${MVC2_ROOT}/port/audio/hdbank.c" "${MVC2_ROOT}/port/audio/resample.c"
   "${MVC2_ROOT}/port/audio/synth.c" "${MVC2_ROOT}/port/audio/tsd.c" "${MVC2_ROOT}/port/audio/vag.c"
-  "${MVC2_ROOT}/port/audio/mix_psp.c" "${PSP_DIR}/host/psp_audio.c")
+  "${MVC2_ROOT}/port/audio/mix_psp.c" "${MVC2_ROOT}/port/audio/vag_psp.c" "${PSP_DIR}/host/psp_audio.c")
 # Renderer: r_gu.c (sceGu) behind upstream's frontend binding fe_render.c,
 # which is compiled unchanged; decode.c (TIM2) is GL-free.
 set(PSP_RENDER_SRCS "${MVC2_ROOT}/port/render/r_gu.c" "${MVC2_ROOT}/port/render/decode.c"
@@ -96,7 +96,8 @@ target_link_options(mvc2_psp PRIVATE -no-pie "@${GLUE}/link_extra.rsp" -Wl,--sor
   -Wl,--wrap=func_00412260 -Wl,--wrap=func_0041BB30 -Wl,--wrap=fe_sync_state
   -Wl,--wrap=func_003F0500__game -Wl,--wrap=func_003EA660
   -Wl,--wrap=fe_sync_handle -Wl,--wrap=func_00170170
-  -Wl,--wrap=synth_render -Wl,--wrap=rs_stream_run -Wl,--wrap=hd_bank_load)
+  -Wl,--wrap=synth_render -Wl,--wrap=rs_stream_run -Wl,--wrap=hd_bank_load
+  -Wl,--wrap=vag_decode -Wl,--wrap=vag_free -Wl,--wrap=dcse_apply)
 # Diagnostic heap map (psp_heapmap.c): -DMVC2_PSP_HEAPMAP=ON, dumped with DRAWLOG.
 option(MVC2_PSP_HEAPMAP "track malloc blocks for [heapmap] logs" OFF)
 if(MVC2_PSP_HEAPMAP)

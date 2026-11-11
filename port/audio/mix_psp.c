@@ -2,9 +2,11 @@
  * (--wrap, port/psp/CMakeLists.txt). The Allegrex has no double FPU and the
  * 32-tap sinc costs more than a whole frame, so voices and the BGM stream are
  * interpolated with a 4-point Hermite on a 32.32 fixed-point position. The
- * envelope is synth.c's env_step, copied. Everything else is upstream's. */
+ * envelope is synth.c's env_step, copied. Everything else is upstream's.
+ * Packed VAGs (vag_psp.c) are decoded per voice as they play. */
 #include "resample.h"
 #include "synth.h"
+#include "vag_psp.h"
 #include <math.h>
 #include <string.h>
 
@@ -68,25 +70,9 @@ static inline double fx_to(int32_t i, uint32_t f) { return i + f * (1.0 / 429496
 #define FX_T(f) ((float)((f) >> 8) * (1.0f / 16777216.0f))
 
 static void mix_render(Synth *s, float *out, int frames);
-void __real_synth_render(Synth *s, float *out, int frames);
-int psp_mixcmp;                 /* MIXCMP=1 (testing): upstream's loop on a copy, energy compared */
-double psp_mixcmp_e[2];
-void __wrap_synth_render(Synth *s, float *out, int frames)
-{
-    static Synth copy;
-    static float a[2048 * 2], b[2048 * 2];
-    if (!psp_mixcmp || frames > 2048) { mix_render(s, out, frames); return; }
-    memcpy(&copy, s, sizeof copy);
-    memset(a, 0, sizeof(float) * 2 * frames);
-    memset(b, 0, sizeof(float) * 2 * frames);
-    __real_synth_render(&copy, a, frames);
-    mix_render(s, b, frames);
-    for (int i = 0; i < 2 * frames; i++) {
-        psp_mixcmp_e[0] += a[i] * a[i];
-        psp_mixcmp_e[1] += b[i] * b[i];
-        out[i] += b[i];
-    }
-}
+void __wrap_synth_render(Synth *s, float *out, int frames) { mix_render(s, out, frames); }
+
+static VagDec vdec[SY_VOICES];
 
 static void mix_render(Synth *s, float *out, int frames)
 {
@@ -94,6 +80,8 @@ static void mix_render(Synth *s, float *out, int frames)
         SyVoice *v = &s->v[vi];
         if (!v->active) continue;
         const VagPcm *src = v->src;
+        const VagLazy *z = vag_psp_lazy(src);
+        VagDec *d = &vdec[vi];
         int32_t pi, si;
         uint32_t pf, sf;
         fx_from(v->pos, &pi, &pf);
@@ -112,7 +100,16 @@ static void mix_render(Synth *s, float *out, int frames)
                 env = v->level * (1.0f / 32767.0f);
             }
             float x, t = FX_T(pf);
-            if (pi >= 1 && pi + 2 < src->len) {
+            int w;
+            if (z) {
+                if (pi >= 1 && pi + 2 < src->len && ((w = vag_psp_fast(d, z, pi - 1)) >= 0 || (w = vag_psp_window(d, z, pi - 1, pi + 2)) >= 0)) {
+                    const int16_t *p = d->buf + w;
+                    x = herm(p[0], p[1], p[2], p[3], t);
+                } else {
+                    x = herm(vag_psp_get(d, src, z, pi - 1), vag_psp_get(d, src, z, pi),
+                             vag_psp_get(d, src, z, pi + 1), vag_psp_get(d, src, z, pi + 2), t);
+                }
+            } else if (pi >= 1 && pi + 2 < src->len) {
                 const int16_t *p = src->pcm + pi;
                 x = herm(p[-1], p[0], p[1], p[2], t);
             } else {

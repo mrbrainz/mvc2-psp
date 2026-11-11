@@ -230,7 +230,6 @@ static void rt_update(void *u)
                 (long)mvc2_host_frame, st.logic_fps, st.update_ms, st.slowed);
         psp_audio_hw_report();
         psp_disc_report();
-        { extern void psp_audio_cmp_report(void); psp_audio_cmp_report(); }
     }
 }
 
