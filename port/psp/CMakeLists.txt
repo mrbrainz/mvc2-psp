@@ -13,6 +13,12 @@ endif()
 get_filename_component(MVC2_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
 set(MVC2_APP OFF CACHE BOOL "the SDL2/GL app is not built for the PSP" FORCE)
 add_subdirectory("${MVC2_ROOT}/port" upstream EXCLUDE_FROM_ALL)
+# hsrc chA_a.c (src/, func_0016D4B0, the ending's legal text) stores floats through one
+# extern array and copies them through the next (adjacent at link time);
+# optimised, clang hoists the copy above the stores, since distinct globals
+# cannot overlap for it, and glyphs get the previous glyph's UV rows (P34).
+set_source_files_properties("${CMAKE_BINARY_DIR}/hsrc/src/chA_a.c" DIRECTORY "${MVC2_ROOT}/port"
+  PROPERTIES COMPILE_OPTIONS "-O0")
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 # long object lists (psp-ar takes @file)
 set(CMAKE_NINJA_FORCE_RESPONSE_FILE ON)

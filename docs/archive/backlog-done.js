@@ -366,6 +366,22 @@ window.BACKLOG_ARCHIVE = [
   "note": "Full arcade run (SCRIPT= runner, psp_script.c, upstream arcade_ending_rank.txt) to the credits in PPSSPP: 0 rejected draws, no >512 or failed textures (now logged), textures peak 3.8 MB in RAM; ~60 window captures checked. VRAM/swizzle not needed for correctness (perf in P35); post-credits legal text garbling is vertex data, P34."
  },
  {
+  "id": "P34",
+  "order": 10.1,
+  "phase": "P2",
+  "size": "M",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/render/r_gu.c",
+   "port/docs/PSP.md"
+  ],
+  "title": "PSP post-credits legal text garbled",
+  "description": "After the arcade credits (state 2 1 4) the legal text is drawn as textured triangles (func_003DF0C0) whose two triangles per glyph carry different UV rows already in the game's data (e.g. v 0.1895 vs 0.1270), giving cut letters and diagonal slashes. The boot legal screen (sprites) is fine. Compare the vertex data against the wasm reference to find the diverging game code; PSP-side fix only.",
+  "done_when": "The post-credits legal text reads cleanly in PPSSPP after a full arcade run (SCRIPT= arcade run).",
+  "note": "func_0016D4B0 (src/chA_a.c) copies UVs through adjacent extern arrays; optimised, clang hoisted the copy above the stores, so a glyph's second triangle took the previous glyph's rows. port/psp/CMakeLists.txt compiles that file at -O0. Arcade run: all glyph triangle pairs share their row; screen not checked by eye."
+ },
+ {
   "id": "P35",
   "order": 10.2,
   "phase": "P2",
