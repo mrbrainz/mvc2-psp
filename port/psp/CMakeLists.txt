@@ -51,12 +51,12 @@ set_source_files_properties(${HOST_CORE_SRCS} PROPERTIES OBJECT_DEPENDS "${GLUE}
 
 # ---- psp-gcc (EABI32) objects: module entry, sceGu shims; the rest is o32 --
 set(PSP_EABI_OBJS "")
-foreach(f psp_entry psp_gu_shim)
+foreach(f psp_entry psp_gu_shim psp_audio_hw)
   set(_o "${CMAKE_BINARY_DIR}/${f}.o")
   add_custom_command(OUTPUT ${_o}
     COMMAND ${PSPDEV}/bin/psp-gcc -O2 -G0 -Wall -I${PSPDEV}/psp/sdk/include -D_PSP_FW_VERSION=600
             -c "${PSP_DIR}/host/${f}.c" -o ${_o}
-    DEPENDS "${PSP_DIR}/host/${f}.c" "${PSP_DIR}/host/psp_entry.h" "${PSP_DIR}/host/psp_gu_shim.h")
+    DEPENDS "${PSP_DIR}/host/${f}.c" "${PSP_DIR}/host/psp_entry.h" "${PSP_DIR}/host/psp_gu_shim.h" "${PSP_DIR}/host/psp_audio_hw.h")
   list(APPEND PSP_EABI_OBJS ${_o})
 endforeach()
 
@@ -66,6 +66,13 @@ endforeach()
 add_library(psp_game_data STATIC $<TARGET_OBJECTS:mvc2_game_data>)
 set_target_properties(psp_game_data PROPERTIES LINKER_LANGUAGE C)
 
+# Audio (P31): port/audio's mixer unchanged, audio_psp.c in place of the SDL
+# audio.c, out through sceAudio (psp_audio_hw.c).
+set(PSP_AUDIO_SRCS "${MVC2_ROOT}/port/audio/audio_psp.c" "${MVC2_ROOT}/port/audio/adx.c"
+  "${MVC2_ROOT}/port/audio/dcse.c" "${MVC2_ROOT}/port/audio/hdbank.c" "${MVC2_ROOT}/port/audio/resample.c"
+  "${MVC2_ROOT}/port/audio/synth.c" "${MVC2_ROOT}/port/audio/tsd.c" "${MVC2_ROOT}/port/audio/vag.c"
+  "${MVC2_ROOT}/port/audio/mix_psp.c" "${PSP_DIR}/host/psp_audio.c")
+
 # Renderer: r_gu.c (sceGu) behind upstream's frontend binding fe_render.c,
 # which is compiled unchanged; decode.c (TIM2) is GL-free.
 set(PSP_RENDER_SRCS "${MVC2_ROOT}/port/render/r_gu.c" "${MVC2_ROOT}/port/render/decode.c"
@@ -73,7 +80,7 @@ set(PSP_RENDER_SRCS "${MVC2_ROOT}/port/render/r_gu.c" "${MVC2_ROOT}/port/render/
   "${MVC2_ROOT}/port/host/fe/fe_mesh.c")
 set_source_files_properties("${MVC2_ROOT}/port/host/fe/fe_render.c" "${MVC2_ROOT}/port/host/fe/fe_char.c" "${MVC2_ROOT}/port/host/fe/fe_mesh.c" PROPERTIES OBJECT_DEPENDS "${GLUE}/mvc2_host_protos.h")
 
-add_executable(mvc2_psp ${STUB_SRCS} ${GLUE_SRCS} ${PSP_EABI_OBJS} ${PSP_RENDER_SRCS}
+add_executable(mvc2_psp ${STUB_SRCS} ${GLUE_SRCS} ${PSP_EABI_OBJS} ${PSP_RENDER_SRCS} ${PSP_AUDIO_SRCS}
   "${PSP_DIR}/host/psp_main.c" "${PSP_DIR}/host/libc_o32.c" "${PSP_DIR}/host/psp_fpu.c"
   "${PSP_DIR}/host/psp_prof.c" "${PSP_DIR}/host/psp_fe_sync.c" "${MVC2_ROOT}/port/platform/platform_psp.c"
   $<TARGET_OBJECTS:psp_host_core>)
@@ -82,7 +89,7 @@ target_include_directories(mvc2_psp PRIVATE "${MVC2_ROOT}/port/stubs" "${PSP_DIR
 target_include_directories(mvc2_psp SYSTEM PRIVATE ${PSP_INC})
 target_compile_options(mvc2_psp PRIVATE -fno-common)
 target_link_libraries(mvc2_psp PRIVATE "-Wl,--whole-archive" psp_game_data "-Wl,--no-whole-archive"
-  mvc2_game pspgu pspdebug pspdisplay pspge pspctrl psprtc psppower m)
+  mvc2_game pspgu pspdebug pspdisplay pspge pspctrl psprtc psppower pspaudio m)
 # --sort-section=name: the .data.ee_<address> sections in EE order (R18).
 # --wrap: o32 replacements and PSP-side hooks (port/psp/host).
 target_link_options(mvc2_psp PRIVATE -no-pie "@${GLUE}/link_extra.rsp" -Wl,--sort-section=name
@@ -93,7 +100,8 @@ target_link_options(mvc2_psp PRIVATE -no-pie "@${GLUE}/link_extra.rsp" -Wl,--sor
   -Wl,--wrap=func_003ECD00 -Wl,--wrap=func_003F0500 -Wl,--wrap=fl_clay_draw
   -Wl,--wrap=func_00412260 -Wl,--wrap=func_0041BB30 -Wl,--wrap=fe_sync_state
   -Wl,--wrap=func_003F0500__game -Wl,--wrap=func_003EA660
-  -Wl,--wrap=fe_sync_handle -Wl,--wrap=func_00170170)
+  -Wl,--wrap=fe_sync_handle -Wl,--wrap=func_00170170
+  -Wl,--wrap=synth_render -Wl,--wrap=rs_stream_run -Wl,--wrap=hd_bank_load)
 
 # ---- EBOOT.PBP: fixup imports, strip, SFO (MEMSIZE=1: Slim memory), pack --
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/EBOOT.PBP"

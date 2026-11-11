@@ -27,6 +27,8 @@ unsigned psp_fpu_init(void);   /* psp_fpu.c */
 int r_init(void);              /* port/render/r_gu.c */
 void r_gu_present(void);
 void fe_render_init(void);     /* port/host/fe/fe_render.c */
+int psp_audio_init(void);      /* psp_audio.c */
+#include "psp_audio_hw.h"
 
 /* the o32/EABI boundary items the host relies on (port/docs/PSP.md) */
 static void selftest(void)
@@ -159,6 +161,8 @@ static void rt_update(void *u)
         plat_stats(&st);
         fprintf(stderr, "[plat] frame %ld: logic %.2f fps, update %.2f ms, slowed %d\n",
                 (long)mvc2_host_frame, st.logic_fps, st.update_ms, st.slowed);
+        psp_audio_hw_report();
+        { extern void psp_audio_cmp_report(void); psp_audio_cmp_report(); }
     }
 }
 
@@ -188,6 +192,7 @@ int mvc2_psp_run(int frames)
         psp_log("[host] no disc image: file loads will fail\n");
     if (r_init() == 0)
         fe_render_init();   /* the game's render-library calls draw with sceGu */
+    psp_audio_init();
     mvc2_boot(1);
     psp_mem_report("after boot");
     if (frames > 0) {

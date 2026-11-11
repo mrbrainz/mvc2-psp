@@ -43,7 +43,8 @@ window.BACKLOG = {
   "P24",
   "P25",
   "P26",
-  "P27"
+  "P27",
+  "P31"
  ],
  "activities": [
   {
@@ -113,22 +114,38 @@ window.BACKLOG = {
    "done_when": "Full HUD readable; chosen default documented."
   },
   {
-   "id": "P31",
-   "order": 5.1,
-   "phase": "P3",
-   "size": "M",
+   "id": "P28",
+   "order": 5.05,
+   "phase": "P2",
+   "size": "S",
    "status": "Ready",
    "depends": [
-    "P11"
+    "P25"
+   ],
+   "read": [
+    "port/render/r_gu_mesh.c",
+    "port/docs/PSP.md"
+   ],
+   "title": "PSP stage background glitches",
+   "description": "Animated stage backgrounds glitch in PPSSPP: water turns grey at times, rocks along the bottom edge flicker. Seen in the scripted fight run (STAGE=16 env.txt), with or without audio.",
+   "done_when": "Water and edge rocks draw steadily through a fight on the affected stage(s), matching the native/web port."
+  },
+  {
+   "id": "P32",
+   "order": 5.15,
+   "phase": "P3",
+   "size": "S",
+   "status": "Ready",
+   "depends": [
+    "P31"
    ],
    "read": [
     "port/docs/AUDIO.md",
-    "port/docs/AUDIO_NOTES.md",
-    "port/audio/"
+    "port/audio/audio_psp.c"
    ],
-   "title": "PSP audio backend",
-   "description": "Mixer output via sceAudio on a dedicated thread; ADX music + HD/BD SFX.",
-   "done_when": "Music and SFX play without underruns in a fight."
+   "title": "PSP sound effects too quiet against music",
+   "description": "In PPSSPP the SFX/voices sit noticeably below the ADX music, unlike the web build at 100/100. The PSP mix matches upstream's synth level (MIXCMP=1), so find the cause PSP-side (output path, clamp, sceAudio, gains) and fix it in PSP files only; no upstream changes.",
+   "done_when": "In a PPSSPP fight the SFX/music balance matches the web build at default volumes (user listens)."
   },
   {
    "id": "P41",

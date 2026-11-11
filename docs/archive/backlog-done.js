@@ -258,6 +258,25 @@ window.BACKLOG_ARCHIVE = [
   "note": "The 0.7 MB figure was newlib's malloc arena slack, not the heap: a malloc probe (DRAWLOG, every 600 frames) shows 14 MB free in a 3v3 fight in PPSSPP. Renderer holds textures 2.5 MB, char atlases 0.6 MB, meshes 0.8 MB; nothing was cut."
  },
  {
+  "id": "P31",
+  "order": 5.1,
+  "phase": "P3",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P11"
+  ],
+  "read": [
+   "port/docs/AUDIO.md",
+   "port/docs/AUDIO_NOTES.md",
+   "port/audio/"
+  ],
+  "title": "PSP audio backend",
+  "description": "Mixer output via sceAudio on a dedicated thread; ADX music + HD/BD SFX.",
+  "done_when": "Music and SFX play without underruns in a fight.",
+  "note": "port/audio/audio_psp.c + psp_audio_hw.c: 48 kHz sceAudio SRC thread; mix_psp.c (--wrap) replaces the sinc/double inner loops with 4-point Hermite on 32.32 fixed point and unlocks during bank decode. 3060-frame fight: 0 underruns, 59.94 fps, ~12 ms/frame (+0.4 ms); MIXCMP=1 shows SFX within -0.5 dB of upstream."
+ },
+ {
   "id": "P12",
   "order": 5.2,
   "phase": "P1",
