@@ -168,6 +168,10 @@ Sound effects stay as SPU2 ADPCM in the loaded bank (`port/audio/vag_psp.c`,
 voice's blocks as it plays, sample-identical to `vag.c`, instead of holding
 ~5 MB of 16-bit PCM. Only the samples the Dreamcast set replaces become PCM.
 Full arcade run (P53): largest free block never below 3.1 MB.
+At the end of a run `[hwm]` lines (`psp_ee_hwm.c`, P54) give the EE heap
+footprint: full arcade, the arena has 16.3 MB of 22 MB written (the 6 MB
+handle pool inside it, 4.6 MB), and the game's break stops at 22.5 MB of
+the 28 MB EE heap. That rules out the PSP-1000.
 `-DMVC2_PSP_HEAPMAP=ON` logs free gaps and live bytes by caller with
 `DRAWLOG=1`.
 

@@ -74,7 +74,7 @@ set(PSP_RENDER_SRCS "${MVC2_ROOT}/port/render/r_gu.c" "${MVC2_ROOT}/port/render/
 set_source_files_properties("${MVC2_ROOT}/port/host/fe/fe_render.c" "${MVC2_ROOT}/port/host/fe/fe_char.c" "${MVC2_ROOT}/port/host/fe/fe_mesh.c" PROPERTIES OBJECT_DEPENDS "${GLUE}/mvc2_host_protos.h")
 add_executable(mvc2_psp ${STUB_SRCS} ${GLUE_SRCS} ${PSP_EABI_OBJS} ${PSP_RENDER_SRCS} ${PSP_AUDIO_SRCS}
   "${PSP_DIR}/host/psp_main.c" "${PSP_DIR}/host/libc_o32.c" "${PSP_DIR}/host/psp_fpu.c"
-  "${PSP_DIR}/host/psp_prof.c" "${PSP_DIR}/host/psp_fe_sync.c" "${PSP_DIR}/host/psp_disc.c" "${PSP_DIR}/host/psp_script.c" "${MVC2_ROOT}/port/platform/platform_psp.c"
+  "${PSP_DIR}/host/psp_prof.c" "${PSP_DIR}/host/psp_fe_sync.c" "${PSP_DIR}/host/psp_disc.c" "${PSP_DIR}/host/psp_script.c" "${PSP_DIR}/host/psp_ee_hwm.c" "${MVC2_ROOT}/port/platform/platform_psp.c"
   $<TARGET_OBJECTS:psp_host_core>)
 target_include_directories(mvc2_psp PRIVATE "${MVC2_ROOT}/port/stubs" "${PSP_DIR}/host"
   "${MVC2_ROOT}/port/host" "${MVC2_ROOT}/port/platform" "${GLUE}")

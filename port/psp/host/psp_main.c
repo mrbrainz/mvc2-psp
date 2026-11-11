@@ -283,6 +283,7 @@ int mvc2_psp_run(int frames)
         plat_run(&app);
         fprintf(stderr, "[host] quit at frame %ld\n", (long)mvc2_host_frame);
     }
+    { extern void psp_ee_hwm(void); psp_ee_hwm(); }
     psp_mem_report("end");
     psp_log("[host] done\n");
     return 0;

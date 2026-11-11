@@ -398,6 +398,22 @@ window.BACKLOG_ARCHIVE = [
   "note": "Sound effects stay ADPCM and are decoded per voice in the mixer (vag_psp.c, --wrap; native test: sample-identical to vag.c), freeing ~5 MB of PCM. Full arcade run: largest free block >= 3136 KB (was 1408), no 300-frame window over 16.7 ms, no audio underruns. Reserved pools for atlas pages or textures made it worse and were dropped."
  },
  {
+  "id": "P54",
+  "order": 10.3,
+  "phase": "P2",
+  "size": "S",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/host/boot.c",
+   "port/docs/PSP.md"
+  ],
+  "title": "Measure the game arena and handle pool high-water marks (PSP-1000 feasibility)",
+  "description": "The game reserves a 22 MB arena and a 6 MB handle pool at boot (port/host/boot.c); a PSP-1000 has ~24 MB of user memory. Log the peak bytes actually used in each over a full arcade run (SCRIPT= + DRAWLOG=1), PSP-side and read-only (--wrap or a scan of the blocks), without changing the reservations.",
+  "done_when": "A full arcade run reports the arena and handle pool high-water marks, and the ticket note says whether shrinking them could fit a PSP-1000.",
+  "note": "psp_ee_hwm.c (page scan of the zeroed EE heap, logged at the end): arena written 16.3 MB of 22 MB (handle pool sits inside it, 4.6 of 6 MB written, top reached); the game breaks only 22.5 MB of the 28 MB EE heap. With a 9.2 MB static image the game alone (~16.7 MB) exceeds the PSP-1000's ~24 MB less image, before renderer and audio: PSP-1000 not feasible."
+ },
+ {
   "id": "P23",
   "order": 11,
   "phase": "P2",
