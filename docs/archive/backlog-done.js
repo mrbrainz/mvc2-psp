@@ -348,6 +348,41 @@ window.BACKLOG_ARCHIVE = [
   "note": "port/psp/pack: psp_pack.py (+ .sh/.ps1 wrappers) writes /PS2/AFS00-03.AFS (the only files read in a full run) as a minimal ISO into DATA.PSAR, 193 MB; psp_disc.c reads it from argv[0]. 3060-frame fight with the ISO removed: 0 underruns, 59.94 fps. .ps1 not run (no PowerShell here)."
  },
  {
+  "id": "P07",
+  "order": 5.5,
+  "phase": "P1",
+  "size": "XS",
+  "status": "Done",
+  "depends": [
+   "P03"
+  ],
+  "read": [
+   "port/psp/host/libc_o32.c"
+  ],
+  "title": "PSP log newlines",
+  "description": "host_log ends lines with fputc to stderr, which goes to newlib, not psp_log; lines run together in mvc2_psp.log.",
+  "done_when": "mvc2_psp.log has one message per line.",
+  "note": "libc_o32.c wraps fputs/fputc (--wrap) so stderr/stdout writes go to psp_log like vfprintf. 600-frame run: one message per line (e.g. platform init and sceSifBindRpc no longer joined)."
+ },
+ {
+  "id": "P08",
+  "order": 5.6,
+  "phase": "P4",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P04"
+  ],
+  "read": [
+   "port/docs/PSP.md",
+   "port/host/boot.c"
+  ],
+  "title": "PSP-1000 feasibility: arena high-water",
+  "description": "PSP-1000 has ~24 MB user memory; the 28 MB EE heap (22 MB arena + 6 MB pool) does not fit. Measure the arena and pool high-water over full fights and decide if a smaller arena is possible without changing behaviour.",
+  "done_when": "High-water figures recorded in PSP.md and a go/no-go on PSP-1000 support.",
+  "note": "Covered by P54: arena 16.3 MB of 22 MB written (handle pool 4.6 of 6 MB), in PSP.md; no-go for the PSP-1000."
+ },
+ {
   "id": "P22",
   "order": 10,
   "phase": "P2",

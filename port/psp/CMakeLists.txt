@@ -91,7 +91,7 @@ target_link_libraries(mvc2_psp PRIVATE "-Wl,--whole-archive" psp_game_data "-Wl,
 # --sort-section=name: the .data.ee_<address> sections in EE order (R18).
 # --wrap: o32 replacements and PSP-side hooks (port/psp/host).
 target_link_options(mvc2_psp PRIVATE -no-pie "@${GLUE}/link_extra.rsp" -Wl,--sort-section=name
-  -Wl,--wrap=fseeko -Wl,--wrap=ps2_float_set_nearest
+  -Wl,--wrap=fseeko -Wl,--wrap=fputs -Wl,--wrap=fputc -Wl,--wrap=ps2_float_set_nearest
   -Wl,--wrap=mvc2_frame -Wl,--wrap=func_0012F460 -Wl,--wrap=func_001E42A0
   -Wl,--wrap=func_003D6FF0 -Wl,--wrap=func_00170D30 -Wl,--wrap=func_003D7400
   -Wl,--wrap=func_003D7640 -Wl,--wrap=func_0012DD90 -Wl,--wrap=func_00170D70

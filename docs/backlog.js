@@ -35,6 +35,8 @@ window.BACKLOG = {
   "P04",
   "P05",
   "P06",
+  "P07",
+  "P08",
   "P09",
   "P10",
   "P11",
@@ -57,6 +59,21 @@ window.BACKLOG = {
   "P55"
  ],
  "activities": [
+  {
+   "id": "P56",
+   "order": 10.4,
+   "phase": "P2",
+   "size": "S",
+   "status": "Ready",
+   "depends": [],
+   "read": [
+    "port/psp/host/psp_fe_sync.c",
+    "port/docs/PSP.md"
+   ],
+   "title": "PSP ending: blank under \"Presented by\" (CAPCOM logo?)",
+   "description": "After the post-credits legal text, the \"Presented by\" screen shows nothing underneath; the arcade presumably shows the CAPCOM logo (confirm). Log that screen's draws in an arcade run (SCRIPT=, DRAWLOG=1 rej counters): texture not loaded/synced, draw rejected, or another optimiser issue as in P34. PSP-side fix only.",
+   "done_when": "The \"Presented by\" screen shows what the arcade shows, checked by eye in PPSSPP after a full arcade run."
+  },
   {
    "id": "P52",
    "order": 10.15,
@@ -155,39 +172,6 @@ window.BACKLOG = {
    "title": "Release packaging",
    "description": "EBOOT icon/title, user guide for supplying own disc data.",
    "done_when": "Installable EBOOT + PSP section in USER_GUIDE.md."
-  },
-  {
-   "id": "P07",
-   "order": 5.5,
-   "phase": "P1",
-   "size": "XS",
-   "status": "Ready",
-   "depends": [
-    "P03"
-   ],
-   "read": [
-    "port/psp/host/libc_o32.c"
-   ],
-   "title": "PSP log newlines",
-   "description": "host_log ends lines with fputc to stderr, which goes to newlib, not psp_log; lines run together in mvc2_psp.log.",
-   "done_when": "mvc2_psp.log has one message per line."
-  },
-  {
-   "id": "P08",
-   "order": 5.6,
-   "phase": "P4",
-   "size": "M",
-   "status": "Ready",
-   "depends": [
-    "P04"
-   ],
-   "read": [
-    "port/docs/PSP.md",
-    "port/host/boot.c"
-   ],
-   "title": "PSP-1000 feasibility: arena high-water",
-   "description": "PSP-1000 has ~24 MB user memory; the 28 MB EE heap (22 MB arena + 6 MB pool) does not fit. Measure the arena and pool high-water over full fights and decide if a smaller arena is possible without changing behaviour.",
-   "done_when": "High-water figures recorded in PSP.md and a go/no-go on PSP-1000 support."
   }
  ]
 };

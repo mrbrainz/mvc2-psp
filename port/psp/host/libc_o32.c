@@ -165,6 +165,19 @@ int fprintf(FILE *fp, const char *f, ...) {
     return r;
 }
 
+/* fputs/fputc on stderr/stdout (host_log's prefix and newline) to the log
+ * too, not newlib's stream (P07); --wrap, port/psp/CMakeLists.txt. */
+int __real_fputs(const char *s, FILE *fp);
+int __real_fputc(int c, FILE *fp);
+int __wrap_fputs(const char *s, FILE *fp) {
+    if (fp == stderr || fp == stdout) { psp_log(s); return 0; }
+    return __real_fputs(s, fp);
+}
+int __wrap_fputc(int c, FILE *fp) {
+    if (fp == stderr || fp == stdout) { char b[2] = { (char)c, 0 }; psp_log(b); return (unsigned char)c; }
+    return __real_fputc(c, fp);
+}
+
 /* ---- sscanf: d i u x o (h/l/ll), s, c, [set], n, *, width ---------------- */
 
 static int isspace_(int c) { return c == ' ' || (c >= '\t' && c <= '\r'); }
