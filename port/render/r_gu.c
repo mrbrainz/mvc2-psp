@@ -50,8 +50,8 @@ enum { RM_FLAT = 0, RM_RGBA = 1, RM_INDEX = 2, RM_RAW4 = 3 };
 typedef struct GuVtx { float u, v; uint32_t c; float x, y, z; } GuVtx;   /* TEXTURE_32BITF|COLOR_8888|VERTEX_32BITF */
 #define GU_VTYPE (GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_2D)
 
-typedef struct TexRec { uint8_t *pix; int w, h, fmt, used, pw, ph, warned; } TexRec;
-typedef struct PalRec { uint32_t *clut; int ncolors, used; } PalRec;
+typedef struct TexRec { uint8_t *pix; int w, h, fmt, used, pw, ph, warned; unsigned gen; } TexRec;
+typedef struct PalRec { uint32_t *clut; int ncolors, used; unsigned gen; } PalRec;
 
 static unsigned int __attribute__((aligned(16))) list[LIST_BYTES / 4];
 static uint32_t __attribute__((aligned(16))) black_clut[256];
@@ -63,6 +63,7 @@ static struct {
     GuVtx verts[MAX_VERTS];
     int nverts;
     /* batch key */
+    unsigned list_gen;                /* lists closed so far: a record whose gen equals it is in the open list */
     int cur_tex, cur_mode, cur_pal;   /* tex/pal: record index, -1 none */
     const void *raw_pix; const uint32_t *raw_clut; int raw_w, raw_h;   /* RM_RAW4 (r_gu_char.c) */
     /* fl state (func_003DF850) */
@@ -137,6 +138,7 @@ static void list_close(void)
     sceGuFinish();
     sceGuSync(0, 0);
     R.list_open = 0;
+    R.list_gen++;
 }
 
 int r_init(void)
@@ -254,9 +256,11 @@ static int texture_filter_linear(void) { return (R.state_ad0 & 0x10000) ? 0 : 1;
 static void tex_bind(const TexRec *t, int pal)
 {
     GuTexImageArgs ti = { 0, t->pw, t->ph, t->pw, t->pix };
+    ((TexRec *)t)->gen = R.list_gen;
     sceGuEnable(GU_TEXTURE_2D);
     if (t->fmt == FL_TEX_IDX4 || t->fmt == FL_TEX_IDX8) {
         const uint32_t *clut = (pal >= 0 && pal < MAX_PAL && R.pal[pal].used) ? R.pal[pal].clut : black_clut;
+        if (clut != black_clut) R.pal[pal].gen = R.list_gen;
         sceGuClutMode(GU_PSM_8888, 0, 0xFF, 0);
         sceGuClutLoad(256 / 8, clut);
         sceGuTexMode(GU_PSM_T8, 0, 0, 0);
@@ -284,6 +288,7 @@ void r_flush(void)
     } else {
         TexRec *t = R.cur_mode == RM_RAW4 ? &R.tex[0] : &R.tex[R.cur_tex];
         GuTexImageArgs ti = { 0, t->pw, t->ph, t->pw, t->pix };
+        t->gen = R.list_gen;
         sceGuEnable(GU_TEXTURE_2D);
         if (R.cur_mode == RM_RAW4) {
             GuTexImageArgs ri = { 0, R.raw_w, R.raw_h, R.raw_w, R.raw_pix };
@@ -293,6 +298,7 @@ void r_flush(void)
             sceGuTexMode(GU_PSM_T4, 0, 0, 0);
         } else if (R.cur_mode == RM_INDEX) {
             const uint32_t *clut = (R.cur_pal >= 0 && R.pal[R.cur_pal].used) ? R.pal[R.cur_pal].clut : black_clut;
+            if (clut != black_clut) R.pal[R.cur_pal].gen = R.list_gen;
             sceGuClutMode(GU_PSM_8888, 0, 0xFF, 0);
             sceGuClutLoad(256 / 8, clut);
             sceGuTexMode(GU_PSM_T8, 0, 0, 0);
@@ -391,12 +397,20 @@ static uint32_t color_flat(uint32_t c)
     return ((c >> 16) & 0xFF) | (c & 0xFF00) | (c & 0xFF) << 16 | (uint32_t)gs_to_unorm(halve(c >> 24)) << 24;
 }
 
+/* GS: larger Z is nearer; depth buffer cleared to 0, tested GEQUAL.
+ * The game's depths all sit at the far end (stage meshes at NDC -1.000 to
+ * -0.998, sprites to -0.78): a 16-bit buffer over the whole range left the
+ * water and riverbed ~65 steps, so they z-fought (P28). DEPTH_ZOOM spreads
+ * [-1, -1 + 2/DEPTH_ZOOM] over the buffer, nearer clamps to the top; meshes
+ * get the same map (r_gu_mesh_draw). */
+#define DEPTH_ZOOM 8.f
 /* GS: larger Z is nearer; depth buffer cleared to 0, tested GEQUAL. */
 static float depth_of(float z)
 {
     float d = -z;
-    d = d < -1.f ? -1.f : d > 1.f ? 1.f : d;
-    return (d + 1.f) * 0.5f * 65535.f;
+    d = (d + 1.f) * (DEPTH_ZOOM * 0.5f);
+    d = d < 0.f ? 0.f : d > 1.f ? 1.f : d;
+    return d * 65535.f;
 }
 
 static void put(GuVtx *o, const FlVec4 *v, const float *uv, uint32_t c, int tw, int th)
@@ -678,6 +692,14 @@ void fl_frame_begin(void)
 
 void fl_frame_end(void) { r_flush(); }
 
+/* The GE reads textures and CLUTs when the list runs (list_close), not when a
+ * draw is recorded: rewriting or freeing one the open list already uses would
+ * change those earlier draws too (P28: grey water). Run the list first. */
+static void in_use_sync(unsigned gen)
+{
+    if (R.list_open && gen == R.list_gen) r_gu_sync();
+}
+
 /* ---------------- palettes ---------------- */
 static uint32_t *clut_new(void)
 {
@@ -712,6 +734,7 @@ void fl_pal_update(uint32_t handle, int first, int n, const uint8_t *rgba)
 {
     int i = (int)(handle >> 16) - 1;
     if (i < 0 || i >= MAX_PAL || !R.pal[i].used) return;
+    in_use_sync(R.pal[i].gen);
     clut_write(R.pal[i].clut, first, n, rgba);
 }
 
@@ -723,6 +746,7 @@ int fl_pal_define(uint32_t handle, int ncolors, const uint8_t *rgba)
         if (!(R.pal[i].clut = clut_new())) return -1;
         R.pal[i].used = 1;
     }
+    in_use_sync(R.pal[i].gen);
     R.pal[i].ncolors = ncolors;
     if (rgba) clut_write(R.pal[i].clut, 0, ncolors > 256 ? 256 : ncolors, rgba);
     return 0;
@@ -800,6 +824,7 @@ int fl_tex_define(uint32_t handle, int w, int h, int fmt, const void *pixels)
     }
     t = &R.tex[i];
     r_flush();
+    if (t->used) in_use_sync(t->gen);
     if (!t->used || t->w != w || t->h != h || t->fmt != fmt) {
         if (t->used) tex_free(t, i);
         if (tex_alloc(t, w, h, fmt)) {
@@ -822,6 +847,7 @@ void fl_tex_update(uint32_t handle, int x, int y, int w, int h, const void *pixe
     int i = (int)(handle & 0xFFFF) - 1;
     if (i < 0 || i >= MAX_TEX || !R.tex[i].used) return;
     r_flush();
+    in_use_sync(R.tex[i].gen);
     tex_copy(&R.tex[i], x, y, w, h, pixels);
 }
 
@@ -1026,6 +1052,10 @@ int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const 
     }
     apply_blend_depth();
     memcpy(&proj, clip, sizeof proj);   /* sceGuSetMatrix copies the values into the list */
+    {   /* depth zoom: z' = (z + w) * DEPTH_ZOOM - w, as depth_of */
+        float *m = (float *)&proj;
+        for (int r = 0; r < 4; r++) m[r * 4 + 2] = (m[r * 4 + 2] + m[r * 4 + 3]) * DEPTH_ZOOM - m[r * 4 + 3];
+    }
     /* GE clip planes cull clip-space z < 0, where the game's depth range
      * (larger = nearer, as the GS) puts every mesh; the VU1 reject above
      * (r_gu_mesh.c) stands in for the GS's own guard-band handling */

@@ -47,6 +47,7 @@ window.BACKLOG = {
   "P25",
   "P26",
   "P27",
+  "P28",
   "P31",
   "P33"
  ],
@@ -96,23 +97,6 @@ window.BACKLOG = {
    "title": "Saves on PSP",
    "description": "Settings/save file on memory stick.",
    "done_when": "Options survive restart."
-  },
-  {
-   "id": "P28",
-   "order": 5.05,
-   "phase": "P2",
-   "size": "S",
-   "status": "Ready",
-   "depends": [
-    "P25"
-   ],
-   "read": [
-    "port/render/r_gu_mesh.c",
-    "port/docs/PSP.md"
-   ],
-   "title": "PSP stage background glitches",
-   "description": "Animated stage backgrounds glitch in PPSSPP: water turns grey at times, rocks along the bottom edge flicker. Seen in the scripted fight run (STAGE=16 env.txt), with or without audio.",
-   "done_when": "Water and edge rocks draw steadily through a fight on the affected stage(s), matching the native/web port."
   },
   {
    "id": "P32",

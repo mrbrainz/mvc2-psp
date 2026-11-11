@@ -258,6 +258,24 @@ window.BACKLOG_ARCHIVE = [
   "note": "The 0.7 MB figure was newlib's malloc arena slack, not the heap: a malloc probe (DRAWLOG, every 600 frames) shows 14 MB free in a 3v3 fight in PPSSPP. Renderer holds textures 2.5 MB, char atlases 0.6 MB, meshes 0.8 MB; nothing was cut."
  },
  {
+  "id": "P28",
+  "order": 5.05,
+  "phase": "P2",
+  "size": "S",
+  "status": "Done",
+  "depends": [
+   "P25"
+  ],
+  "read": [
+   "port/render/r_gu_mesh.c",
+   "port/docs/PSP.md"
+  ],
+  "title": "PSP stage background glitches",
+  "description": "Animated stage backgrounds glitch in PPSSPP: water turns grey at times, rocks along the bottom edge flicker. Seen in the scripted fight run (STAGE=16 env.txt), with or without audio.",
+  "done_when": "Water and edge rocks draw steadily through a fight on the affected stage(s), matching the native/web port.",
+  "note": "Cause: game depths sit at NDC -1.000..-0.998, ~65 steps of the 16-bit depth buffer, so water/rocks z-fought (an arch was hidden). r_gu.c DEPTH_ZOOM 8 spreads the far end over the buffer for meshes and sprites; also syncs the GE before rewriting in-use textures/CLUTs, and mesh vertex colours no longer overwrite a buffer already in the list. r_gu_mesh.c clips the clipping programs' (19, 44-46) triangles on the CPU against w = 1 and a 4x guard band, as the GE draws with clip planes off and drops off-window vertices (the rest of the grey water). Checked in PPSSPP on stage 16, 59.94 fps (fight update 10.6 -> 13.3 ms)."
+ },
+ {
   "id": "P31",
   "order": 5.1,
   "phase": "P3",

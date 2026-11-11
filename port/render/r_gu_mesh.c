@@ -64,6 +64,7 @@ typedef struct MMesh {
     int dirty;               /* cpu positions/uvs changed */
     uint32_t ckey[3];        /* what gv's colours were computed for */
     int cvalid;
+    long used;               /* host frame gv was last handed to the GE (+1) */
 } MMesh;
 
 #define MAX_CLAY 0x402
@@ -435,13 +436,122 @@ int fl_clay_draw(int h)
     return r;
 }
 
+/* The clipping VU1 programs (19, 44-46) clip triangles that cross the camera
+ * plane; the GE draws with its clip planes off, where a vertex with w <= 0
+ * projects to garbage (P28: water near the camera turned grey). Clip those
+ * triangles at w = NEAR_W on the CPU. Returns the new index count, or -1 when
+ * nothing crosses. */
+#define NEAR_W 1.f
+#define GUARD 4.f   /* GE NDC; the GE's 4096-pixel coordinate window spans about 8 screens at 480 */
+typedef struct CVtx { GVtx v; float x, y, w; } CVtx;   /* vertex + clip-space x, y, w */
+
+static float cdist(const CVtx *p, int pl)
+{
+    switch (pl) {
+    case 0: return p->w - NEAR_W;
+    case 1: return GUARD * p->w - p->x;
+    case 2: return GUARD * p->w + p->x;
+    case 3: return GUARD * p->w - p->y;
+    default: return GUARD * p->w + p->y;
+    }
+}
+
+static CVtx lerp_c(const CVtx *a, const CVtx *b, float t)
+{
+    CVtx o;
+    o.v.u = a->v.u + (b->v.u - a->v.u) * t; o.v.v = a->v.v + (b->v.v - a->v.v) * t;
+    o.v.x = a->v.x + (b->v.x - a->v.x) * t; o.v.y = a->v.y + (b->v.y - a->v.y) * t; o.v.z = a->v.z + (b->v.z - a->v.z) * t;
+    o.x = a->x + (b->x - a->x) * t; o.y = a->y + (b->y - a->y) * t; o.w = a->w + (b->w - a->w) * t;
+    o.v.c = 0;
+    for (int s = 0; s < 32; s += 8) {
+        float ca = (float)((a->v.c >> s) & 0xFF), cb = (float)((b->v.c >> s) & 0xFF);
+        o.v.c |= (uint32_t)(ca + (cb - ca) * t + 0.5f) << s;
+    }
+    return o;
+}
+
+/* outcodes per vertex (bit per plane), computed once per draw */
+static uint8_t *cl_code;
+static float *cl_xyw;
+static int cl_cap;
+
+static int clip_prepare(const float clip[16], const GVtx *g, int nverts)
+{
+    int any = 0;
+    if (cl_cap < nverts) {
+        free(cl_code); free(cl_xyw);
+        cl_cap = nverts;
+        cl_code = (uint8_t *)malloc((size_t)nverts);
+        cl_xyw = (float *)malloc((size_t)nverts * 3 * sizeof(float));
+        if (!cl_code || !cl_xyw) { cl_cap = 0; return 0; }
+    }
+    for (int i = 0; i < nverts; i++) {
+        const GVtx *p = &g[i];
+        float x = p->x * clip[0] + p->y * clip[4] + p->z * clip[8] + clip[12];
+        float y = p->x * clip[1] + p->y * clip[5] + p->z * clip[9] + clip[13];
+        float w = p->x * clip[3] + p->y * clip[7] + p->z * clip[11] + clip[15];
+        float gw = GUARD * w;
+        uint8_t c = (uint8_t)((w < NEAR_W) | (x > gw) << 1 | (-x > gw) << 2 | (y > gw) << 3 | (-y > gw) << 4);
+        cl_code[i] = c; any |= c;
+        cl_xyw[i * 3] = x; cl_xyw[i * 3 + 1] = y; cl_xyw[i * 3 + 2] = w;
+    }
+    return any;
+}
+
+/* Returns the new index count into (*ov, *oi), or -1 when no triangle of
+ * this range needs clipping (draw it as it is). */
+static int near_clip(const GVtx *g, const uint16_t *idx, int count, GVtx **ov, uint16_t **oi)
+{
+    int n = 0, any = 0;
+    GVtx *v;
+    uint16_t *ix;
+    for (int k = 0; k < count && !any; k++) any = cl_code[idx[k]];
+    if (!any) return -1;
+    v = (GVtx *)sceGuGetMemory((unsigned)(count * 6) * sizeof *v);
+    ix = (uint16_t *)sceGuGetMemory(((unsigned)count * 12 + 15) & ~15u);
+    for (int k = 0; k + 2 < count; k += 3) {
+        const uint16_t *t3 = idx + k;
+        uint8_t c0 = cl_code[t3[0]], c1 = cl_code[t3[1]], c2 = cl_code[t3[2]];
+        CVtx a[9], b[9], *in = a, *out = b, *tp;
+        int m = 3;
+        if (c0 & c1 & c2) continue;                       /* all outside one plane */
+        if (!(c0 | c1 | c2)) {
+            for (int j = 0; j < 3; j++) { v[n] = g[t3[j]]; ix[n] = (uint16_t)n; n++; }
+            continue;
+        }
+        for (int j = 0; j < 3; j++) {
+            a[j].v = g[t3[j]];
+            a[j].x = cl_xyw[t3[j] * 3]; a[j].y = cl_xyw[t3[j] * 3 + 1]; a[j].w = cl_xyw[t3[j] * 3 + 2];
+        }
+        for (int pl = 0; pl < 5 && m >= 3; pl++) {
+            int o = 0;
+            if (!((c0 | c1 | c2) >> pl & 1)) continue;
+            for (int j = 0; j < m; j++) {
+                const CVtx *p0 = &in[j], *p1 = &in[(j + 1) % m];
+                float d0 = cdist(p0, pl), d1 = cdist(p1, pl);
+                if (d0 >= 0.f) out[o++] = *p0;
+                if ((d0 >= 0.f) != (d1 >= 0.f)) out[o++] = lerp_c(p0, p1, d0 / (d0 - d1));
+            }
+            m = o; tp = in; in = out; out = tp;
+        }
+        for (int q = 1; q + 1 < m; q++) {
+            v[n] = in[0].v; v[n + 1] = in[q].v; v[n + 2] = in[q + 1].v;
+            ix[n] = (uint16_t)n; ix[n + 1] = (uint16_t)(n + 1); ix[n + 2] = (uint16_t)(n + 2);
+            n += 3;
+        }
+    }
+    sceKernelDcacheWritebackRange(v, (unsigned)n * sizeof *v);
+    *ov = v; *oi = ix;
+    return n;
+}
+
 static int clay_draw(int h)
 {
     static int *adc_count, adc_cap;
     int dump;
     MMesh *me;
     uint32_t fmt, gm;
-    int lit, matcol, mod, vi[4];
+    int lit, matcol, mod, vi[4], clipping;
     float cscale, modv[4] = { 1.f, 1.f, 1.f, 1.f }, wv[16], mvp[16], vpm[16], ge[16], clip[16], vf[2];
     float hw, hh, su = 1.f, sv = 1.f, ou = 0.f, ov = 0.f;
     GVtx *g;
@@ -467,26 +577,37 @@ static int clay_draw(int h)
     gm = r_global_mod();
     if (mod) { modv[0] = gsf(gm, 16) / 255.f; modv[1] = gsf(gm, 8) / 255.f; modv[2] = gsf(gm, 0) / 255.f; modv[3] = gsf(gm, 24) / 255.f; }
 
-    r_gu_begin((lit ? (unsigned)me->nverts * sizeof(GVtx) : 0) + (unsigned)me->nidx * 2 + 64);
-    /* vertices: positions on a write, colours when their inputs change */
-    if (me->dirty) {
-        positions(me, me->gv);
-        me->dirty = 0;
-        me->cvalid = 0;
-    }
+    r_gu_begin((unsigned)me->nverts * sizeof(GVtx) + (unsigned)me->nidx * 2 + 64 +
+               ((me->desc == 19 || (me->desc >= 44 && me->desc <= 46)) ? (unsigned)me->nidx * (6 * sizeof(GVtx) + 12) + 32 : 0));
     if (lit) {
+        if (me->dirty) { positions(me, me->gv); me->dirty = 0; me->cvalid = 0; }
         g = (GVtx *)sceGuGetMemory((unsigned)me->nverts * sizeof *g);   /* per draw */
         memcpy(g, me->gv, (size_t)me->nverts * sizeof *g);
         colours_lit(me, g, modv, cscale);
     } else {
+        extern volatile long mvc2_host_frame;
         uint32_t key[3] = { mod ? gm : 0xFFFFFFFFu, fmt, (uint32_t)matcol };
-        if (!me->cvalid || memcmp(key, me->ckey, sizeof key)) {
-            colours_unlit(me, me->gv, matcol, modv, cscale);
-            memcpy(me->ckey, key, sizeof key);
-            me->cvalid = 1;
+        int stale = me->dirty || !me->cvalid || memcmp(key, me->ckey, sizeof key);
+        if (stale && me->used == mvc2_host_frame + 1) {
+            /* gv is already in this frame's display list: rewriting it would
+             * change that earlier draw too (grey water, flickering edges), so
+             * build this draw's copy in list memory */
+            g = (GVtx *)sceGuGetMemory((unsigned)me->nverts * sizeof *g);
+            memcpy(g, me->gv, (size_t)me->nverts * sizeof *g);
+            if (me->dirty) positions(me, g);
+            colours_unlit(me, g, matcol, modv, cscale);
+            wb(g, (size_t)me->nverts * sizeof *g);
+        } else {
+            if (me->dirty) { positions(me, me->gv); me->dirty = 0; me->cvalid = 0; }
+            if (!me->cvalid || memcmp(key, me->ckey, sizeof key)) {
+                colours_unlit(me, me->gv, matcol, modv, cscale);
+                memcpy(me->ckey, key, sizeof key);
+                me->cvalid = 1;
+            }
+            g = me->gv;
+            wb(g, (size_t)me->nverts * sizeof *g);
+            me->used = mvc2_host_frame + 1;
         }
-        g = me->gv;
-        wb(g, (size_t)me->nverts * sizeof *g);
     }
 
     /* world * view * projection, then the viewport (func_003DD5D0, canvas NDC), then the screen */
@@ -565,9 +686,19 @@ static int clay_draw(int h)
         }
     }
 
+    clipping = (me->desc == 19 || (me->desc >= 44 && me->desc <= 46)) && clip_prepare(clip, g, me->nverts);
     for (int r = 0; r < me->nrange; r++) {
         const MRange *rg = &me->range[r];
         if (!adc_count[r]) continue;
+        if (clipping) {
+            GVtx *cv;
+            uint16_t *ci;
+            int n = near_clip(g, idx + rg->first, adc_count[r], &cv, &ci);
+            if (n >= 0) {
+                if (n) r_gu_mesh_draw(clip, me->textured ? rg->tex : 0, cv, ci, n, su, sv, ou, ov);
+                continue;
+            }
+        }
         r_gu_mesh_draw(clip, me->textured ? rg->tex : 0, g, idx + rg->first, adc_count[r], su, sv, ou, ov);
         if (dump) {
             float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f, z0 = 1e9f, z1 = -1e9f, w0 = 1e9f, w1 = -1e9f;
