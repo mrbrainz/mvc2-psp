@@ -348,6 +348,23 @@ window.BACKLOG_ARCHIVE = [
   "note": "port/psp/pack: psp_pack.py (+ .sh/.ps1 wrappers) writes /PS2/AFS00-03.AFS (the only files read in a full run) as a minimal ISO into DATA.PSAR, 193 MB; psp_disc.c reads it from argv[0]. 3060-frame fight with the ISO removed: 0 underruns, 59.94 fps. .ps1 not run (no PowerShell here)."
  },
  {
+  "id": "P14",
+  "order": 5.4,
+  "phase": "P1",
+  "size": "S",
+  "status": "Done",
+  "depends": [
+   "P11"
+  ],
+  "read": [
+   "port/platform/settings.c"
+  ],
+  "title": "Saves on PSP",
+  "description": "Settings/save file on memory stick.",
+  "done_when": "Options survive restart.",
+  "note": "Already worked: mc.c writes mvc2_memcard/ in the game folder on ms0. card_save.txt created the save (3 files), card_reload.txt read it back at boot (1876 bytes); added VERBOSE=1 (host_verbose) to see libmc requests. Options change -> restart not checked by eye."
+ },
+ {
   "id": "P07",
   "order": 5.5,
   "phase": "P1",

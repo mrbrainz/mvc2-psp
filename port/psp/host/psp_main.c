@@ -9,6 +9,7 @@
  *                   HOME -> Exit does (PPSSPP has no HOME menu)
  *   PROFILE=1       stage timings (psp_prof.c)
  *   DRAWLOG=1       draw counters per 60 frames
+ *   VERBOSE=1       host_verbose (libmc requests, file loads)
  *   anything else   setenv, e.g. MVC2_STATE_DUMP / MVC2_STATE_SNAP for
  *                   port/tools/oracle/compare_ports.py, MVC2_PS2FP_OFF=1
  * See port/docs/PSP.md. */
@@ -274,6 +275,7 @@ int mvc2_psp_run(int frames)
         PlatApp app = {0, rt_update, rt_render, rt_pause};
         const char *q = getenv("QUIT_AFTER");
         quit_after = q ? atol(q) : 0;
+        host_verbose = getenv("VERBOSE") != NULL;
         q = getenv("SCRIPT");
         if (q && *q) {
             script_on = psp_script_load(q) == 0;

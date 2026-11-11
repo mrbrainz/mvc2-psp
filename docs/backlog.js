@@ -42,6 +42,7 @@ window.BACKLOG = {
   "P11",
   "P12",
   "P13",
+  "P14",
   "P21",
   "P22",
   "P23",
@@ -75,6 +76,21 @@ window.BACKLOG = {
    "done_when": "The \"Presented by\" screen shows what the arcade shows, checked by eye in PPSSPP after a full arcade run."
   },
   {
+   "id": "P57",
+   "order": 10.5,
+   "phase": "P2",
+   "size": "M",
+   "status": "Ready",
+   "depends": [],
+   "read": [
+    "port/host/mc.c",
+    "port/docs/PSP.md"
+   ],
+   "title": "PSP saves through the system savedata utility",
+   "description": "Saves are mc.c's PS2 card files in the game folder (P14). Replace them on the PSP with sceUtilitySavedata (ms0:/PSP/SAVEDATA, title, icon, system load/save dialogs as needed) behind the libmc API, PSP-side (--wrap or a mc_psp.c), keeping the game's own save flow and messages. Decide whether to import an existing mvc2_memcard save.",
+   "done_when": "Saving from the menu writes a PSP savedata entry shown in the system's save list, and options survive a restart in PPSSPP."
+  },
+  {
    "id": "P52",
    "order": 10.15,
    "phase": "P2",
@@ -88,22 +104,6 @@ window.BACKLOG = {
    "title": "PSP credits: first concept-art frame glitches",
    "description": "In the arcade credits scroll the first concept-art image draws garbled; the following images scroll cleanly. Low priority. Likely a texture/CLUT upload racing its first draw or a first-use path in the 2D sprite route; reproduce with the SCRIPT= arcade run near the end and compare with the web port.",
    "done_when": "The first credits concept-art image draws cleanly in PPSSPP, as the later ones do."
-  },
-  {
-   "id": "P14",
-   "order": 5.4,
-   "phase": "P1",
-   "size": "S",
-   "status": "Ready",
-   "depends": [
-    "P11"
-   ],
-   "read": [
-    "port/platform/settings.c"
-   ],
-   "title": "Saves on PSP",
-   "description": "Settings/save file on memory stick.",
-   "done_when": "Options survive restart."
   },
   {
    "id": "P32",

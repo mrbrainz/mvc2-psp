@@ -309,6 +309,11 @@ credits (~27,000 frames). Its `shot` BMPs currently capture the debug text,
 not the game. `PRESS=frame:len:bits,...` in `env.txt` (testing) holds PS2 bits (hex,
 `pad.h`) on player 1, e.g. `PRESS=600:6:8` presses Start at frame 600.
 
+Saves (P14): the game's memory card is `mc.c` over `mvc2_memcard/` in the
+game folder (`ms0:/PSP/GAME/mvc2/mvc2_memcard/BASLUS-20486SYS/`).
+`card_save.txt` writes it and `card_reload.txt` reads it back at boot;
+`VERBOSE=1` in `env.txt` logs the libmc requests.
+
 ## Renderer: meshes (P25)
 
 `port/render/r_gu_mesh.c` is a PSP copy of `r_mesh.c`'s clay path
