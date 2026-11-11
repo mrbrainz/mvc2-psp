@@ -55,6 +55,21 @@ window.BACKLOG = {
  ],
  "activities": [
   {
+   "id": "P54",
+   "order": 10.3,
+   "phase": "P2",
+   "size": "S",
+   "status": "Ready",
+   "depends": [],
+   "read": [
+    "port/host/boot.c",
+    "port/docs/PSP.md"
+   ],
+   "title": "Measure the game arena and handle pool high-water marks (PSP-1000 feasibility)",
+   "description": "The game reserves a 22 MB arena and a 6 MB handle pool at boot (port/host/boot.c); a PSP-1000 has ~24 MB of user memory. Log the peak bytes actually used in each over a full arcade run (SCRIPT= + DRAWLOG=1), PSP-side and read-only (--wrap or a scan of the blocks), without changing the reservations.",
+   "done_when": "A full arcade run reports the arena and handle pool high-water marks, and the ticket note says whether shrinking them could fit a PSP-1000."
+  },
+  {
    "id": "P52",
    "order": 10.15,
    "phase": "P2",
