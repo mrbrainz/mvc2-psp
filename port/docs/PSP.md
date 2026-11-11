@@ -304,15 +304,20 @@ pad; the game's own BUTTON CONFIG then assigns attacks (defaults below).
 PS2 L2/R2/L3/R3 have no PSP button. Player 2 is not connected.
 `SCRIPT=path` in `env.txt` (testing) runs upstream's state-driven input scripts
 (`port/tools/scripts/`, `psp_script.c`); with `MVC2_CPU_HP=1` and
-`MVC2_P1_HP=100`, `arcade_ending_rank.txt` plays a whole arcade run to the
+`MVC2_P1_HP=100`, `arcade_ending_rank.txt` (PSP: `port/psp/scripts/arcade_psp.txt`) plays a whole arcade run to the
 credits (~27,000 frames). Its `shot` BMPs currently capture the debug text,
 not the game. `PRESS=frame:len:bits,...` in `env.txt` (testing) holds PS2 bits (hex,
 `pad.h`) on player 1, e.g. `PRESS=600:6:8` presses Start at frame 600.
 
-Saves (P14): the game's memory card is `mc.c` over `mvc2_memcard/` in the
-game folder (`ms0:/PSP/GAME/mvc2/mvc2_memcard/BASLUS-20486SYS/`).
-`card_save.txt` writes it and `card_reload.txt` reads it back at boot;
-`VERBOSE=1` in `env.txt` logs the libmc requests.
+Saves (P57-P59, `psp_saveui.c`, `psp_save.c`): one PSP system savedata
+entry, `ms0:/PSP/SAVEDATA/MVC2PSP000000/DATA.BIN`, holding the game's
+0x754-byte save block. Boot (front end 1/8) loads it without a dialog and
+skips the PS2 card screen; main menu SAVE / LOAD open the system Save / Load
+list dialogs (drawn from `r_gu_present`, icon from `tools/make_icon0.py`);
+the game's autosaves (`func_0038B2E0`) store it without a dialog. The
+autosave screens still check the PS2 card through `mc.c`. Scripted arcade
+runs use `port/psp/scripts/arcade_psp.txt`, which presses through the
+arcade-end autosave prompt. `VERBOSE=1` logs libmc requests.
 
 ## Renderer: meshes (P25)
 

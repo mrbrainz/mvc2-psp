@@ -213,6 +213,10 @@ void r_gu_present(void)
         r_flush();
     }
     list_close();
+    {   /* the system Save / Load dialog draws over the finished frame (P59) */
+        extern int psp_saveui_frame(void);
+        if (psp_saveui_frame()) R.drawn_since_swap = 1;
+    }
     if (R.drawn_since_swap) {
         sceGuSwapBuffers();
         R.drawn_since_swap = 0;

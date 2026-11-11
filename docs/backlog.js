@@ -57,7 +57,10 @@ window.BACKLOG = {
   "P35",
   "P53",
   "P54",
-  "P55"
+  "P55",
+  "P57",
+  "P58",
+  "P59"
  ],
  "activities": [
   {
@@ -72,23 +75,8 @@ window.BACKLOG = {
     "port/docs/PSP.md"
    ],
    "title": "PSP ending: blank under \"Presented by\" (CAPCOM logo?)",
-   "description": "After the post-credits legal text, the \"Presented by\" screen shows nothing underneath; the arcade presumably shows the CAPCOM logo (confirm). Log that screen's draws in an arcade run (SCRIPT=, DRAWLOG=1 rej counters): texture not loaded/synced, draw rejected, or another optimiser issue as in P34. PSP-side fix only.",
+   "description": "After the post-credits legal text, the \"Presented by\" screen shows nothing underneath; the web port (arcade path) shows \"THANK YOU FOR PLAYING / PRESENTED BY\" with the yellow-on-blue CAPCOM logo below (checked in an arcade_ending_rank run, 2026-11-11). Log that screen's draws in an arcade run (SCRIPT=, DRAWLOG=1 rej counters): texture not loaded/synced, draw rejected, or another optimiser issue as in P34. PSP-side fix only.",
    "done_when": "The \"Presented by\" screen shows what the arcade shows, checked by eye in PPSSPP after a full arcade run."
-  },
-  {
-   "id": "P57",
-   "order": 10.5,
-   "phase": "P2",
-   "size": "M",
-   "status": "Ready",
-   "depends": [],
-   "read": [
-    "port/host/mc.c",
-    "port/docs/PSP.md"
-   ],
-   "title": "PSP saves through the system savedata utility",
-   "description": "Saves are mc.c's PS2 card files in the game folder (P14). Replace them on the PSP with sceUtilitySavedata (ms0:/PSP/SAVEDATA, title, icon, system load/save dialogs as needed) behind the libmc API, PSP-side (--wrap or a mc_psp.c), keeping the game's own save flow and messages. Decide whether to import an existing mvc2_memcard save.",
-   "done_when": "Saving from the menu writes a PSP savedata entry shown in the system's save list, and options survive a restart in PPSSPP."
   },
   {
    "id": "P52",

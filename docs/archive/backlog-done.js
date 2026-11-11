@@ -498,6 +498,58 @@ window.BACKLOG_ARCHIVE = [
   "note": "psp_ee_heap.c wraps func_001044E0 and host_ee_heap_base/top with a 23 MB heap. Full arcade run: break peak 22530 KB, no refused growth, largest free block >= 8256 KB (was 3136), no window over 16.7 ms. Other modes untested; a refusal is logged."
  },
  {
+  "id": "P57",
+  "order": 10.5,
+  "phase": "P2",
+  "size": "M",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/host/mc.c",
+   "port/docs/PSP.md"
+  ],
+  "title": "PSP saves through the system savedata utility",
+  "description": "Saves are mc.c's PS2 card files in the game folder (P14). Replace them on the PSP with sceUtilitySavedata (ms0:/PSP/SAVEDATA, title, icon, system load/save dialogs as needed) behind the libmc API, PSP-side (--wrap or a mc_psp.c), keeping the game's own save flow and messages. Decide whether to import an existing mvc2_memcard save.",
+  "done_when": "Saving from the menu writes a PSP savedata entry shown in the system's save list, and options survive a restart in PPSSPP.",
+  "note": "Became the storage layer: psp_save.c (EABI) reads/writes one savedata entry (DATA.BIN = the game block, ICON0, SFO) by AUTOLOAD/AUTOSAVE or the list dialogs. The PS2 card-folder sync tried first was dropped."
+ },
+ {
+  "id": "P58",
+  "order": 10.55,
+  "phase": "P2",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P57"
+  ],
+  "read": [
+   "port/psp/host/psp_mc.c",
+   "port/docs/PSP.md"
+  ],
+  "title": "PSP boot: native autoload, no PS2 card screen",
+  "description": "The boot memory-card screen (front end 1/8, func_00130040) shows PS2 card text. On the PSP, load the savedata at boot, hand it to the game as its own autoload does, and continue to the next screen without the PS2 messages. PSP-side only.",
+  "done_when": "Boot shows no PS2 memory-card text, and saved options and unlocks are in effect after a restart in PPSSPP.",
+  "note": "psp_saveui.c wraps func_00130040: AUTOLOAD, then func_0038C210/0038B8C0 apply it (D_004C29B0 = size), autosave on only after a good load, then the 1/8 exit. Boot goes 1/8 -> 1/13 with no card text; arcade run: loaded 1876 bytes."
+ },
+ {
+  "id": "P59",
+  "order": 10.6,
+  "phase": "P2",
+  "size": "L",
+  "status": "Done",
+  "depends": [
+   "P57"
+  ],
+  "read": [
+   "port/psp/host/psp_mc.c",
+   "port/docs/PSP.md"
+  ],
+  "title": "PSP SAVE/LOAD menu: system savedata dialogs instead of the PS2 slot screen",
+  "description": "Main menu SAVE/LOAD shows the PS2 screen (SLOT 1/2, 8 MB card for PlayStation 2). On the PSP, open the system savedata Save / Load list dialogs (icon, title, date, size) instead, with the game frame kept behind the dialog, then return to the menu. Needs the game functions that build and apply the save data, and an original ICON0. PSP-side only.",
+  "done_when": "Choosing SAVE/LOAD opens the PSP Save or Load dialog; a save made there loads back after a restart; no PS2 card screen is shown.",
+  "note": "func_0041DF70/0041EE80 wrapped: LISTSAVE / LISTLOAD dialogs over the frame (r_gu_present), func_0038AA30 builds the block; autosaves via a func_0038B2E0 wrap. Save and load checked by eye in PPSSPP; arcade run autosaves (port/psp/scripts/arcade_psp.txt presses through). Autosave screens still probe mc.c."
+ },
+ {
   "id": "P23",
   "order": 11,
   "phase": "P2",

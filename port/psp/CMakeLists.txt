@@ -52,13 +52,17 @@ target_include_directories(psp_host_core SYSTEM PRIVATE ${PSP_INC})
 target_compile_options(psp_host_core PRIVATE -fno-common -Wall -Wno-unused-function)
 set_source_files_properties(${HOST_CORE_SRCS} PROPERTIES OBJECT_DEPENDS "${GLUE}/mvc2_host_protos.h")
 # ---- psp-gcc (EABI32) objects: module entry, sceGu shims; the rest is o32 --
+add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/psp_icon0.h"
+  COMMAND python3 "${PSP_DIR}/tools/make_icon0.py" "${CMAKE_BINARY_DIR}/psp_icon0.h"
+  DEPENDS "${PSP_DIR}/tools/make_icon0.py")
 set(PSP_EABI_OBJS "")
-foreach(f psp_entry psp_gu_shim psp_audio_hw psp_disc_io)
+foreach(f psp_entry psp_gu_shim psp_audio_hw psp_disc_io psp_save)
   set(_o "${CMAKE_BINARY_DIR}/${f}.o")
   add_custom_command(OUTPUT ${_o}
     COMMAND ${PSPDEV}/bin/psp-gcc -O2 -G0 -Wall -I${PSPDEV}/psp/sdk/include -D_PSP_FW_VERSION=600
-            -c "${PSP_DIR}/host/${f}.c" -o ${_o}
-    DEPENDS "${PSP_DIR}/host/${f}.c" "${PSP_DIR}/host/psp_entry.h" "${PSP_DIR}/host/psp_gu_shim.h" "${PSP_DIR}/host/psp_audio_hw.h" "${PSP_DIR}/host/psp_disc_io.h")
+            -I${CMAKE_BINARY_DIR} -c "${PSP_DIR}/host/${f}.c" -o ${_o}
+    DEPENDS "${PSP_DIR}/host/${f}.c" "${PSP_DIR}/host/psp_entry.h" "${PSP_DIR}/host/psp_gu_shim.h" "${PSP_DIR}/host/psp_audio_hw.h" "${PSP_DIR}/host/psp_disc_io.h"
+            "${PSP_DIR}/host/psp_save.h" "${CMAKE_BINARY_DIR}/psp_icon0.h")
   list(APPEND PSP_EABI_OBJS ${_o})
 endforeach()
 # The ~16k EE data units go in through an archive (their paths overflow the
@@ -80,14 +84,14 @@ set(PSP_RENDER_SRCS "${MVC2_ROOT}/port/render/r_gu.c" "${MVC2_ROOT}/port/render/
 set_source_files_properties("${MVC2_ROOT}/port/host/fe/fe_render.c" "${MVC2_ROOT}/port/host/fe/fe_char.c" "${MVC2_ROOT}/port/host/fe/fe_mesh.c" PROPERTIES OBJECT_DEPENDS "${GLUE}/mvc2_host_protos.h")
 add_executable(mvc2_psp ${STUB_SRCS} ${GLUE_SRCS} ${PSP_EABI_OBJS} ${PSP_RENDER_SRCS} ${PSP_AUDIO_SRCS}
   "${PSP_DIR}/host/psp_main.c" "${PSP_DIR}/host/libc_o32.c" "${PSP_DIR}/host/psp_fpu.c"
-  "${PSP_DIR}/host/psp_prof.c" "${PSP_DIR}/host/psp_fe_sync.c" "${PSP_DIR}/host/psp_disc.c" "${PSP_DIR}/host/psp_script.c" "${PSP_DIR}/host/psp_ee_hwm.c" "${PSP_DIR}/host/psp_ee_heap.c" "${MVC2_ROOT}/port/platform/platform_psp.c"
+  "${PSP_DIR}/host/psp_prof.c" "${PSP_DIR}/host/psp_fe_sync.c" "${PSP_DIR}/host/psp_disc.c" "${PSP_DIR}/host/psp_script.c" "${PSP_DIR}/host/psp_ee_hwm.c" "${PSP_DIR}/host/psp_ee_heap.c" "${PSP_DIR}/host/psp_saveui.c" "${MVC2_ROOT}/port/platform/platform_psp.c"
   $<TARGET_OBJECTS:psp_host_core>)
 target_include_directories(mvc2_psp PRIVATE "${MVC2_ROOT}/port/stubs" "${PSP_DIR}/host"
   "${MVC2_ROOT}/port/host" "${MVC2_ROOT}/port/platform" "${GLUE}")
 target_include_directories(mvc2_psp SYSTEM PRIVATE ${PSP_INC})
 target_compile_options(mvc2_psp PRIVATE -fno-common)
 target_link_libraries(mvc2_psp PRIVATE "-Wl,--whole-archive" psp_game_data "-Wl,--no-whole-archive"
-  mvc2_game pspgu pspdebug pspdisplay pspge pspctrl psprtc psppower pspaudio m)
+  mvc2_game pspgu pspdebug pspdisplay pspge pspctrl psprtc psppower pspaudio psputility m)
 # --sort-section=name: the .data.ee_<address> sections in EE order (R18).
 # --wrap: o32 replacements and PSP-side hooks (port/psp/host).
 target_link_options(mvc2_psp PRIVATE -no-pie "@${GLUE}/link_extra.rsp" -Wl,--sort-section=name
@@ -104,7 +108,9 @@ target_link_options(mvc2_psp PRIVATE -no-pie "@${GLUE}/link_extra.rsp" -Wl,--sor
   -Wl,--wrap=fe_sync_handle -Wl,--wrap=func_00170170
   -Wl,--wrap=synth_render -Wl,--wrap=rs_stream_run -Wl,--wrap=hd_bank_load
   -Wl,--wrap=vag_decode -Wl,--wrap=vag_free -Wl,--wrap=dcse_apply
-  -Wl,--wrap=func_001044E0 -Wl,--wrap=host_ee_heap_base -Wl,--wrap=host_ee_heap_top)
+  -Wl,--wrap=func_001044E0 -Wl,--wrap=host_ee_heap_base -Wl,--wrap=host_ee_heap_top
+  -Wl,--wrap=func_0041DF70 -Wl,--wrap=func_0041EE80
+  -Wl,--wrap=func_00130040 -Wl,--wrap=func_0038B2E0)
 # Diagnostic heap map (psp_heapmap.c): -DMVC2_PSP_HEAPMAP=ON, dumped with DRAWLOG.
 option(MVC2_PSP_HEAPMAP "track malloc blocks for [heapmap] logs" OFF)
 if(MVC2_PSP_HEAPMAP)
