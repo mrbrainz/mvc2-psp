@@ -132,11 +132,18 @@ static void list_open(void)
     apply_scissor();
 }
 
+int psp_prof_on(void);
+unsigned long long psp_prof_now(void);
+void psp_prof_add(int slot, const char *label, unsigned long long us);
+
 static void list_close(void)
 {
+    unsigned long long t = 0;
     if (!R.list_open) return;
+    if (psp_prof_on()) t = psp_prof_now();
     sceGuFinish();
     sceGuSync(0, 0);
+    if (t) { psp_prof_add(20, "  GE list run (sceGuSync)", psp_prof_now() - t); psp_prof_add(21, "  GE lists per frame (count, not ms)", 1000); }
     R.list_open = 0;
     R.list_gen++;
 }

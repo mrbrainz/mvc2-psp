@@ -268,7 +268,7 @@ logo, title, demo fight) draw through the mesh and character paths, P24/P25.
 
 `port/render/r_gu_char.c` is a PSP copy of `r_char.c`'s `fl_char_*` (kept in
 step by hand); upstream `fe_char.c` is compiled unchanged on top. Tiles decode
-on first use into 512x512 T4 pages in RAM (128 KB, at most 8 per bank; a full
+on first use into 512x512 T4 pages in RAM (128 KB, at most 4 per bank (P35); a full
 bank clears its atlas); each bank's 16 palettes are 16-colour 8888 CLUTs,
 drawn through `r_gu.c`'s `RM_RAW4` batch. `DRAWLOG` adds `char draws/parts dec
 tile-decodes`.

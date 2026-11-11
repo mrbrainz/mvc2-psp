@@ -8,8 +8,8 @@
 #include <stdlib.h>
 
 static int on = -1, frames;
-static unsigned long long acc[32];   /* 0-9 frame stages; 10+ nested inside them (not subtracted) */
-static const char *names[32];
+static unsigned long long acc[48];   /* 0-9 frame stages; 10+ nested inside them (not subtracted) */
+static const char *names[48];
 
 static unsigned long long now(void)
 {
@@ -33,7 +33,6 @@ static unsigned long long now(void)
 STAGE(1, func_0012F460, "func_0012F460 counters/CRI/pad")
 STAGE(2, func_001E42A0, "func_001E42A0 sound tick")
 STAGE(3, func_00170D30, "func_00170D30 begin scene")
-STAGE(4, func_003D7400, "func_003D7400 render pass 1")
 STAGE(5, func_003D7640, "func_003D7640 render pass 2")
 STAGE(6, func_0012DD90, "func_0012DD90 file loader tick")
 STAGE(7, func_00170D70, "func_00170D70 end scene")
@@ -118,10 +117,66 @@ void __wrap_mvc2_frame(void)
     names[0] = "frame other (top hooks, small steps)";
     if (++frames < 300)
         return;
-    for (i = 0; i < 32; i++) {
+    for (i = 0; i < 48; i++) {
         if (names[i] && acc[i] / 300 >= 100)   /* >= 0.1 ms */
             fprintf(stderr, "[prof] %6.2f ms  %s\n", acc[i] / 300 / 1000.0, names[i]);
         acc[i] = 0;
     }
     frames = 0;
+}
+
+/* renderer-side timings (r_gu.c): slot 20+ */
+int psp_prof_on(void) { return on > 0; }
+unsigned long long psp_prof_now(void) { return now(); }
+void psp_prof_add(int slot, const char *label, unsigned long long us)
+{
+    if (on <= 0 || slot < 20 || slot >= 48) return;
+    acc[slot] += us;
+    names[slot] = label;
+}
+
+/* render pass 1 with each task-list entry (D_0058C800, D_004C2A5C entries)
+ * timed through a per-slot trampoline (P35) */
+typedef void (*TaskFn)(void);
+extern TaskFn D_0058C800[];
+extern int D_004C2A5C;
+#define NTASK 32
+static TaskFn task_orig[NTASK];
+static unsigned long long task_acc[NTASK];
+static TaskFn task_fn[NTASK];   /* last function seen in each slot */
+#define TR(i) static void task_tr##i(void) { unsigned long long t = now(); task_orig[i](); task_acc[i] += now() - t; }
+TR(0) TR(1) TR(2) TR(3) TR(4) TR(5) TR(6) TR(7) TR(8) TR(9) TR(10) TR(11) TR(12) TR(13) TR(14) TR(15)
+TR(16) TR(17) TR(18) TR(19) TR(20) TR(21) TR(22) TR(23) TR(24) TR(25) TR(26) TR(27) TR(28) TR(29) TR(30) TR(31)
+static const TaskFn task_tr[NTASK] = { task_tr0, task_tr1, task_tr2, task_tr3, task_tr4, task_tr5, task_tr6, task_tr7,
+    task_tr8, task_tr9, task_tr10, task_tr11, task_tr12, task_tr13, task_tr14, task_tr15, task_tr16, task_tr17,
+    task_tr18, task_tr19, task_tr20, task_tr21, task_tr22, task_tr23, task_tr24, task_tr25, task_tr26, task_tr27,
+    task_tr28, task_tr29, task_tr30, task_tr31 };
+static int task_frames;
+
+void __real_func_003D7400(void);
+void __wrap_func_003D7400(void)
+{
+    unsigned long long t;
+    int n, i;
+    if (on <= 0) { __real_func_003D7400(); return; }
+    n = D_004C2A5C;
+    if (n > NTASK) n = NTASK;
+    for (i = 0; i < n; i++) {
+        task_orig[i] = D_0058C800[i];
+        if (task_fn[i] != task_orig[i]) { task_fn[i] = task_orig[i]; task_acc[i] = 0; }
+        D_0058C800[i] = task_tr[i];
+    }
+    t = now();
+    __real_func_003D7400();
+    acc[4] += now() - t;
+    names[4] = "func_003D7400 render pass 1";
+    for (i = 0; i < n; i++) if (D_0058C800[i] == task_tr[i]) D_0058C800[i] = task_orig[i];
+    if (++task_frames >= 300) {
+        for (i = 0; i < NTASK; i++) {
+            if (task_acc[i] / 300 >= 300)
+                fprintf(stderr, "[prof]   task %2d %p: %.2f ms\n", i, (void *)task_fn[i], task_acc[i] / 300 / 1000.0);
+            task_acc[i] = 0;
+        }
+        task_frames = 0;
+    }
 }

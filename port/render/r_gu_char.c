@@ -14,7 +14,7 @@
 #include "decode.h"
 
 #define PAGE 512
-#define PAGES_MAX 8
+#define PAGES_MAX 4
 
 void r_flush(void);
 void r_gu_sync(void);
