@@ -68,6 +68,17 @@ static int cb_thread(SceSize a, void *b) {
     return 0;
 }
 
+/* testing (psp_script.c "shot"): the displayed 8888 frame, uncached */
+int psp_shot_fb(void **pix, int *stride) {
+    void *top; int bufw, fmt;
+    static int made;
+    if (!made) { sceIoMkdir("ms0:/PSP/GAME/mvc2/shots", 0777); made = 1; }
+    if (sceDisplayGetFrameBuf(&top, &bufw, &fmt, PSP_DISPLAY_SETBUF_NEXTFRAME) < 0 || !top || fmt != PSP_DISPLAY_PIXEL_FORMAT_8888) return -1;
+    *pix = (void *)((unsigned)top | 0x40000000u);
+    *stride = bufw;
+    return 0;
+}
+
 const char *psp_eboot_path;   /* argv[0]: the EBOOT.PBP that was started */
 
 int main(int argc, char **argv) {

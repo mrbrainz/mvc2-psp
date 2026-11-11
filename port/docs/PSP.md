@@ -280,7 +280,11 @@ pad; the game's own BUTTON CONFIG then assigns attacks (defaults below).
 | Start / Select | Start / Select | |
 
 PS2 L2/R2/L3/R3 have no PSP button. Player 2 is not connected.
-`PRESS=frame:len:bits,...` in `env.txt` (testing) holds PS2 bits (hex,
+`SCRIPT=path` in `env.txt` (testing) runs upstream's state-driven input scripts
+(`port/tools/scripts/`, `psp_script.c`); with `MVC2_CPU_HP=1` and
+`MVC2_P1_HP=100`, `arcade_ending_rank.txt` plays a whole arcade run to the
+credits (~27,000 frames). Its `shot` BMPs currently capture the debug text,
+not the game. `PRESS=frame:len:bits,...` in `env.txt` (testing) holds PS2 bits (hex,
 `pad.h`) on player 1, e.g. `PRESS=600:6:8` presses Start at frame 600.
 
 ## Renderer: meshes (P25)

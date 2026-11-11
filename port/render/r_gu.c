@@ -771,12 +771,18 @@ int fl_tex_define(uint32_t handle, int w, int h, int fmt, const void *pixels)
 {
     int i = (int)(handle & 0xFFFF) - 1;
     TexRec *t;
-    if (i < 0 || i >= MAX_TEX || w <= 0 || h <= 0) return -1;
+    if (i < 0 || i >= MAX_TEX || w <= 0 || h <= 0) {
+        fprintf(stderr, "[gu] texture handle %08x (%dx%d): out of range, not defined\n", (unsigned)handle, w, h);
+        return -1;
+    }
     t = &R.tex[i];
     r_flush();
     if (!t->used || t->w != w || t->h != h || t->fmt != fmt) {
         if (t->used) tex_free(t, i);
-        if (tex_alloc(t, w, h, fmt)) return -1;
+        if (tex_alloc(t, w, h, fmt)) {
+            fprintf(stderr, "[gu] texture %d (%dx%d): out of memory, not defined\n", i + 1, w, h);
+            return -1;
+        }
     }
     tex_copy(t, 0, 0, w, h, pixels);
     return 0;
@@ -856,6 +862,7 @@ int fl_tri_tex(const FlTri *t)
     TexRec *tx = bind_current();
     GuVtx *o;
     if (!tx) return 0;
+    }
     o = verts(3);
     for (int k = 0; k < 3; k++)
         put(&o[k], &t->v[k], t->uv[k], color_tex(t->argb[k]), tx->w, tx->h);

@@ -328,5 +328,23 @@ window.BACKLOG_ARCHIVE = [
   "description": "bash / PowerShell script that takes the player's own ISO and writes an EBOOT.PBP holding only the data the PSP build reads, so no ISO is needed on the memory stick.",
   "done_when": "A packed EBOOT plays a fight in PPSSPP with no ISO present; nothing copyrighted committed.",
   "note": "port/psp/pack: psp_pack.py (+ .sh/.ps1 wrappers) writes /PS2/AFS00-03.AFS (the only files read in a full run) as a minimal ISO into DATA.PSAR, 193 MB; psp_disc.c reads it from argv[0]. 3060-frame fight with the ISO removed: 0 underruns, 59.94 fps. .ps1 not run (no PowerShell here)."
+ },
+ {
+  "id": "P22",
+  "order": 10,
+  "phase": "P2",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P21",
+   "P24"
+  ],
+  "read": [
+   "port/docs/RENDERER.md"
+  ],
+  "title": "Textures within VRAM",
+  "description": "TIM2/CLUT to PSP CLUT textures (T4/T8 native); 2MB VRAM budget and caching/swizzle.",
+  "done_when": "No missing/corrupt textures over a full arcade run.",
+  "note": "Full arcade run (SCRIPT= runner, psp_script.c, upstream arcade_ending_rank.txt) to the credits in PPSSPP: 0 rejected draws, no >512 or failed textures (now logged), textures peak 3.8 MB in RAM; ~60 window captures checked. VRAM/swizzle not needed for correctness (perf in P35); post-credits legal text garbling is vertex data, P34."
  }
 ];

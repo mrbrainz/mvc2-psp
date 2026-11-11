@@ -41,6 +41,7 @@ window.BACKLOG = {
   "P12",
   "P13",
   "P21",
+  "P22",
   "P24",
   "P25",
   "P26",
@@ -49,6 +50,36 @@ window.BACKLOG = {
   "P33"
  ],
  "activities": [
+  {
+   "id": "P34",
+   "order": 10.1,
+   "phase": "P2",
+   "size": "M",
+   "status": "Ready",
+   "depends": [],
+   "read": [
+    "port/render/r_gu.c",
+    "port/docs/PSP.md"
+   ],
+   "title": "PSP post-credits legal text garbled",
+   "description": "After the arcade credits (state 2 1 4) the legal text is drawn as textured triangles (func_003DF0C0) whose two triangles per glyph carry different UV rows already in the game's data (e.g. v 0.1895 vs 0.1270), giving cut letters and diagonal slashes. The boot legal screen (sprites) is fine. Compare the vertex data against the wasm reference to find the diverging game code; PSP-side fix only.",
+   "done_when": "The post-credits legal text reads cleanly in PPSSPP after a full arcade run (SCRIPT= arcade run)."
+  },
+  {
+   "id": "P35",
+   "order": 10.2,
+   "phase": "P2",
+   "size": "M",
+   "status": "Ready",
+   "depends": [],
+   "read": [
+    "port/psp/host/psp_prof.c",
+    "port/docs/PSP.md"
+   ],
+   "title": "PSP late-arcade frame time and heap low-water",
+   "description": "Full arcade run in PPSSPP: 5 s update averages reach 16-22 ms in the last fights (Abyss stages), and the largest free heap block drops to 256 KB at times (P27 fight: 14 MB). Profile those fights (PROFILE=1), find the fragmentation/peak, and consider VRAM/swizzled textures if GE-bound.",
+   "done_when": "A full arcade run stays under 16.7 ms per update outside loads and keeps >= 2 MB largest free block."
+  },
   {
    "id": "P14",
    "order": 5.4,
@@ -64,23 +95,6 @@ window.BACKLOG = {
    "title": "Saves on PSP",
    "description": "Settings/save file on memory stick.",
    "done_when": "Options survive restart."
-  },
-  {
-   "id": "P22",
-   "order": 10,
-   "phase": "P2",
-   "size": "M",
-   "status": "Backlog",
-   "depends": [
-    "P21",
-    "P24"
-   ],
-   "read": [
-    "port/docs/RENDERER.md"
-   ],
-   "title": "Textures within VRAM",
-   "description": "TIM2/CLUT to PSP CLUT textures (T4/T8 native); 2MB VRAM budget and caching/swizzle.",
-   "done_when": "No missing/corrupt textures over a full arcade run."
   },
   {
    "id": "P23",

@@ -29,6 +29,9 @@ void r_gu_present(void);
 void fe_render_init(void);     /* port/host/fe/fe_render.c */
 int psp_audio_init(void);      /* psp_audio.c */
 int psp_disc_open(void);       /* psp_disc.c */
+int psp_script_load(const char *path);   /* psp_script.c (testing) */
+void psp_script_step(uint16_t *b0, uint16_t *b1);
+static int script_on;
 void psp_disc_report(void);
 #include "psp_audio_hw.h"
 
@@ -53,7 +56,7 @@ static void selftest(void)
 
 static int load_env(int frames)
 {
-    char ln[256];
+    char ln[4096];
     FILE *f = fopen("ms0:/PSP/GAME/mvc2/env.txt", "r");
     if (!f)
         return frames;
@@ -129,6 +132,12 @@ static void rt_update(void *u)
     {
         PadRaw p0 = *plat_pad(0), p1 = *plat_pad(1);
         p0.buttons |= press_bits(mvc2_host_frame);
+        if (script_on && mvc2_host_frame >= 0) {
+            uint16_t b0, b1;
+            psp_script_step(&b0, &b1);
+            p0.buttons |= b0;
+            p1.buttons |= b1;
+        }
         p0.connected = p1.connected = 1;
         host_pad_set(0, &p0);
         host_pad_set(1, &p1);
@@ -209,6 +218,11 @@ int mvc2_psp_run(int frames)
         PlatApp app = {0, rt_update, rt_render, rt_pause};
         const char *q = getenv("QUIT_AFTER");
         quit_after = q ? atol(q) : 0;
+        q = getenv("SCRIPT");
+        if (q && *q) {
+            script_on = psp_script_load(q) == 0;
+            fprintf(stderr, "[host] script %s: %s\n", q, script_on ? "loaded" : "cannot read");
+        }
         plat_init(0);
         plat_run(&app);
         fprintf(stderr, "[host] quit at frame %ld\n", (long)mvc2_host_frame);
