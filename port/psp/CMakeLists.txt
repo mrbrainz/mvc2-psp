@@ -97,6 +97,13 @@ target_link_options(mvc2_psp PRIVATE -no-pie "@${GLUE}/link_extra.rsp" -Wl,--sor
   -Wl,--wrap=func_003F0500__game -Wl,--wrap=func_003EA660
   -Wl,--wrap=fe_sync_handle -Wl,--wrap=func_00170170
   -Wl,--wrap=synth_render -Wl,--wrap=rs_stream_run -Wl,--wrap=hd_bank_load)
+# Diagnostic heap map (psp_heapmap.c): -DMVC2_PSP_HEAPMAP=ON, dumped with DRAWLOG.
+option(MVC2_PSP_HEAPMAP "track malloc blocks for [heapmap] logs" OFF)
+if(MVC2_PSP_HEAPMAP)
+  target_sources(mvc2_psp PRIVATE "${PSP_DIR}/host/psp_heapmap.c")
+  target_link_options(mvc2_psp PRIVATE -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc
+    -Wl,--wrap=memalign -Wl,--wrap=free)
+endif()
 # ---- EBOOT.PBP: fixup imports, strip, SFO (MEMSIZE=1: Slim memory), pack --
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/EBOOT.PBP"
   COMMAND ${PSPDEV}/bin/psp-fixup-imports -o mvc2_psp.elf mvc2_psp

@@ -219,6 +219,10 @@ static void rt_update(void *u)
             }
             fprintf(stderr, "[mem] heap: largest free block %u KB\n", lo >> 10);
         }
+        {
+            extern void psp_heapmap_dump(void) __attribute__((weak));
+            if (psp_heapmap_dump) psp_heapmap_dump();
+        }
     }
     if (mvc2_host_frame % 300 == 0) {   /* every 5 s */
         plat_stats(&st);

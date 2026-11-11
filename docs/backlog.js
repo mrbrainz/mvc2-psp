@@ -66,7 +66,8 @@ window.BACKLOG = {
    ],
    "title": "PSP heap fragmentation: keep a 2 MB free block",
    "description": "Full arcade run (SCRIPT= + DRAWLOG=1): ~4.5 MB of the heap is free at the low point but the largest block is 1.4 MB, fragmented by 128 KB character atlas pages, textures and mesh buffers allocated and freed between fights. Try a fixed pool for atlas pages (or textures) reserved at boot so they stop splitting the heap.",
-   "done_when": "A full arcade run keeps >= 2 MB largest free block, with fights still under 16.7 ms."
+   "done_when": "A full arcade run keeps >= 2 MB largest free block, with fights still under 16.7 ms.",
+   "note": "Reserved atlas pools (lazy or in r_init) lowered the low point to 0.5-0.8 MB; reverted. Heap map (-DMVC2_PSP_HEAPMAP=ON): in fights the arena has <0.5 MB free and the largest block is untouched space past its top; the sub-2 MB point is the credits, where 16-64 KB fl_tex_define textures split ~2.6 MB into 1.4 + 1.2 MB gaps. Layout-sensitive: the fight low point varies 1.8-2.6 MB between builds."
   },
   {
    "id": "P52",
