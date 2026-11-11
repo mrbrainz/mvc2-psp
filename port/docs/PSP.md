@@ -242,8 +242,15 @@ setter, blend decode, primitive set-up, texture/palette tables) is a copy of
 `r_gl.c`'s and has to be kept in step by hand. sceGu is EABI; the three calls
 with more than four arguments go through `port/psp/host/psp_gu_shim.c`.
 
-- Primitives are scaled straight into the 480x272 back buffer, fitting the
-  game's displayed area (640x448) with its aspect kept (389x272, centred).
+- Primitives are scaled straight into the 480x272 back buffer (P23). Default
+  **fit**: the game's displayed area (640x448) with its aspect kept (389x272,
+  centred; HUD text readable over a full arcade run). **stretch** fills
+  480x272. `ms0:/PSP/GAME/mvc2/settings.txt` (written with the defaults on
+  first run): `screen=fit|stretch`, `color=32|16`; L+R+Select in game swaps
+  the screen mode and saves it (the game does not see that press).
+  `color=16`: dithered 5650 draw/display buffers, half the VRAM (557 KB freed)
+  and fill bandwidth; read at start. Default 32, as 16 can band gradients;
+  its speed-up is on hardware only (PPSSPP does not time the GE).
 - Indexed textures use the GE's CLUT (T8 + 256-colour 8888 palette);
   textures live in RAM, padded to powers of two; > 512 is not drawn.
 - Depth as the GS: larger is nearer, cleared to 0, GEQUAL.

@@ -88,14 +88,29 @@ static struct {
 static int mem_tex, mem_ntex;   /* texture pixel bytes held, count */
 
 /* ---------------- display list ---------------- */
+/* Presentation (P23): FIT keeps the game's aspect (640x448 -> 389x272,
+ * centred), STRETCH fills 480x272. COLOR16: 5650 frame buffers, dithered
+ * (half the VRAM and fill bandwidth; set before r_init). */
+static int present_stretch, present_c16;
+void r_gu_set_present(int stretch, int color16) { present_stretch = stretch != 0; present_c16 = color16 != 0; }
+
 static void set_mapping(void)
 {
     int dw = R.disp_w > 0 ? R.disp_w : FL_SCREEN_W, dh = R.disp_h > 0 ? R.disp_h : FL_SCREEN_H;
     float s = (float)SCR_W / dw < (float)SCR_H / dh ? (float)SCR_W / dw : (float)SCR_H / dh;
     R.sx = R.sy = s;
-    R.ox = (SCR_W - dw * s) * 0.5f;
-    R.oy = (SCR_H - dh * s) * 0.5f;
+    if (present_stretch) { R.sx = (float)SCR_W / dw; R.sy = (float)SCR_H / dh; }
+    R.ox = (SCR_W - dw * R.sx) * 0.5f;
+    R.oy = (SCR_H - dh * R.sy) * 0.5f;
 }
+
+/* switch FIT/STRETCH while running (the next frame's clear covers the bars) */
+void r_gu_toggle_stretch(void)
+{
+    present_stretch = !present_stretch;
+    set_mapping();
+}
+int r_gu_stretch(void) { return present_stretch; }
 
 static void apply_scissor(void)
 {
@@ -135,12 +150,20 @@ int r_init(void)
     R.fog_a = R.fog_b = 10000000.f;
     set_mapping();
 
-    /* VRAM: draw + display 8888 (512x272 each), depth 16-bit */
+    /* VRAM: draw + display 8888 (512x272 each; 5650 with COLOR16), depth 16-bit */
     sceGuInit();
     sceGuStart(GU_DIRECT, list);
-    sceGuDrawBuffer(GU_PSM_8888, (void *)0, BUF_W);
-    sceGuDispBuffer(SCR_W, SCR_H, (void *)(BUF_W * SCR_H * 4), BUF_W);
-    sceGuDepthBuffer((void *)(BUF_W * SCR_H * 8), BUF_W);
+    {
+        int bpp = present_c16 ? 2 : 4;
+        sceGuDrawBuffer(present_c16 ? GU_PSM_5650 : GU_PSM_8888, (void *)0, BUF_W);
+        sceGuDispBuffer(SCR_W, SCR_H, (void *)(BUF_W * SCR_H * bpp), BUF_W);
+        sceGuDepthBuffer((void *)(BUF_W * SCR_H * bpp * 2), BUF_W);
+        if (present_c16) {
+            static const ScePspIMatrix4 dith = { { -4, 0, -3, 1 }, { 2, -2, 3, -1 }, { -3, 1, -4, 0 }, { 3, -1, 2, -2 } };
+            sceGuSetDither(&dith);
+            sceGuEnable(GU_DITHER);
+        }
+    }
     sceGuOffset(2048 - SCR_W / 2, 2048 - SCR_H / 2);
     sceGuViewport(2048, 2048, SCR_W, SCR_H);
     sceGuDepthRange(0, 65535);
@@ -862,7 +885,6 @@ int fl_tri_tex(const FlTri *t)
     TexRec *tx = bind_current();
     GuVtx *o;
     if (!tx) return 0;
-    }
     o = verts(3);
     for (int k = 0; k < 3; k++)
         put(&o[k], &t->v[k], t->uv[k], color_tex(t->argb[k]), tx->w, tx->h);

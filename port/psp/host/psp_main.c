@@ -32,6 +32,57 @@ int psp_disc_open(void);       /* psp_disc.c */
 int psp_script_load(const char *path);   /* psp_script.c (testing) */
 void psp_script_step(uint16_t *b0, uint16_t *b1);
 static int script_on;
+void r_gu_set_present(int stretch, int color16);   /* r_gu.c (P23) */
+void r_gu_toggle_stretch(void);
+int r_gu_stretch(void);
+
+/* Player settings (P23): ms0:/PSP/GAME/mvc2/settings.txt, "screen=fit|stretch"
+ * and "color=32|16" (16: dithered 5650 frame buffers, faster fill, read at
+ * start). Written with the defaults when missing; L+R+Select in game swaps
+ * the screen mode and saves it. */
+#define SETTINGS "ms0:/PSP/GAME/mvc2/settings.txt"
+static int set_c16;
+
+static void settings_save(void)
+{
+    FILE *f = fopen(SETTINGS, "w");
+    if (!f) return;
+    fprintf(f, "# MvC2 PSP settings\n# screen: fit (arcade 4:3, default) or stretch (full 480x272); L+R+Select swaps it in game\n"
+               "screen=%s\n# color: 32 (default) or 16 (dithered 16-bit: faster drawing, may band gradients)\ncolor=%d\n",
+            r_gu_stretch() ? "stretch" : "fit", set_c16 ? 16 : 32);
+    fclose(f);
+}
+
+static void settings_load(void)
+{
+    char ln[128];
+    int stretch = 0, found = 0;
+    FILE *f = fopen(SETTINGS, "r");
+    if (f) {
+        while (fgets(ln, sizeof ln, f)) {
+            if (!strncmp(ln, "screen=", 7)) { stretch = !strncmp(ln + 7, "stretch", 7); found = 1; }
+            else if (!strncmp(ln, "color=", 6)) set_c16 = atoi(ln + 6) == 16;
+        }
+        fclose(f);
+    }
+    r_gu_set_present(stretch, set_c16);
+    fprintf(stderr, "[host] settings: screen %s, color %d\n", stretch ? "stretch" : "fit", set_c16 ? 16 : 32);
+    if (!found) settings_save();
+}
+
+/* L+R+Select (held together, once per hold): swap FIT/STRETCH; the game does
+ * not see that press */
+static void present_combo(PadRaw *p)
+{
+    static int held;
+    const uint16_t combo = PS2_L1 | PS2_R1 | PS2_SELECT;
+    if ((p->buttons & combo) == combo) {
+        if (!held) { r_gu_toggle_stretch(); settings_save(); held = 1; }
+        p->buttons &= (uint16_t)~combo;
+    } else {
+        held = 0;
+    }
+}
 void psp_disc_report(void);
 #include "psp_audio_hw.h"
 
@@ -138,6 +189,7 @@ static void rt_update(void *u)
             p0.buttons |= b0;
             p1.buttons |= b1;
         }
+        present_combo(&p0);
         p0.connected = p1.connected = 1;
         host_pad_set(0, &p0);
         host_pad_set(1, &p1);
@@ -202,6 +254,7 @@ int mvc2_psp_run(int frames)
     psp_log("[host] boot\n");
     if (psp_disc_open() != 0)
         psp_log("[host] file loads will fail\n");
+    settings_load();
     if (r_init() == 0)
         fe_render_init();   /* the game's render-library calls draw with sceGu */
     psp_audio_init();

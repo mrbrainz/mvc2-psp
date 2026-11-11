@@ -346,5 +346,22 @@ window.BACKLOG_ARCHIVE = [
   "description": "TIM2/CLUT to PSP CLUT textures (T4/T8 native); 2MB VRAM budget and caching/swizzle.",
   "done_when": "No missing/corrupt textures over a full arcade run.",
   "note": "Full arcade run (SCRIPT= runner, psp_script.c, upstream arcade_ending_rank.txt) to the credits in PPSSPP: 0 rejected draws, no >512 or failed textures (now logged), textures peak 3.8 MB in RAM; ~60 window captures checked. VRAM/swizzle not needed for correctness (perf in P35); post-credits legal text garbling is vertex data, P34."
+ },
+ {
+  "id": "P23",
+  "order": 11,
+  "phase": "P2",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P21"
+  ],
+  "read": [
+   "port/docs/RENDERER.md"
+  ],
+  "title": "480x272 presentation",
+  "description": "Scale 640x480 game space to 480x272: fit/stretch modes, HUD legibility check.",
+  "done_when": "Full HUD readable; chosen default documented.",
+  "note": "r_gu.c fit (default, 389x272) / stretch (480x272) and optional dithered 16-bit buffers; settings.txt + L+R+Select toggle in psp_main.c. Checked in PPSSPP (toggle, save, 16-bit render); HUD readable in fit over the full arcade captures. 16-bit speed-up not measurable in PPSSPP."
  }
 ];

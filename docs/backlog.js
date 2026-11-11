@@ -42,6 +42,7 @@ window.BACKLOG = {
   "P13",
   "P21",
   "P22",
+  "P23",
   "P24",
   "P25",
   "P26",
@@ -95,22 +96,6 @@ window.BACKLOG = {
    "title": "Saves on PSP",
    "description": "Settings/save file on memory stick.",
    "done_when": "Options survive restart."
-  },
-  {
-   "id": "P23",
-   "order": 11,
-   "phase": "P2",
-   "size": "M",
-   "status": "Backlog",
-   "depends": [
-    "P21"
-   ],
-   "read": [
-    "port/docs/RENDERER.md"
-   ],
-   "title": "480x272 presentation",
-   "description": "Scale 640x480 game space to 480x272: fit/stretch modes, HUD legibility check.",
-   "done_when": "Full HUD readable; chosen default documented."
   },
   {
    "id": "P28",
