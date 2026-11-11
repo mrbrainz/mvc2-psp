@@ -33,8 +33,9 @@ void psp_ee_hwm(void)
     uint8_t *pool = EE_BSS(uint8_t *, 0x0062BFCC);
     uint32_t pool_n = EE_BSS(uint32_t, 0x0062BFD0);
     const uint32_t *ctl = (const uint32_t *)EE_BSS_PTR(0x0062C020);
-    fprintf(stderr, "[hwm] ee heap %p, break +%u KB; arena ctl %08x %08x %08x %08x\n", (void *)base,
-            (unsigned)((top - base) >> 10), (unsigned)ctl[0], (unsigned)ctl[1], (unsigned)ctl[2], (unsigned)ctl[3]);
+    extern unsigned psp_ee_heap_peak_kb(void);
+    fprintf(stderr, "[hwm] ee heap %p, break +%u KB (peak %u KB); arena ctl %08x %08x %08x %08x\n", (void *)base,
+            (unsigned)((top - base) >> 10), psp_ee_heap_peak_kb(), (unsigned)ctl[0], (unsigned)ctl[1], (unsigned)ctl[2], (unsigned)ctl[3]);
     scan("ee heap (to break)", base, (uint32_t)(top - base));
     scan("arena (22 MB from heap base)", base, 0x1600000);
     if (pool && pool_n) scan("handle pool", pool, pool_n);

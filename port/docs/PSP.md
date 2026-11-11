@@ -149,9 +149,11 @@ Measured in PPSSPP (model PSP-2000+, `MEMSIZE=1`), attract mode, 600 frames:
 | malloc after 600 frames | 28.3 |
 | total with stacks | ~38.5 |
 
-Almost all of the malloc is the EE heap (`HOST_EE_HEAP`, 28 MB,
-`port/host/boot.c`), which the game fills at boot with its 22 MB arena and
-6 MB handle pool, so play does not grow it. **Minimum model: PSP-2000 (Slim)
+Almost all of the malloc is the EE heap (`HOST_EE_HEAP`, 28 MB in
+`port/host/boot.c`; 23 MB on the PSP, `psp_ee_heap.c` over its sbrk with
+`--wrap`, P55), where the game puts its 22 MB arena (the 6 MB handle pool is
+inside it) at boot, so play does not grow it. A refused growth logs
+`[mem] EE heap: sbrk(...) refused`. **Minimum model: PSP-2000 (Slim)
 or later, with `MEMSIZE=1`** (about 52 MB user memory, about 13 MB left for
 renderer and audio buffers; VRAM is separate). The PSP-1000 (24 MB user)
 cannot hold the EE heap. `[mem]` lines in `mvc2_psp.log` report malloc use;
@@ -170,8 +172,9 @@ voice's blocks as it plays, sample-identical to `vag.c`, instead of holding
 Full arcade run (P53): largest free block never below 3.1 MB.
 At the end of a run `[hwm]` lines (`psp_ee_hwm.c`, P54) give the EE heap
 footprint: full arcade, the arena has 16.3 MB of 22 MB written (the 6 MB
-handle pool inside it, 4.6 MB), and the game's break stops at 22.5 MB of
-the 28 MB EE heap. That rules out the PSP-1000.
+handle pool inside it, 4.6 MB), and the game's break stops at 22.5 MB. That
+rules out the PSP-1000. With the 23 MB EE heap (P55) the largest free block
+never drops below 8 MB.
 `-DMVC2_PSP_HEAPMAP=ON` logs free gaps and live bytes by caller with
 `DRAWLOG=1`.
 

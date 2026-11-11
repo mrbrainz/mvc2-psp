@@ -414,6 +414,22 @@ window.BACKLOG_ARCHIVE = [
   "note": "psp_ee_hwm.c (page scan of the zeroed EE heap, logged at the end): arena written 16.3 MB of 22 MB (handle pool sits inside it, 4.6 of 6 MB written, top reached); the game breaks only 22.5 MB of the 28 MB EE heap. With a 9.2 MB static image the game alone (~16.7 MB) exceeds the PSP-1000's ~24 MB less image, before renderer and audio: PSP-1000 not feasible."
  },
  {
+  "id": "P55",
+  "order": 10.35,
+  "phase": "P2",
+  "size": "S",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/host/boot.c",
+   "port/docs/PSP.md"
+  ],
+  "title": "PSP: size the EE heap to what the game breaks (reclaim ~5 MB)",
+  "description": "boot.c callocs a 28 MB EE heap but a full arcade run breaks only 22.5 MB of it (P54). On the PSP, --wrap the game's sbrk (func_001044E0) and host_ee_heap_base/top with a 23 MB heap, logging any failed growth.",
+  "done_when": "A full arcade run shows ~5 MB more heap headroom, no failed growth, fights under 16.7 ms.",
+  "note": "psp_ee_heap.c wraps func_001044E0 and host_ee_heap_base/top with a 23 MB heap. Full arcade run: break peak 22530 KB, no refused growth, largest free block >= 8256 KB (was 3136), no window over 16.7 ms. Other modes untested; a refusal is logged."
+ },
+ {
   "id": "P23",
   "order": 11,
   "phase": "P2",
