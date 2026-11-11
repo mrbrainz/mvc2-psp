@@ -31,4 +31,4 @@ A PSP build of the Marvel vs. Capcom 2 decompilation, as a new platform backend 
 - Ticket `note`s: 1–3 sentences (what changed, how verified, limits). No narration.
 
 ## Status (max 3 lines; replace, never append)
-- P12, P13, P14, P22-P28, P31, P33-P35, P53-P59 done: full arcade run plays in PPSSPP from a packed EBOOT, fights under 16.7 ms, >= 8 MB heap headroom (SFX kept ADPCM, 23 MB EE heap); PSP-1000 ruled out; saves are PSP system savedata. Next: P32 SFX balance, P52.
+- P12, P13, P14, P22-P28, P31, P33-P35, P53-P59, P56 done: full arcade run plays in PPSSPP from a packed EBOOT, fights under 16.7 ms, >= 8 MB heap headroom (SFX kept ADPCM, 23 MB EE heap); PSP-1000 ruled out; saves are PSP system savedata. Next: P32 SFX balance.

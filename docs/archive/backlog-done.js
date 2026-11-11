@@ -434,6 +434,22 @@ window.BACKLOG_ARCHIVE = [
   "note": "func_0016D4B0 (src/chA_a.c) copies UVs through adjacent extern arrays; optimised, clang hoisted the copy above the stores, so a glyph's second triangle took the previous glyph's rows. port/psp/CMakeLists.txt compiles that file at -O0. Arcade run: all glyph triangle pairs share their row; screen not checked by eye."
  },
  {
+  "id": "P52",
+  "order": 10.15,
+  "phase": "P2",
+  "size": "S",
+  "status": "Won't fix",
+  "depends": [],
+  "read": [
+   "port/render/r_gu.c",
+   "port/docs/PSP.md"
+  ],
+  "title": "PSP credits: first concept-art frame glitches",
+  "description": "In the arcade credits scroll the first concept-art image draws garbled; the following images scroll cleanly. Low priority. Likely a texture/CLUT upload racing its first draw or a first-use path in the 2D sprite route; reproduce with the SCRIPT= arcade run near the end and compare with the web port.",
+  "done_when": "The first credits concept-art image draws cleanly in PPSSPP, as the later ones do.",
+  "note": "Present on PS2 too (seen in a PS2 playthrough), so it is original behaviour, not a port bug."
+ },
+ {
   "id": "P35",
   "order": 10.2,
   "phase": "P2",
@@ -496,6 +512,22 @@ window.BACKLOG_ARCHIVE = [
   "description": "boot.c callocs a 28 MB EE heap but a full arcade run breaks only 22.5 MB of it (P54). On the PSP, --wrap the game's sbrk (func_001044E0) and host_ee_heap_base/top with a 23 MB heap, logging any failed growth.",
   "done_when": "A full arcade run shows ~5 MB more heap headroom, no failed growth, fights under 16.7 ms.",
   "note": "psp_ee_heap.c wraps func_001044E0 and host_ee_heap_base/top with a 23 MB heap. Full arcade run: break peak 22530 KB, no refused growth, largest free block >= 8256 KB (was 3136), no window over 16.7 ms. Other modes untested; a refusal is logged."
+ },
+ {
+  "id": "P56",
+  "order": 10.4,
+  "phase": "P2",
+  "size": "S",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/psp/host/psp_fe_sync.c",
+   "port/docs/PSP.md"
+  ],
+  "title": "PSP ending: blank under \"Presented by\" (CAPCOM logo?)",
+  "description": "After the post-credits legal text, the \"Presented by\" screen shows nothing underneath; the web port (arcade path) shows \"THANK YOU FOR PLAYING / PRESENTED BY\" with the yellow-on-blue CAPCOM logo below (checked in an arcade_ending_rank run, 2026-11-11). Log that screen's draws in an arcade run (SCRIPT=, DRAWLOG=1 rej counters): texture not loaded/synced, draw rejected, or another optimiser issue as in P34. PSP-side fix only.",
+  "done_when": "The \"Presented by\" screen shows what the arcade shows, checked by eye in PPSSPP after a full arcade run.",
+  "note": "The CAPCOM logo is a 3D mesh at NDC z -0.6, nearer than DEPTH_ZOOM's window, so the zoomed depth fell outside the GE range and was dropped. r_gu_mesh_draw now anchors such meshes just under the top depth (layer order kept). Arcade run: yellow-on-blue logo shown under PRESENTED BY; worst update unchanged."
  },
  {
   "id": "P57",
@@ -565,5 +597,21 @@ window.BACKLOG_ARCHIVE = [
   "description": "Scale 640x480 game space to 480x272: fit/stretch modes, HUD legibility check.",
   "done_when": "Full HUD readable; chosen default documented.",
   "note": "r_gu.c fit (default, 389x272) / stretch (480x272) and optional dithered 16-bit buffers; settings.txt + L+R+Select toggle in psp_main.c. Checked in PPSSPP (toggle, save, 16-bit render); HUD readable in fit over the full arcade captures. 16-bit speed-up not measurable in PPSSPP."
+ },
+ {
+  "id": "P60",
+  "order": 16,
+  "phase": "P5",
+  "size": "S",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/docs/PLATFORM_SURFACE.md",
+   "port/docs/BOOT_NOTES.md"
+  ],
+  "title": "Audit player-visible 2P surfaces",
+  "description": "List every screen where a second player appears: title/mode menu entries (Versus etc.), 2P 'press start'/join prompts in attract, title, character select and fights, challenger join-in, P2 side of options/button config. Record each with the game state and the code/flag that drives it.",
+  "done_when": "Audit list in this ticket's note, each item mapped to a follow-up ticket.",
+  "note": "P2 pad already reports disconnected (plat_pad_connected: slot 0 only, platform_psp.c:109). Empty-side HUD prompt residual_00172B70 (src/nq121_b.c) draws PRESS START BUTTON / NO CHALLENGER via func_003D7350 -> P63; button config left/right controller prompts -> P64; mode-menu Versus is texture-drawn in front-end mode 1 (w20b0_e.c), sub-state untraced -> P62."
  }
 ];

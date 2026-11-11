@@ -91,7 +91,7 @@ target_include_directories(mvc2_psp PRIVATE "${MVC2_ROOT}/port/stubs" "${PSP_DIR
 target_include_directories(mvc2_psp SYSTEM PRIVATE ${PSP_INC})
 target_compile_options(mvc2_psp PRIVATE -fno-common)
 target_link_libraries(mvc2_psp PRIVATE "-Wl,--whole-archive" psp_game_data "-Wl,--no-whole-archive"
-  mvc2_game pspgu pspdebug pspdisplay pspge pspctrl psprtc psppower pspaudio psputility m)
+  mvc2_game pspgu pspdebug pspdisplay pspge pspctrl psprtc psppower pspaudio psputility pspdmac m)
 # --sort-section=name: the .data.ee_<address> sections in EE order (R18).
 # --wrap: o32 replacements and PSP-side hooks (port/psp/host).
 target_link_options(mvc2_psp PRIVATE -no-pie "@${GLUE}/link_extra.rsp" -Wl,--sort-section=name

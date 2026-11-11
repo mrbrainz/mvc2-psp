@@ -2,6 +2,7 @@
 #include <pspkernel.h>
 #include <pspdebug.h>
 #include <pspdisplay.h>
+#include <pspdmac.h>
 #include <psppower.h>
 #include <stdio.h>
 #include <malloc.h>
@@ -74,7 +75,14 @@ int psp_shot_fb(void **pix, int *stride) {
     static int made;
     if (!made) { sceIoMkdir("ms0:/PSP/GAME/mvc2/shots", 0777); made = 1; }
     if (sceDisplayGetFrameBuf(&top, &bufw, &fmt, PSP_DISPLAY_SETBUF_NEXTFRAME) < 0 || !top || fmt != PSP_DISPLAY_PIXEL_FORMAT_8888) return -1;
-    *pix = (void *)((unsigned)top | 0x40000000u);
+    /* DMAC copy: PPSSPP keeps the frame on the GPU and only downloads it to
+     * VRAM for a copy it can see; a plain read gets a stale frame */
+    static void *buf;
+    unsigned n = (unsigned)bufw * 272 * 4;
+    if (!buf && !(buf = memalign(64, n))) return -1;
+    sceKernelDcacheWritebackInvalidateRange(buf, n);
+    if (sceDmacMemcpy(buf, top, n) < 0) return -1;
+    *pix = (void *)((unsigned)buf | 0x40000000u);
     *stride = bufw;
     return 0;
 }

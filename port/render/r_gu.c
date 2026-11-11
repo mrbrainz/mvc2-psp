@@ -1044,6 +1044,7 @@ void r_gu_canvas_to_ge(float m[16])
  * transformed by clip (row-major, v' = v * M, GE clip space), textured from
  * an fl texture handle (0 = untextured) with UVs scaled (su, sv) and offset
  * (ou, ov) in texture units of the handle's w x h. */
+typedef struct GuVtxIdx { float u, v; uint32_t c; float x, y, z; } GuVtxIdx;   /* r_gu_mesh.c GVtx layout */
 int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const uint16_t *idx, int count,
                    float su, float sv, float ou, float ov)
 {
@@ -1063,9 +1064,27 @@ int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const 
     }
     apply_blend_depth();
     memcpy(&proj, clip, sizeof proj);   /* sceGuSetMatrix copies the values into the list */
-    {   /* depth zoom: z' = (z + w) * DEPTH_ZOOM - w, as depth_of */
+    {   /* depth zoom: z' = (z + w) * DEPTH_ZOOM - w, as depth_of.  A mesh
+         * wholly nearer than the zoomed window (the ending's CAPCOM logo at
+         * NDC -0.6) would land past the GE's depth range and be dropped;
+         * depth_of clamps such depths to the top, so clamp the mesh too
+         * (sampled from a few of its vertices) */
         float *m = (float *)&proj;
-        for (int r = 0; r < 4; r++) m[r * 4 + 2] = (m[r * 4 + 2] + m[r * 4 + 3]) * DEPTH_ZOOM - m[r * 4 + 3];
+        const GuVtxIdx *vv = (const GuVtxIdx *)verts;
+        int near = 1;
+        float zs = -1.f;
+        for (int k = 0; k < 4 && near; k++) {
+            const float *q = &vv[idx[k * (count - 1) / 3]].x;
+            float zc = q[0] * m[2] + q[1] * m[6] + q[2] * m[10] + m[14];
+            float wc = q[0] * m[3] + q[1] * m[7] + q[2] * m[11] + m[15];
+            near = wc > 0.f && zc / wc > -1.f + 2.f / DEPTH_ZOOM;
+            if (near && zc / wc > zs) zs = zc / wc;
+        }
+        /* near: the same zoom, anchored so the mesh's nearest sampled depth
+         * sits just under the top (its layers keep their order) */
+        for (int r = 0; r < 4; r++)
+            m[r * 4 + 2] = near ? m[r * 4 + 2] * DEPTH_ZOOM + m[r * 4 + 3] * (0.999f - zs * DEPTH_ZOOM)
+                                : (m[r * 4 + 2] + m[r * 4 + 3]) * DEPTH_ZOOM - m[r * 4 + 3];
     }
     /* GE clip planes cull clip-space z < 0, where the game's depth range
      * (larger = nearer, as the GS) puts every mesh; the VU1 reject above

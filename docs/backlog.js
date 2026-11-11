@@ -58,41 +58,13 @@ window.BACKLOG = {
   "P53",
   "P54",
   "P55",
+  "P56",
   "P57",
   "P58",
-  "P59"
+  "P59",
+  "P60"
  ],
  "activities": [
-  {
-   "id": "P56",
-   "order": 10.4,
-   "phase": "P2",
-   "size": "S",
-   "status": "Ready",
-   "depends": [],
-   "read": [
-    "port/psp/host/psp_fe_sync.c",
-    "port/docs/PSP.md"
-   ],
-   "title": "PSP ending: blank under \"Presented by\" (CAPCOM logo?)",
-   "description": "After the post-credits legal text, the \"Presented by\" screen shows nothing underneath; the web port (arcade path) shows \"THANK YOU FOR PLAYING / PRESENTED BY\" with the yellow-on-blue CAPCOM logo below (checked in an arcade_ending_rank run, 2026-11-11). Log that screen's draws in an arcade run (SCRIPT=, DRAWLOG=1 rej counters): texture not loaded/synced, draw rejected, or another optimiser issue as in P34. PSP-side fix only.",
-   "done_when": "The \"Presented by\" screen shows what the arcade shows, checked by eye in PPSSPP after a full arcade run."
-  },
-  {
-   "id": "P52",
-   "order": 10.15,
-   "phase": "P2",
-   "size": "S",
-   "status": "Backlog",
-   "depends": [],
-   "read": [
-    "port/render/r_gu.c",
-    "port/docs/PSP.md"
-   ],
-   "title": "PSP credits: first concept-art frame glitches",
-   "description": "In the arcade credits scroll the first concept-art image draws garbled; the following images scroll cleanly. Low priority. Likely a texture/CLUT upload racing its first draw or a first-use path in the 2D sprite route; reproduce with the SCRIPT= arcade run near the end and compare with the web port.",
-   "done_when": "The first credits concept-art image draws cleanly in PPSSPP, as the later ones do."
-  },
   {
    "id": "P32",
    "order": 5.15,
@@ -160,6 +132,88 @@ window.BACKLOG = {
    "title": "Release packaging",
    "description": "EBOOT icon/title, user guide for supplying own disc data.",
    "done_when": "Installable EBOOT + PSP section in USER_GUIDE.md."
+  },
+  {
+   "id": "P61",
+   "order": 17,
+   "phase": "P5",
+   "size": "XS",
+   "status": "Backlog",
+   "depends": [
+    "P60"
+   ],
+   "read": [
+    "port/docs/PLATFORM_SURFACE.md",
+    "port/docs/BOOT_NOTES.md"
+   ],
+   "title": "Block 2P join-in",
+   "description": "P2 input is already dead on PSP (plat_pad_connected returns 0 for slot 1). Confirm in a full run that no challenger or P2 cursor can appear; add a mask only if one does.",
+   "done_when": "Pressing any input never spawns P2 in a full arcade run in PPSSPP."
+  },
+  {
+   "id": "P62",
+   "order": 18,
+   "phase": "P5",
+   "size": "S",
+   "status": "Backlog",
+   "depends": [
+    "P60"
+   ],
+   "read": [
+    "port/docs/PLATFORM_SURFACE.md",
+    "port/docs/BOOT_NOTES.md"
+   ],
+   "title": "Hide 2P modes from menus",
+   "description": "Trace which front-end sub-state (mode 1, src/w20b0_e.c, D_00477170) draws the mode menu, then skip Versus/2P entries from the PSP side. Entries are textures, not strings.",
+   "done_when": "Menus show only single-player modes; navigation wraps cleanly."
+  },
+  {
+   "id": "P63",
+   "order": 19,
+   "phase": "P5",
+   "size": "S",
+   "status": "Backlog",
+   "depends": [
+    "P61"
+   ],
+   "read": [
+    "port/docs/PLATFORM_SURFACE.md",
+    "port/docs/BOOT_NOTES.md"
+   ],
+   "title": "Hide 2P prompts and HUD text",
+   "description": "Skip func_003D7350 draws of gPressStartLabel_004B5640 / gNoChallengerLabel_004B5630 (from residual_00172B70) via a PSP-side --wrap, like the existing func_003D7400 wrap. Check attract/title for other 2P prompts.",
+   "done_when": "No 2P prompt visible anywhere in a full arcade run (screenshots)."
+  },
+  {
+   "id": "P64",
+   "order": 20,
+   "phase": "P5",
+   "size": "XS",
+   "status": "Backlog",
+   "depends": [
+    "P60"
+   ],
+   "read": [
+    "port/docs/PLATFORM_SURFACE.md",
+    "port/docs/BOOT_NOTES.md"
+   ],
+   "title": "Drop P2 controls from options",
+   "description": "Hide the controller left/right side choice (gControllerLeftPrompt_004B3590 / gControllerRightPrompt_004B35B0) in button config so only P1 shows. PSP-side only.",
+   "done_when": "Options show P1 settings only; saves still load."
+  },
+  {
+   "id": "P65",
+   "order": 21,
+   "phase": "P5",
+   "size": "S",
+   "status": "Backlog",
+   "depends": [],
+   "read": [
+    "port/docs/BOOT_NOTES.md"
+   ],
+   "title": "Add port credits to top of staff roll",
+   "description": "Prepend entries to the ending credits, PSP-side only: 'MVC2 PSP Port By' / 'Mr Brainz & LLM Vibes', then 'Original MVC2 Decomp' / 'G. Guthrie'. Match the existing heading/name styles.",
+   "done_when": "New entries roll first in the ending credits, styled like the originals; rest of the roll unchanged (screenshots)."
   }
  ]
 };
