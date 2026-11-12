@@ -13,8 +13,8 @@ python3 "$ROOT/port/psp/tools/check_release_eboot.py" "$BASE"
 mkdir -p "$OUT"; OUT=$(cd "$OUT" && pwd)
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 
-# LICENSE.txt: third-party notices for code in the EBOOT and tools
-{ echo "MvC2 PSP: third-party notices"; echo
+# LICENSE.txt: the PSP code licence, then third-party notices for code in the EBOOT and tools
+{ cat "$ROOT/LICENSE"; echo; echo "MvC2 PSP: third-party notices"; echo
   for f in "$ROOT"/LICENSES/README.md "$ROOT"/LICENSES/*.txt; do
     echo "==== $(basename "$f") ===="; cat "$f"; echo; done
   echo "==== PSPSDK, newlib (pspdev) and Go runtime ===="

@@ -1,109 +1,174 @@
-# Marvel vs. Capcom 2 — PSP port
+# Marvel vs. Capcom 2 — PSP
 
-Attempt at forking the amazing work by G Guthrie at decompiling MvC2 for the PS2 and porting it over to PSP
+A native PSP port of Marvel vs. Capcom 2: New Age of Heroes, built on the
+[MvC2 PS2 decompilation and port](https://github.com/g-guthrie/mvc2-port-and-decomp)
+by G Guthrie. It runs on PSP hardware (custom firmware) and in PPSSPP.
 
-Below is the original upstream Readme
+**No game data is included.** You build your own EBOOT from your own copy of
+the PS2 disc.
 
-# Marvel vs. Capcom 2 — port and decompilation
+## Status
 
-[![Progress report](https://github.com/g-guthrie/mvc2-port-and-decomp/actions/workflows/report.yml/badge.svg)](https://github.com/g-guthrie/mvc2-port-and-decomp/actions/workflows/report.yml)
+- Full arcade mode plays from start to credits in PPSSPP at full speed.
+- Single player only (player 2 is not connected).
+- Saves use the PSP's own savedata system.
+- Real-hardware speed is still being tested.
 
-*Marvel vs. Capcom 2: New Age of Heroes*, rebuilt from source:
+Open work is tracked in [docs/backlog.js](docs/backlog.js) (board:
+[docs/backlog.html](docs/backlog.html)).
 
-| Part | Where | State |
-| --- | --- | --- |
-| **The port**: the game's own code on modern hardware, no emulator | [`port/`](port) | Playable end to end in the browser |
-| **PS2 decompilation** (NTSC-U `SLUS_204.86`) | [`src/`](src), [`config/`](config), [`tools/`](tools) | 99.93% of code, 99.99% of data; rebuilds the retail ELF byte for byte |
-| **Arcade (NAOMI) decompilation** | [`naomi/`](naomi) | In progress: 58.4% of the main image, 36.9% as verified C |
+## Requirements
 
-No game data is in this repository. The port runs from your own disc.
+- A PS2 disc image (`.iso`) of **Marvel vs. Capcom 2: New Age of Heroes (USA)**,
+  SLUS-20486. Other regions are not supported. BIN/CUE, CSO and CHD images must
+  be converted to `.iso` first.
+- **PSP-2000 or later** with custom firmware (the PSP-1000 does not have enough
+  memory), or [PPSSPP](https://www.ppsspp.org/).
+- About 200 MB free on the memory stick.
 
-## The port
+## Making your EBOOT
 
-The port compiles the decompiled PS2 C for a 32-bit host and replaces only the
-console's hardware: graphics (WebGL2), sound (ADX streams and sound banks
-through Web Audio), controllers, memory card and disc. Everything the player
-does runs through the game's own code.
+Download the package for your computer from
+[Releases](https://github.com/mrbrainz/mvc2-psp/releases). The builder checks
+your disc, then writes a folder called `MVC2` (containing `EBOOT.PBP`) next to
+your `.iso`. Your disc image is only read; nothing is uploaded anywhere.
 
-It plays by the **arcade's rules**. The PS2 build was made from the arcade
-program; where the two differ (timing, super-freeze order, flying-screen
-edges, Servbot hit-stop, float rounding and more), the port follows the arcade.
-The differences were found by comparing the two programs and confirmed by
-running the arcade ROM next to the port ([ARCADE_DIFF.md](port/docs/ARCADE_DIFF.md)).
+### Windows
 
-There are no settings that make it worse. It always runs with:
+`mvc2-psp-<version>-windows.zip`
 
-- **Zero added input lag**: input is read the frame it happens, and run-ahead
-  shows each press one frame sooner, ahead of the arcade cabinet. The display
-  path is low latency too.
-- Everything unlocked, no load times, sharp native-resolution output.
-- Keyboard and gamepad for two players with full remapping (Xbox,
-  PlayStation and Switch pads), and a touch overlay on phones.
-- The Dreamcast's higher-rate sound effects, if you also give it your
-  Dreamcast disc. The PS2's are 8 kHz; the Dreamcast's are 11–16 kHz.
-- Saves that persist, and offline play once the disc is cached.
+- **GUI:** unzip, then drag your `.iso` onto `MvC2 EBOOT Builder.exe`.
+  If SmartScreen appears, choose *More info → Run anyway*.
+- **Command line:**
 
-**Play.** Build the web version, or open a hosted copy, and choose your
-`SLUS-20486` disc image once; it is cached in the browser. `?disc=URL` and
-`?dcse=URL` load the discs without the picker. Controls and building are in
-the [player guide](port/docs/USER_GUIDE.md).
+  ```bat
+  "MvC2 EBOOT Builder.exe" "C:\path\to\game.iso"
+  ```
 
-**Verified against retail.** An oracle runs the retail PS2 executable in an
-emulator and compares the port with it frame by frame: the whole game state,
-plus every sound command. 416 random fight seeds and 36 complete arcade runs
-(about 1.1 million frames, through Abyss to the ending) match exactly, and so
-do 410,208 sound commands ([ORACLE_FUZZ.md](port/docs/ORACLE_FUZZ.md)). These
-runs switch the arcade rules off, so that retail PS2 is a fair reference.
+### macOS
 
-| Document | Contents |
+`mvc2-psp-<version>-macos.zip` (Apple Silicon and Intel, macOS 11+)
+
+- **GUI:** unzip, open `MvC2 EBOOT Builder.app`, choose your `.iso`. The first
+  time, macOS may block it because it is unsigned: right-click the app →
+  *Open → Open*, or allow it in *System Settings → Privacy & Security*.
+- **Command line:**
+
+  ```sh
+  "MvC2 EBOOT Builder.app/Contents/MacOS/mvc2-eboot-builder" ~/path/to/game.iso
+  ```
+
+### Linux
+
+`mvc2-psp-<version>-linux-x64.tar.gz`
+
+- **GUI:** extract, then double-click `mvc2-eboot-builder` and choose your
+  `.iso` (the file picker needs `zenity`; without it, run it from a terminal).
+- **Command line:**
+
+  ```sh
+  tar -xzf mvc2-psp-<version>-linux-x64.tar.gz
+  cd mvc2-psp-<version>
+  ./mvc2-eboot-builder ~/path/to/game.iso
+  ```
+
+### Any OS with Python 3
+
+`mvc2-psp-<version>-pypack.zip`
+
+```sh
+python3 port/psp/tools/xmb_art.py game.iso art
+mkdir MVC2
+python3 port/psp/pack/psp_pack.py --icon0 art/ICON0.PNG --pic1 art/PIC1.PNG game.iso base/EBOOT.PBP MVC2/EBOOT.PBP
+```
+
+### Builder options
+
+```
+mvc2-eboot-builder [-base EBOOT.PBP] [-o OUTDIR] [-q] [game.iso]
+  -base  base EBOOT (default: the one shipped with the builder)
+  -o     folder to create MVC2/ in (default: next to the .iso)
+  -q     no dialogs and no "Press Enter" prompt
+```
+
+## Installing and playing
+
+1. Copy the `MVC2` folder into `PSP/GAME/` on the memory stick, so you have
+   `PSP/GAME/MVC2/EBOOT.PBP`.
+2. Launch it from *Game → Memory Stick*. The `.iso` is not needed on the PSP.
+
+PPSSPP: open `MVC2/EBOOT.PBP` directly.
+
+**The built EBOOT contains game data from your disc. Do not share it.**
+
+### Controls
+
+| PSP | Default |
 | --- | --- |
-| [USER_GUIDE.md](port/docs/USER_GUIDE.md) | Playing, controls, building, test switches |
-| [ARCADE_DIFF.md](port/docs/ARCADE_DIFF.md) | PS2 vs arcade: what differs and what the port does |
-| [ORACLE_FUZZ.md](port/docs/ORACLE_FUZZ.md) | The retail comparison and its results |
-| [BOOT_NOTES.md](port/docs/BOOT_NOTES.md) | How the port runs the game's code; every fix, with its evidence |
-| [PS2_GRIPES.md](port/docs/PS2_GRIPES.md) | Known complaints about the PS2 version, and what the port does about each |
-| [RENDERER.md](port/docs/RENDERER.md), [AUDIO.md](port/docs/AUDIO.md) | The graphics and sound layers |
-| [PORT_PLAN.md](port/docs/PORT_PLAN.md) | Phases and what is next (desktop builds) |
+| D-pad / analog stick | Move |
+| Square / Triangle | Light punch / Heavy punch |
+| Cross / Circle | Light kick / Heavy kick |
+| L / R | Assist 1 / Assist 2 |
+| Start | Start / pause |
 
-## PS2 decompilation
+Buttons can be reassigned in the game's own *Button Config*.
 
-[![Matching C progress](assets/progress.svg)](DECOMP.md)
+### Settings
 
-Every matched function is C compiled with a period toolchain (Metrowerks MWCC
-2.4/3.0/3.0.3, SN GCC 2.95.2, EE GCC 2.96 or Sony EE GCC 2.9), and checked byte
-for byte against retail. The few routines that were hand-written assembly in
-the original (crt0, the exception handler, libvu0 kernels, the cache flush,
-newlib's r5900 string routines) are `.S` sources. The hybrid build links all
-of it and reproduces the retail ELF exactly (SHA-256 `48ebf907…6f13d7`).
+`PSP/GAME/MVC2/settings.txt` is created on first run:
 
-| Track | Progress |
+| Setting | Values |
 | --- | --- |
-| Code | **99.93%** (3,291,484 / 3,293,696 bytes; 20,181 / 20,678 functions) |
-| Initialized data | **99.99%** (647,988 / 648,064 bytes) |
-| Retail ELF rebuild | Byte-exact |
+| `screen` | `fit` (4:3, default) or `stretch` (full 480x272). L+R+Select in game switches it. |
+| `color` | `32` (default) or `16` (16-bit colour, less VRAM and bandwidth) |
 
-The last 2,212 bytes of code are blocked by compiler behaviour that no
-available build reproduces; [REMAINING.md](REMAINING.md) gives the evidence
-for each. Setup, building and the matching rules are in [DECOMP.md](DECOMP.md)
-and [AGENTS.md](AGENTS.md). CI checks the catalog, the build script and the
-tools. It cannot compile, because the compilers are not redistributable.
+## Building from source
 
-## NAOMI decompilation
+The PSP build needs the [pspdev](https://github.com/pspdev/pspdev) toolchain,
+LLVM (clang with the MIPS target), Emscripten, CMake, Ninja and Python 3.
+Setup, build steps and PPSSPP testing are in
+[port/docs/PSP.md](port/docs/PSP.md).
 
-The arcade program, compiled with the original Hitachi SH C compiler and
-matched against the retail ROM. It is far from done, so the port runs the PS2
-program. The arcade ROM is the reference for how the port plays. See
-[naomi/README.md](naomi/README.md).
+```sh
+cmake -S port/psp -B build/port-psp -G Ninja -DCMAKE_TOOLCHAIN_FILE=$PWD/port/cmake/psp-clang.cmake
+ninja -C build/port-psp mvc2_eboot
+```
 
-## Layout
+Add `-DMVC2_RELEASE=ON` for a release base EBOOT (no art, no game data). The
+EBOOT builder is in [port/psp/builder](port/psp/builder) (Go), and release
+packages come from [port/psp/release/package.sh](port/psp/release/package.sh).
+Pushing a `v*` tag builds them in CI as a draft GitHub release.
+
+## Repository layout
 
 | Path | Holds |
 | --- | --- |
-| `port/` | The port: host layer, renderer, audio, front ends, web shell, oracle tools |
-| `src/`, `config/`, `tools/`, `tests/` | PS2 decompilation: C sources, symbol and match catalogs, build and verification tools |
-| `naomi/` | NAOMI decompilation, self-contained |
-| `docs/` | PS2 decompilation notes; `docs/recovery/` holds the dated recovery records |
-| `build-inputs/`, `private/` | Where you supply the retail image and compilers (ignored) |
+| `port/psp/` | PSP build: host layer, glue, savedata, builder, release scripts |
+| `port/platform/platform_psp.c`, `port/render/r_gu*.c` | PSP platform and GU renderer |
+| `port/` | Upstream native/browser port the PSP build sits beside |
+| `src/`, `config/`, `tools/` | Upstream PS2 decompilation |
+| `naomi/` | Upstream NAOMI (arcade) decompilation |
+| `docs/backlog.js` | PSP to-do list |
+
+## Credits
+
+This project would not exist without
+**[G Guthrie's Marvel vs. Capcom 2 decompilation and port](https://github.com/g-guthrie/mvc2-port-and-decomp)**:
+the byte-exact PS2 decompilation, the native port and the arcade decompilation
+that this PSP build is based on. Thank you for the work and for sharing it.
+
+Also thanks to the [pspdev](https://github.com/pspdev) community for the
+PSP toolchain and SDK, and the [PPSSPP](https://www.ppsspp.org/) team.
+
+## License
+
+The PSP-specific code in this fork (`port/psp/`, `port/platform/*_psp.c`,
+`port/render/r_gu*.c`, `.github/workflows/psp-release.yml`) is released under
+the [MIT License](LICENSE).
+
+The upstream project has no licence of its own; its code remains under its
+authors' rights. Third-party code in the decompilation keeps the notices
+listed in [LICENSES/](LICENSES).
 
 ## Legal
 
