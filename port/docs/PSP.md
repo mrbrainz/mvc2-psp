@@ -207,6 +207,11 @@ cable in, not in USB-storage mode. Mac: `brew install libusb`, then
 and the log, shots and settings the run writes. `psp-gdb` works through
 `usbgdb.prx`.
 
+Textures (P87) are copied into the VRAM past the frame and depth buffers on
+first bind (about 600 KB; reset at a frame boundary when full, off while a
+system dialog is up): the GE reading them from RAM slowed the CPU through bus
+contention (3v3 fight: frame 45.2 -> 42.5 ms). `MVC2_NO_VRAM_TEX=1` turns it off.
+
 ## Real hardware (P82)
 
 Verified on a PSP-2003 with ARK-4. PPSSPP accepts all of these; hardware does not:

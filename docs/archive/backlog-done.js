@@ -852,5 +852,23 @@ window.BACKLOG_ARCHIVE = [
   "description": "Packed EBOOTs ran in PPSSPP but failed on hardware: 800200D9 at load, then a freeze in early boot.",
   "done_when": "A packed EBOOT boots and plays on a PSP-2000+ with ARK-4.",
   "note": "PRX link, -mno-check-zero-division (112 teq traps), FPU traps cleared, SLUS_204.86 packed, log closed per line; no mvc2_memcard folder (mkdir wrap), boot text only in debug. Found with mvc2exc.prx watchdog and crumb trampolines; plays on a PSP-2003, but fights run at 17-21 fps (P41)."
+ },
+ {
+  "id": "P87",
+  "order": 35,
+  "phase": "P4",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P82"
+  ],
+  "read": [
+   "port/render/r_gu.c",
+   "port/docs/PSP.md"
+  ],
+  "title": "Hardware speed: mesh textures in VRAM",
+  "description": "Hardware A/B (P83): with mesh submits off, the VU1 packet build (CPU only) also ran 3.4 ms faster, so the GE reading textures/CLUTs from main RAM seems to slow the CPU through bus contention, and each GU submit costs ~25 us. Keep the hottest mesh textures and CLUTs in free VRAM (~0.9 MB past the frame and depth buffers), PSP-side, and measure.",
+  "done_when": "Hardware fight profile before/after over PSPLink; screenshot bit-identical; kept if the frame gets faster.",
+  "note": "Textures (mesh and 2D) copied to free VRAM on first bind, dropped on update, reset at frame end when full, paused while a system dialog is up. Same-binary A/B (MVC2_NO_VRAM_TEX) over PSPLink: 3v3 fight 45.2 -> 42.5 ms (packet build 17.8 -> 16.0, fl_clay_draw 14.9 -> 14.2), fight screenshot bit-identical; save dialog not tested on hardware."
  }
 ];

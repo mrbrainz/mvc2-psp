@@ -80,7 +80,8 @@ window.BACKLOG = {
   "P70",
   "P71",
   "P81",
-  "P82"
+  "P82",
+  "P87"
  ],
  "activities": [
   {
@@ -369,23 +370,6 @@ window.BACKLOG = {
    "title": "Hardware speed: re-profile fights and menus",
    "description": "Hardware profile (PSP-2003, PROFILE=1, 3v3 fight): frame 45-47 ms; game update 3; fl_clay_draw 17; func_003F0500__game packet build 13.5; fe_sync_handle 4.5 + func_003EA660 tex select 4.2; GE wait 0.2 (CPU-bound). After P83-P85, profile intro, character select and a 3v3 fight on hardware again (menus were 19-23 ms) and ticket what remains.",
    "done_when": "PSP.md has the new hardware profile; fights and menus at 59.94 fps or new tickets for the rest."
-  },
-  {
-   "id": "P87",
-   "order": 35,
-   "phase": "P4",
-   "size": "M",
-   "status": "Ready",
-   "depends": [
-    "P82"
-   ],
-   "read": [
-    "port/render/r_gu.c",
-    "port/docs/PSP.md"
-   ],
-   "title": "Hardware speed: mesh textures in VRAM",
-   "description": "Hardware A/B (P83): with mesh submits off, the VU1 packet build (CPU only) also ran 3.4 ms faster, so the GE reading textures/CLUTs from main RAM seems to slow the CPU through bus contention, and each GU submit costs ~25 us. Keep the hottest mesh textures and CLUTs in free VRAM (~0.9 MB past the frame and depth buffers), PSP-side, and measure.",
-   "done_when": "Hardware fight profile before/after over PSPLink; screenshot bit-identical; kept if the frame gets faster."
   }
  ]
 };

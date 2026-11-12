@@ -50,10 +50,14 @@ enum { RM_FLAT = 0, RM_RGBA = 1, RM_INDEX = 2, RM_RAW4 = 3 };
 typedef struct GuVtx { float u, v; uint32_t c; float x, y, z; } GuVtx;   /* TEXTURE_32BITF|COLOR_8888|VERTEX_32BITF */
 #define GU_VTYPE (GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_2D)
 
-typedef struct TexRec { uint8_t *pix; int w, h, fmt, used, pw, ph, warned; unsigned gen; } TexRec;
+typedef struct TexRec { uint8_t *pix; int w, h, fmt, used, pw, ph, warned; unsigned gen; uint32_t voff; } TexRec;   /* voff: VRAM copy (P87), 0 none */
 typedef struct PalRec { uint32_t *clut; int ncolors, used; unsigned gen; } PalRec;
 
 static unsigned int __attribute__((aligned(16))) list[LIST_BYTES / 4];
+static uint32_t vr_base, vr_next, vr_top;   /* P87 mesh texture VRAM cache (offsets) */
+static void vr_frame(void);
+static int vr_full, vr_off = -1, vr_pause;   /* pause: frames left without the cache (system dialog up) */
+static int is_index(int fmt);
 static uint32_t __attribute__((aligned(16))) black_clut[256];
 
 static struct {
@@ -178,6 +182,8 @@ int r_init(void)
         sceGuDrawBuffer(present_c16 ? GU_PSM_5650 : GU_PSM_8888, (void *)0, BUF_W);
         sceGuDispBuffer(SCR_W, SCR_H, (void *)(BUF_W * SCR_H * bpp), BUF_W);
         sceGuDepthBuffer((void *)(BUF_W * SCR_H * bpp * 2), BUF_W);
+        vr_base = vr_next = (uint32_t)(BUF_W * SCR_H * bpp * 2 + BUF_W * SCR_H * 2);
+        vr_top = 2u << 20;
         if (present_c16) {
             static const ScePspIMatrix4 dith = { { -4, 0, -3, 1 }, { 2, -2, 3, -1 }, { -3, 1, -4, 0 }, { 3, -1, 2, -2 } };
             sceGuSetDither(&dith);
@@ -224,9 +230,13 @@ void r_gu_present(void)
         r_flush();
     }
     list_close();
+    vr_frame();
     {   /* the system Save / Load dialog draws over the finished frame (P59) */
         extern int psp_saveui_frame(void);
-        if (psp_saveui_frame()) R.drawn_since_swap = 1;
+        if (psp_saveui_frame()) {
+            R.drawn_since_swap = 1;
+            vr_full = 1; vr_pause = 2;   /* the dialog may use VRAM: drop the texture cache (P87) */
+        }
     }
     if (R.drawn_since_swap) {
         sceGuSwapBuffers();
@@ -276,9 +286,46 @@ static void canvas_bind(void)
 static int texture_filter_linear(void) { return (R.state_ad0 & 0x10000) ? 0 : 1; }
 
 /* texture + CLUT + filter/wrap for one record (the mesh path) */
+/* P87: mesh textures are copied into the VRAM past the frame and depth
+ * buffers on first use, so the GE does not read them over the main bus.
+ * When it is full, textures stay in RAM until the next frame boundary
+ * (GE idle), where the cache starts again. tex_copy drops a stale copy. */
+static int vr_stat[3];   /* PROFILE: hits, copies, bytes copied */
+
+static const void *tex_addr(TexRec *t)
+{
+    unsigned bytes = (unsigned)t->pw * (unsigned)t->ph * (is_index(t->fmt) ? 1u : 4u);
+    if (vr_off < 0) { const char *e = getenv("MVC2_NO_VRAM_TEX"); vr_off = e != NULL; }
+    if (vr_off || vr_pause || !vr_base || !t->pix) return t->pix;
+    if (t->voff) { vr_stat[0]++; return (const void *)(uintptr_t)(0x04000000u + t->voff); }
+    bytes = (bytes + 63u) & ~63u;
+    if (vr_next + bytes > vr_top) { vr_full = 1; return t->pix; }
+    memcpy((void *)(uintptr_t)(0x44000000u + vr_next), t->pix, bytes);   /* uncached VRAM */
+    t->voff = vr_next;
+    vr_next += bytes;
+    vr_stat[1]++; vr_stat[2] += (int)bytes;
+    return (const void *)(uintptr_t)(0x04000000u + t->voff);
+}
+
+/* frame boundary, list closed and run: start the cache again if it filled */
+static void vr_frame(void)
+{
+    if (psp_prof_on()) {
+        psp_prof_add(22, "  mesh tex VRAM hits (count)", 1000ull * (unsigned)vr_stat[0]);
+        psp_prof_add(23, "  mesh tex VRAM copies (count)", 1000ull * (unsigned)vr_stat[1]);
+        psp_prof_add(24, "  mesh tex VRAM KB copied (count)", 1000ull * (unsigned)(vr_stat[2] >> 10));
+    }
+    vr_stat[0] = vr_stat[1] = vr_stat[2] = 0;
+    if (vr_pause) vr_pause--;
+    if (!vr_full) return;
+    for (int i = 0; i < MAX_TEX; i++) R.tex[i].voff = 0;
+    vr_next = vr_base;
+    vr_full = 0;
+}
+
 static void tex_bind(const TexRec *t, int pal)
 {
-    GuTexImageArgs ti = { 0, t->pw, t->ph, t->pw, t->pix };
+    GuTexImageArgs ti = { 0, t->pw, t->ph, t->pw, tex_addr((TexRec *)t) };
     ((TexRec *)t)->gen = R.list_gen;
     sceGuEnable(GU_TEXTURE_2D);
     if (t->fmt == FL_TEX_IDX4 || t->fmt == FL_TEX_IDX8) {
@@ -311,7 +358,7 @@ void r_flush(void)
         sceGuDisable(GU_TEXTURE_2D);
     } else {
         TexRec *t = R.cur_mode == RM_RAW4 ? &R.tex[0] : &R.tex[R.cur_tex];
-        GuTexImageArgs ti = { 0, t->pw, t->ph, t->pw, t->pix };
+        GuTexImageArgs ti = { 0, t->pw, t->ph, t->pw, R.cur_mode == RM_RAW4 ? t->pix : tex_addr(t) };
         t->gen = R.list_gen;
         sceGuEnable(GU_TEXTURE_2D);
         if (R.cur_mode == RM_RAW4) {
@@ -787,6 +834,7 @@ static void tex_copy(TexRec *t, int x, int y, int w, int h, const void *pixels)
     int bpp = is_index(t->fmt) ? 1 : 4;
     const uint8_t *s = (const uint8_t *)pixels;
     if (!pixels || !t->pix) return;
+    t->voff = 0;   /* the VRAM copy (P87) is stale */
     for (int r = 0; r < h && y + r < t->ph; r++)
         memcpy(t->pix + ((size_t)(y + r) * t->pw + x) * bpp, s + (size_t)r * w * bpp,
                (size_t)(x + w <= t->pw ? w : t->pw - x) * bpp);
