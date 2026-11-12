@@ -703,5 +703,52 @@ window.BACKLOG_ARCHIVE = [
   "description": "Hide the controller left/right side choice (gControllerLeftPrompt_004B3590 / gControllerRightPrompt_004B35B0) in button config so only P1 shows. PSP-side only.",
   "done_when": "Options show P1 settings only; saves still load.",
   "note": "The P2 surface was the whole PLAYER2 column, not the L/R prompts: psp_1p.c wraps func_00149690 (skip P2 column) and func_00149020 (P2 cursor bar placed off-screen for the call). PPSSPP button config shows PLAYER1 only; boot autoload still loads the save."
+ },
+ {
+  "id": "P65",
+  "order": 21,
+  "phase": "P5",
+  "size": "S",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/docs/BOOT_NOTES.md"
+  ],
+  "title": "Add port credits to top of staff roll",
+  "description": "Prepend entries to the ending credits, PSP-side only: 'MVC2 PSP Port By' / 'Mr Brainz & LLM Vibes', then 'Original MVC2 Decomp' / 'G. Guthrie'. Match the existing heading/name styles.",
+  "done_when": "New entries roll first in the ending credits, styled like the originals; rest of the roll unchanged (screenshots).",
+  "note": "psp_credits.c wraps func_0016B440 to roll a copy of the credits script with GAME PSP PORT BY / MR BRAINZ & LLM VIBES and ORIGINAL GAME DECOMP / G. GUTHRIE after STAFF CREDIT, and adds 9 x 0x20 frames to the timer so the original margin before FIN is kept. Font has no digits, hence GAME for MVC2; seen in PPSSPP arcade runs."
+ },
+ {
+  "id": "P66",
+  "order": 22,
+  "phase": "P5",
+  "size": "S",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/tools/convert/textures.py"
+  ],
+  "title": "Dump ISO textures to PNG for XMB art selection",
+  "description": "PSP-side wrapper over upstream textures.py that dumps every AFS02 texture entry from the user's ISO into gitignored private/dump/, so ICON0 (144x80) and PIC1 (480x272) sources can be picked. Build-time extraction into the EBOOT is a follow-up ticket.",
+  "done_when": "One command fills private/dump/ with PNGs plus an index; nothing under private/ is committed.",
+  "note": "port/psp/tools/dump_textures.py wraps upstream textures.py over all AFS02 entries; run gave 202 texture entries, 702 PNGs + index.txt in gitignored private/dump/."
+ },
+ {
+  "id": "P67",
+  "order": 23,
+  "phase": "P5",
+  "size": "S",
+  "status": "Done",
+  "depends": [
+   "P66"
+  ],
+  "read": [
+   "port/psp/CMakeLists.txt"
+  ],
+  "title": "XMB icon and background from the user's ISO",
+  "description": "Build ICON0 (also the savedata icon) and PIC1 at EBOOT build time from three AFS02 entries (DM13TEX, DM0ATEX, GAL39) per the agreed crop/scale/composite recipe; fall back to the generated icon when no ISO.",
+  "done_when": "EBOOT.PBP carries ICON0 144x80 and PIC1 480x272 built from the ISO; no art in git.",
+  "note": "port/psp/tools/xmb_art.py (pure Python, <1 s) writes ICON0.PNG, PIC1.PNG, psp_icon0.h; CMake MVC2_ISO var, pack-pbp gets both. Verified PBP section sizes and images by eye; not yet viewed in the PPSSPP game list."
  }
 ];

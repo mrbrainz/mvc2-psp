@@ -52,9 +52,24 @@ target_include_directories(psp_host_core SYSTEM PRIVATE ${PSP_INC})
 target_compile_options(psp_host_core PRIVATE -fno-common -Wall -Wno-unused-function)
 set_source_files_properties(${HOST_CORE_SRCS} PROPERTIES OBJECT_DEPENDS "${GLUE}/mvc2_host_protos.h")
 # ---- psp-gcc (EABI32) objects: module entry, sceGu shims; the rest is o32 --
-add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/psp_icon0.h"
-  COMMAND python3 "${PSP_DIR}/tools/make_icon0.py" "${CMAKE_BINARY_DIR}/psp_icon0.h"
-  DEPENDS "${PSP_DIR}/tools/make_icon0.py")
+# XMB art (ICON0 + PIC1) from the user's ISO; without one, a plain generated icon.
+set(MVC2_ISO "${MVC2_ROOT}/Marvel vs. Capcom 2 - New Age of Heroes (USA).iso" CACHE FILEPATH "Retail ISO for XMB art")
+if(EXISTS "${MVC2_ISO}")
+  add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/psp_icon0.h" "${CMAKE_BINARY_DIR}/ICON0.PNG" "${CMAKE_BINARY_DIR}/PIC1.PNG"
+    COMMAND python3 "${PSP_DIR}/tools/xmb_art.py" "${MVC2_ISO}" "${CMAKE_BINARY_DIR}"
+    DEPENDS "${PSP_DIR}/tools/xmb_art.py" "${MVC2_ISO}" VERBATIM)
+  set(PBP_ICON0 ICON0.PNG)
+  set(PBP_PIC1 PIC1.PNG)
+  set(PBP_ART "${CMAKE_BINARY_DIR}/ICON0.PNG" "${CMAKE_BINARY_DIR}/PIC1.PNG")
+else()
+  message(STATUS "MVC2_ISO not found: EBOOT without XMB art")
+  add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/psp_icon0.h"
+    COMMAND python3 "${PSP_DIR}/tools/make_icon0.py" "${CMAKE_BINARY_DIR}/psp_icon0.h"
+    DEPENDS "${PSP_DIR}/tools/make_icon0.py")
+  set(PBP_ICON0 NULL)
+  set(PBP_PIC1 NULL)
+  set(PBP_ART "")
+endif()
 set(PSP_EABI_OBJS "")
 foreach(f psp_entry psp_gu_shim psp_audio_hw psp_disc_io psp_save)
   set(_o "${CMAKE_BINARY_DIR}/${f}.o")
@@ -84,7 +99,7 @@ set(PSP_RENDER_SRCS "${MVC2_ROOT}/port/render/r_gu.c" "${MVC2_ROOT}/port/render/
 set_source_files_properties("${MVC2_ROOT}/port/host/fe/fe_render.c" "${MVC2_ROOT}/port/host/fe/fe_char.c" "${MVC2_ROOT}/port/host/fe/fe_mesh.c" PROPERTIES OBJECT_DEPENDS "${GLUE}/mvc2_host_protos.h")
 add_executable(mvc2_psp ${STUB_SRCS} ${GLUE_SRCS} ${PSP_EABI_OBJS} ${PSP_RENDER_SRCS} ${PSP_AUDIO_SRCS}
   "${PSP_DIR}/host/psp_main.c" "${PSP_DIR}/host/libc_o32.c" "${PSP_DIR}/host/psp_fpu.c"
-  "${PSP_DIR}/host/psp_prof.c" "${PSP_DIR}/host/psp_fe_sync.c" "${PSP_DIR}/host/psp_disc.c" "${PSP_DIR}/host/psp_script.c" "${PSP_DIR}/host/psp_ee_hwm.c" "${PSP_DIR}/host/psp_ee_heap.c" "${PSP_DIR}/host/psp_saveui.c" "${PSP_DIR}/host/psp_1p.c" "${MVC2_ROOT}/port/platform/platform_psp.c"
+  "${PSP_DIR}/host/psp_prof.c" "${PSP_DIR}/host/psp_fe_sync.c" "${PSP_DIR}/host/psp_disc.c" "${PSP_DIR}/host/psp_script.c" "${PSP_DIR}/host/psp_ee_hwm.c" "${PSP_DIR}/host/psp_ee_heap.c" "${PSP_DIR}/host/psp_saveui.c" "${PSP_DIR}/host/psp_1p.c" "${PSP_DIR}/host/psp_credits.c" "${MVC2_ROOT}/port/platform/platform_psp.c"
   $<TARGET_OBJECTS:psp_host_core>)
 target_include_directories(mvc2_psp PRIVATE "${MVC2_ROOT}/port/stubs" "${PSP_DIR}/host"
   "${MVC2_ROOT}/port/host" "${MVC2_ROOT}/port/platform" "${GLUE}")
@@ -110,7 +125,7 @@ target_link_options(mvc2_psp PRIVATE -no-pie "@${GLUE}/link_extra.rsp" -Wl,--sor
   -Wl,--wrap=vag_decode -Wl,--wrap=vag_free -Wl,--wrap=dcse_apply
   -Wl,--wrap=func_001044E0 -Wl,--wrap=host_ee_heap_base -Wl,--wrap=host_ee_heap_top
   -Wl,--wrap=func_0041DF70 -Wl,--wrap=func_0041EE80
-  -Wl,--wrap=func_00130040 -Wl,--wrap=func_0038B2E0 -Wl,--wrap=func_00128CA0 -Wl,--wrap=func_00149690 -Wl,--wrap=func_00149020)
+  -Wl,--wrap=func_00130040 -Wl,--wrap=func_0038B2E0 -Wl,--wrap=func_00128CA0 -Wl,--wrap=func_00149690 -Wl,--wrap=func_00149020 -Wl,--wrap=func_0016B440)
 # Diagnostic heap map (psp_heapmap.c): -DMVC2_PSP_HEAPMAP=ON, dumped with DRAWLOG.
 option(MVC2_PSP_HEAPMAP "track malloc blocks for [heapmap] logs" OFF)
 if(MVC2_PSP_HEAPMAP)
@@ -123,6 +138,6 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/EBOOT.PBP"
   COMMAND ${PSPDEV}/bin/psp-fixup-imports -o mvc2_psp.elf mvc2_psp
   COMMAND ${PSPDEV}/bin/psp-strip mvc2_psp.elf -o mvc2_psp.strip.elf
   COMMAND ${PSPDEV}/bin/mksfoex -d MEMSIZE=1 "MvC2 PSP" PARAM.SFO
-  COMMAND ${PSPDEV}/bin/pack-pbp EBOOT.PBP PARAM.SFO NULL NULL NULL NULL NULL mvc2_psp.strip.elf NULL
-  DEPENDS mvc2_psp WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+  COMMAND ${PSPDEV}/bin/pack-pbp EBOOT.PBP PARAM.SFO ${PBP_ICON0} NULL NULL ${PBP_PIC1} NULL mvc2_psp.strip.elf NULL
+  DEPENDS mvc2_psp ${PBP_ART} WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
 add_custom_target(mvc2_eboot ALL DEPENDS "${CMAKE_BINARY_DIR}/EBOOT.PBP")

@@ -67,7 +67,10 @@ window.BACKLOG = {
   "P61",
   "P62",
   "P63",
-  "P64"
+  "P64",
+  "P65",
+  "P66",
+  "P67"
  ],
  "activities": [
   {
@@ -120,20 +123,6 @@ window.BACKLOG = {
    "title": "Release packaging",
    "description": "EBOOT icon/title, user guide for supplying own disc data.",
    "done_when": "Installable EBOOT + PSP section in USER_GUIDE.md."
-  },
-  {
-   "id": "P65",
-   "order": 21,
-   "phase": "P5",
-   "size": "S",
-   "status": "Backlog",
-   "depends": [],
-   "read": [
-    "port/docs/BOOT_NOTES.md"
-   ],
-   "title": "Add port credits to top of staff roll",
-   "description": "Prepend entries to the ending credits, PSP-side only: 'MVC2 PSP Port By' / 'Mr Brainz & LLM Vibes', then 'Original MVC2 Decomp' / 'G. Guthrie'. Match the existing heading/name styles.",
-   "done_when": "New entries roll first in the ending credits, styled like the originals; rest of the roll unchanged (screenshots)."
   }
  ]
 };
