@@ -1,7 +1,9 @@
 /* PSP mixer inner loops (P31), linked over synth_render and rs_stream_run
  * (--wrap, port/psp/CMakeLists.txt). The Allegrex has no double FPU and the
  * 32-tap sinc costs more than a whole frame, so voices and the BGM stream are
- * interpolated with a 4-point Hermite on a 32.32 fixed-point position. The
+ * interpolated linearly on a 32.32 fixed-point position and mixed in fixed
+ * point into audio_psp.c's int32 buffer (P92: float is slow on the Allegrex).
+ * The
  * envelope is synth.c's env_step, copied. Everything else is upstream's.
  * Packed VAGs (vag_psp.c) are decoded per voice as they play. */
 #include "resample.h"
@@ -40,13 +42,9 @@ static void env_step(SyVoice *v)   /* synth.c, unchanged */
     else if (v->phase == 3 && v->level == 0) v->phase = 4;
 }
 
-static inline float herm(float xm1, float x0, float x1, float x2, float t)
-{
-    float c1 = 0.5f * (x1 - xm1);
-    float c2 = xm1 - 2.5f * x0 + 2.0f * x1 - 0.5f * x2;
-    float c3 = 0.5f * (x2 - xm1) + 1.5f * (x0 - x1);
-    return ((c3 * t + c2) * t + c1) * t + x0;
-}
+static inline float lerp(float x0, float x1, float t) { return x0 + (x1 - x0) * t; }
+
+float mix_psp_gain = 1.0f;   /* audio_psp.c: SFX bus x master */
 
 static inline float smp(const VagPcm *src, int i)   /* synth.c's, int16 scale */
 {
@@ -69,12 +67,30 @@ static inline void fx_from(double d, int32_t *i, uint32_t *f)
 static inline double fx_to(int32_t i, uint32_t f) { return i + f * (1.0 / 4294967296.0); }
 #define FX_T(f) ((float)((f) >> 8) * (1.0f / 16777216.0f))
 
-static void mix_render(Synth *s, float *out, int frames);
-void __wrap_synth_render(Synth *s, float *out, int frames) { mix_render(s, out, frames); }
+static void mix_render(Synth *s, int32_t *out, int frames);
+/* P92: audio_psp.c passes an int32 stereo buffer (int16 scale) as tsd_render's float * */
+void __wrap_synth_render(Synth *s, float *out, int frames) { mix_render(s, (int32_t *)(void *)out, frames); }
 
 static VagDec vdec[SY_VOICES];
 
-static void mix_render(Synth *s, float *out, int frames)
+/* rate field for the voice's current phase (env_step's switch) */
+static inline int env_rate(const SyVoice *v)
+{
+    uint16_t a1 = v->smpl->adsr1, a2 = v->smpl->adsr2;
+    switch (v->phase) {
+    case 0: return (a1 >> 8) & 0x7F;
+    case 1: return ((a1 >> 4) & 0xF) << 2;
+    case 2: return (a2 >> 6) & 0x7F;
+    case 3: return (a2 & 0x1F) << 2;
+    default: return 0x7F;
+    }
+}
+
+/* P92: fixed point. Integer interpolation and envelope; the envelope's rate
+ * decode runs only when its counter expires (env_step only decrements
+ * otherwise, or does nothing at rate 0x7F). Gains are Q12 (bus gain folded
+ * in), smoothed like synth.c's; v->cl/cr are kept in synth.c's units. */
+static void mix_render(Synth *s, int32_t *out, int frames)
 {
     for (int vi = 0; vi < SY_VOICES; vi++) {
         SyVoice *v = &s->v[vi];
@@ -86,50 +102,99 @@ static void mix_render(Synth *s, float *out, int frames)
         uint32_t pf, sf;
         fx_from(v->pos, &pi, &pf);
         fx_from(v->step, &si, &sf);
-        float cl = v->cl, cr = v->cr;
-        const float bg = vag_psp_gain(src);
-        const float gl = v->gl * bg, gr = v->gr * bg;
+        const float sc = vag_psp_gain(src) * mix_psp_gain * 4096.0f;
+        const int gl = (int)(v->gl * sc), gr = (int)(v->gr * sc);
+        int cl = (int)(v->cl * sc), cr = (int)(v->cr * sc);
+        const int kf = (int)(v->kill_from * 32767.0f);
+        int ph = -1, frozen = 0;
+        const int len = src->len;
         for (int o = 0; o < frames; o++) {
-            if (!src->looped && pi >= src->len) { v->active = 0; break; }
-            float env;
+            if (!src->looped && pi >= len) { v->active = 0; break; }
+            int x, t = (int)(pf >> 17);   /* Q15 */
+            int w;
+            /* run: steady level and gains, samples [pi, pi+1] already in
+             * memory; stops at the window/sample end or the envelope's step */
+            if (!v->kill && v->phase == ph && cl == gl && cr == gr && (frozen || v->counter > 1) && pi >= 0) {
+                const int16_t *b = NULL;
+                int limit = len - 2;
+                if (!z) b = src->pcm;
+                else if (pi + 1 < len && ((w = vag_psp_fast(d, z, pi)) >= 0 || (w = vag_psp_window(d, z, pi, pi + 1)) >= 0)) {
+                    b = d->buf + w - pi;   /* indexed by sample number */
+                    if (pi - w + 54 < limit) limit = pi - w + 54;
+                }
+                if (b && pi <= limit) {
+                    int oend = frames;
+                    if (!frozen && v->counter - 1 < frames - o) oend = o + v->counter - 1;
+                    const int ml = (v->level * cl) >> 15, mr = (v->level * cr) >> 15;
+                    int o0 = o;
+                    do {
+                        int x0 = b[pi], u = (int)(pf >> 17);
+                        int y = x0 + (((b[pi + 1] - x0) * u) >> 15);
+                        out[2 * o] += (y * ml) >> 12;
+                        out[2 * o + 1] += (y * mr) >> 12;
+                        uint32_t nf = pf + sf;
+                        pi += si + (nf < pf);
+                        pf = nf;
+                        o++;
+                    } while (o < oend && pi <= limit);
+                    if (!frozen) v->counter -= o - o0;
+                    o--;
+                    if (src->looped && pi >= len) {
+                        int body = len - src->loop_start;
+                        pi = src->loop_start + (pi - src->loop_start) % body;
+                    }
+                    continue;
+                }
+            }
+            if (z) {
+                if (pi >= 0 && pi + 1 < len && ((w = vag_psp_fast(d, z, pi)) >= 0 || (w = vag_psp_window(d, z, pi, pi + 1)) >= 0)) {
+                    const int16_t *p = d->buf + w;
+                    x = p[0] + (((p[1] - p[0]) * t) >> 15);
+                } else {
+                    int x0 = vag_psp_get(d, src, z, pi), x1 = vag_psp_get(d, src, z, pi + 1);
+                    x = x0 + (((x1 - x0) * t) >> 15);
+                }
+            } else if (pi >= 0 && pi + 1 < len) {
+                const int16_t *p = src->pcm + pi;
+                x = p[0] + (((p[1] - p[0]) * t) >> 15);
+            } else {
+                int x0 = (int)smp(src, pi), x1 = (int)smp(src, pi + 1);
+                x = x0 + (((x1 - x0) * t) >> 15);
+            }
+            int lev;
             if (v->kill) {
-                env = v->kill_from * (v->kill / (float)DECLICK);
+                lev = (kf * v->kill) >> 6;   /* kill_from * kill / DECLICK */
                 if (--v->kill == 0) { v->active = 0; break; }
             } else {
-                env_step(v);
-                if (v->phase == 4) { v->active = 0; break; }
-                env = v->level * (1.0f / 32767.0f);
-            }
-            float x, t = FX_T(pf);
-            int w;
-            if (z) {
-                if (pi >= 1 && pi + 2 < src->len && ((w = vag_psp_fast(d, z, pi - 1)) >= 0 || (w = vag_psp_window(d, z, pi - 1, pi + 2)) >= 0)) {
-                    const int16_t *p = d->buf + w;
-                    x = herm(p[0], p[1], p[2], p[3], t);
-                } else {
-                    x = herm(vag_psp_get(d, src, z, pi - 1), vag_psp_get(d, src, z, pi),
-                             vag_psp_get(d, src, z, pi + 1), vag_psp_get(d, src, z, pi + 2), t);
+                if (v->phase != ph) {
+                    ph = v->phase;
+                    if (ph == 4) { v->active = 0; break; }
+                    frozen = env_rate(v) == 0x7F;
                 }
-            } else if (pi >= 1 && pi + 2 < src->len) {
-                const int16_t *p = src->pcm + pi;
-                x = herm(p[-1], p[0], p[1], p[2], t);
-            } else {
-                x = herm(smp(src, pi - 1), smp(src, pi), smp(src, pi + 1), smp(src, pi + 2), t);
+                if (!frozen) {
+                    if (v->counter > 1) v->counter--;
+                    else {
+                        env_step(v);
+                        if (v->phase == 4) { v->active = 0; break; }
+                    }
+                }
+                lev = v->level;
             }
-            cl += (gl - cl) * (1.0f / 64);
-            cr += (gr - cr) * (1.0f / 64);
-            float a = x * (1.0f / 32768.0f) * env;
-            out[2 * o] += a * cl;
-            out[2 * o + 1] += a * cr;
+            if (cl != gl) { int e = gl - cl; cl = e > -64 && e < 64 ? gl : cl + (e >> 6); }
+            if (cr != gr) { int e = gr - cr; cr = e > -64 && e < 64 ? gr : cr + (e >> 6); }
+            int a = (x * lev) >> 15;
+            out[2 * o] += (a * cl) >> 12;
+            out[2 * o + 1] += (a * cr) >> 12;
             uint32_t nf = pf + sf;
             pi += si + (nf < pf);
             pf = nf;
-            if (src->looped && pi >= src->len) {
-                int body = src->len - src->loop_start;
+            if (src->looped && pi >= len) {
+                int body = len - src->loop_start;
                 pi = src->loop_start + (pi - src->loop_start) % body;
             }
         }
-        v->cl = cl; v->cr = cr;
+        v->cl = cl == gl || sc <= 0.0f ? v->gl : cl / sc;
+        v->cr = cr == gr || sc <= 0.0f ? v->gr : cr / sc;
         v->pos = fx_to(pi, pf);
     }
 }
@@ -184,16 +249,16 @@ void __wrap_rs_stream_run(RsStream *s, RsPull pull, void *ctx, float *out, int f
     fx_from(s->pos, &pi, &pf);
     fx_from(s->step, &si, &sf);
     for (int o = 0; o < frames; o++) {
-        if (pi + 3 >= s->fill) refill(s, pull, ctx, &pi, pi + 4);
+        if (pi + 1 >= s->fill) refill(s, pull, ctx, &pi, pi + 2);
         const float *L = s->buf[0], *R = s->buf[1];
         float t = FX_T(pf);
         int n = s->fill;
-        if (pi >= 1 && pi + 2 < n) {
-            out[2 * o] = herm(L[pi - 1], L[pi], L[pi + 1], L[pi + 2], t);
-            out[2 * o + 1] = herm(R[pi - 1], R[pi], R[pi + 1], R[pi + 2], t);
+        if (pi >= 0 && pi + 1 < n) {
+            out[2 * o] = lerp(L[pi], L[pi + 1], t);
+            out[2 * o + 1] = lerp(R[pi], R[pi + 1], t);
         } else {
-            out[2 * o] = herm(at(L, pi - 1, n), at(L, pi, n), at(L, pi + 1, n), at(L, pi + 2, n), t);
-            out[2 * o + 1] = herm(at(R, pi - 1, n), at(R, pi, n), at(R, pi + 1, n), at(R, pi + 2, n), t);
+            out[2 * o] = lerp(at(L, pi, n), at(L, pi + 1, n), t);
+            out[2 * o + 1] = lerp(at(R, pi, n), at(R, pi + 1, n), t);
         }
         uint32_t nf = pf + sf;
         pi += si + (nf < pf);

@@ -26,7 +26,10 @@ typedef struct Bgm {
     int carry;             /* ADX_LOOP_CARRY: PS2-exact loop history */
     int vol;               /* 0.1 dB */
     float gain, cur;       /* target / smoothed linear gain */
-    RsStream rs;           /* ADX rate -> 48 kHz (passthrough at 48 kHz) */
+    int16_t q[2 * 1024];   /* P92: decoded stereo frames, ADX rate */
+    int qfill;
+    int32_t qpi, qsi;      /* 32.32 read position / step, ADX rate -> 48 kHz */
+    uint32_t qpf, qsf;
     uint32_t played;
 } Bgm;
 
@@ -41,8 +44,6 @@ static struct {
     RsStream out_rs;       /* 48 kHz -> device rate */
     AudioAfsLoader loader;
     void *loader_ctx;
-    float *scratch;
-    int scratch_n;
 
 /* ---- locking ---- */
     int dev;
@@ -88,43 +89,65 @@ int audio_dcse_refresh(void)
 /* ---- BGM ---- */
 static float db10_to_gain(int v) { return v <= -999 ? 0.0f : powf(10.0f, v / 200.0f); }
 
-static int bgm_pull(void *ctx, float *dst, int max)
+/* decoded frames up to need_upto (or the buffer's end), keeping q[qpi..] */
+static void bgm_refill(Bgm *b, int need_upto)
 {
-    Bgm *b = (Bgm *)ctx;
-    int16_t tmp[2 * 512];
-    if (max > 512) max = 512;
-    int n = adx_decode(&b->adx, tmp, max);
-    int ch = b->adx.h.channels;
-    for (int i = 0; i < n; i++) {
-        float l = tmp[i * ch] * (1.0f / 32768.0f);
-        float r = ch > 1 ? tmp[i * ch + 1] * (1.0f / 32768.0f) : l;
-        dst[2 * i] = l;
-        dst[2 * i + 1] = r;
+    if (b->qpi > 0) {
+        int n = b->qfill - b->qpi;
+        if (n > 0) memmove(b->q, b->q + 2 * b->qpi, sizeof(int16_t) * 2 * n);
+        else n = 0;
+        b->qfill = n;
+        need_upto -= b->qpi;
+        b->qpi = 0;
     }
-    if (n < max && b->adx.ended && b->stat == PADX_PLAYING) b->stat = PADX_PLAYEND;
-    return n;
+    int16_t tmp[2 * 512];
+    while (b->qfill < need_upto && b->qfill < 1024) {
+        int want = 1024 - b->qfill;
+        if (want > 512) want = 512;
+        int n = adx_decode(&b->adx, tmp, want);
+        if (n < want && b->adx.ended && b->stat == PADX_PLAYING) b->stat = PADX_PLAYEND;
+        int16_t *d = b->q + 2 * b->qfill;
+        if (n <= 0) {   /* resample.c's refill: run on over silence */
+            memset(d, 0, sizeof(int16_t) * 2 * want);
+            n = want;
+        } else if (b->adx.h.channels > 1) {
+            int ch = b->adx.h.channels;
+            for (int i = 0; i < n; i++) { d[2 * i] = tmp[i * ch]; d[2 * i + 1] = tmp[i * ch + 1]; }
+        } else {
+            for (int i = 0; i < n; i++) d[2 * i] = d[2 * i + 1] = tmp[i];
+        }
+        b->qfill += n;
+    }
 }
 
-static void bgm_render(Bgm *b, float *out, int frames)
+/* P92: fixed point, overwrites out (int16 scale); g = music bus x master */
+static void bgm_render(Bgm *b, int32_t *out, int frames, float g)
 {
-    if (b->stat != PADX_PLAYING || b->paused) return;
-    if (A.scratch_n < frames) {
-        free(A.scratch);
-        A.scratch = (float *)malloc(sizeof(float) * 2 * frames);
-        A.scratch_n = frames;
-    }
-    float *s = A.scratch;
-    rs_stream_run(&b->rs, bgm_pull, b, s, frames);
-    for (int i = 0; i < frames; i++) {
-        if (b->cur != b->gain) {
-            b->cur += (b->gain - b->cur) * (1.0f / 256);
-            if (fabsf(b->cur - b->gain) < 1e-5f) b->cur = b->gain;
+    if (b->stat != PADX_PLAYING || b->paused) { memset(out, 0, sizeof(int32_t) * 2 * frames); return; }
+    int32_t pi = b->qpi;
+    uint32_t pf = b->qpf;
+    float cur = b->cur, tgt = b->gain;
+    int gi = (int)(cur * g * 4096.0f);   /* Q12 */
+    for (int o = 0; o < frames; o++) {
+        if (pi + 1 >= b->qfill) { b->qpi = pi; bgm_refill(b, pi + 2); pi = b->qpi; }
+        if (cur != tgt) {
+            cur += (tgt - cur) * (1.0f / 256);
+            if (fabsf(cur - tgt) < 1e-5f) cur = tgt;
+            gi = (int)(cur * g * 4096.0f);
         }
-        float l = s[2 * i], r = s[2 * i + 1];
-        if (b->mono) l = r = 0.5f * (l + r);
-        out[2 * i] += l * b->cur * A.music * PSP_MUSIC_TRIM;
-        out[2 * i + 1] += r * b->cur * A.music * PSP_MUSIC_TRIM;
+        const int16_t *p = b->q + 2 * pi;
+        int t = (int)(pf >> 17);
+        int l = p[0] + (((p[2] - p[0]) * t) >> 15), r = p[1] + (((p[3] - p[1]) * t) >> 15);
+        if (b->mono) l = r = (l + r) >> 1;
+        out[2 * o] = (l * gi) >> 12;
+        out[2 * o + 1] = (r * gi) >> 12;
+        uint32_t nf = pf + b->qsf;
+        pi += b->qsi + (nf < pf);
+        pf = nf;
     }
+    b->qpi = pi;
+    b->qpf = pf;
+    b->cur = cur;
     b->played += (uint32_t)frames;
 }
 
@@ -146,7 +169,9 @@ int padx_start_mem(const uint8_t *adx, size_t size, int take)
         b->stat = PADX_ERROR;
     } else {
         b->adx.loop_mode = b->carry ? ADX_LOOP_CARRY : ADX_LOOP_RESTORE;
-        rs_stream_init(&b->rs, b->adx.h.rate, AUDIO_RATE);
+        uint64_t st = ((uint64_t)b->adx.h.rate << 32) / AUDIO_RATE;
+        b->qsi = (int32_t)(st >> 32); b->qsf = (uint32_t)st;
+        b->qpi = 0; b->qpf = 0; b->qfill = 0;
         b->stat = PADX_PLAYING; /* host decode is instant: DECINFO/PREP are skipped */
         b->played = 0;
     }
@@ -193,16 +218,25 @@ void padx_set_output_mono(int mono) { audio_lock(); A.bgm.mono = mono != 0; audi
 uint32_t padx_get_time(void) { return A.bgm.played; }
 
 /* ---- mixing ---- */
-void audio_render(float *out, int frames)
+extern float mix_psp_gain;   /* mix_psp.c: folded into the voice gains */
+
+/* P92: fixed point, int16 scale, unclamped. BGM (music x master) first, then
+ * voices (sfx x master; mix_psp.c reads the buffer as int32 through tsd). */
+static void render_raw(int32_t *out, int frames)
 {
-    memset(out, 0, sizeof(float) * 2 * frames);
-    tsd_render(&A.tsd, out, frames);
-    for (int i = 0; i < 2 * frames; i++) out[i] *= A.sfx * PSP_SFX_TRIM;
-    bgm_render(&A.bgm, out, frames);
-    float g = A.master;
+    bgm_render(&A.bgm, out, frames, A.music * PSP_MUSIC_TRIM * A.master);
+    mix_psp_gain = A.sfx * PSP_SFX_TRIM * A.master;
+    tsd_render(&A.tsd, (float *)(void *)out, frames);
+}
+
+void audio_render(float *out, int frames)   /* in place: int32 -> float */
+{
+    int32_t *o = (int32_t *)(void *)out;
+    render_raw(o, frames);
     for (int i = 0; i < 2 * frames; i++) {
-        float x = out[i] * g;
-        out[i] = x > 1.0f ? 1.0f : x < -1.0f ? -1.0f : x;
+        int x = o[i];
+        x = x > 32767 ? 32767 : x < -32767 ? -32767 : x;
+        out[i] = (float)x * (1.0f / 32767.0f);
     }
 }
 
@@ -226,14 +260,17 @@ void audio_set_loader(AudioAfsLoader fn, void *ctx) { A.loader = fn; A.loader_ct
 /* sceAudio thread: 48 kHz stereo floats -> s16, silence while suspended */
 static void device_fill(short *dst, int frames)
 {
-    static float buf[PSP_AUDIO_FRAMES * 2];
+    static int32_t buf[PSP_AUDIO_FRAMES * 2];
     static int fpu;
     if (!fpu) { __asm__ volatile("ctc1 %0, $31" ::"r"(0x01000000)); fpu = 1; } /* FS: denormals to zero */
     if (A.user_paused) { memset(dst, 0, sizeof(short) * 2 * frames); return; }
     audio_lock();
-    audio_render(buf, frames);
+    render_raw(buf, frames);
     audio_unlock();
-    for (int i = 0; i < 2 * frames; i++) dst[i] = (short)(buf[i] * 32767.0f);
+    for (int i = 0; i < 2 * frames; i++) {   /* clamp + s16 in one pass */
+        int x = buf[i];
+        dst[i] = (short)(x > 32767 ? 32767 : x < -32767 ? -32767 : x);
+    }
 }
 
 int audio_init(int open_device)
@@ -265,7 +302,5 @@ void audio_shutdown(void)
     tsdc_set_sink(NULL);
     tsd_shutdown(&A.tsd);
     bgm_free(&A.bgm);
-    free(A.scratch);
-    A.scratch = NULL;
     A.init = 0;
 }

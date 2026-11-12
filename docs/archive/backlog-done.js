@@ -854,6 +854,26 @@ window.BACKLOG_ARCHIVE = [
   "note": "PRX link, -mno-check-zero-division (112 teq traps), FPU traps cleared, SLUS_204.86 packed, log closed per line; no mvc2_memcard folder (mkdir wrap), boot text only in debug. Found with mvc2exc.prx watchdog and crumb trampolines; plays on a PSP-2003, but fights run at 17-21 fps (P41)."
  },
  {
+  "id": "P92",
+  "order": 31,
+  "phase": "P4",
+  "size": "S",
+  "status": "Done",
+  "depends": [
+   "P86"
+  ],
+  "read": [
+   "port/audio/mix_psp.c",
+   "port/audio/audio_psp.c",
+   "port/psp/host/psp_audio_hw.c",
+   "port/docs/PSP.md"
+  ],
+  "title": "Hardware speed: audio mixer CPU load (mix_psp, audio_psp)",
+  "description": "mvc2_audio runs at priority 0x12 (preempting the main thread at 0x20) and executes ~2 fills per logic frame (46.9 fills/s) with worst-case fills of 4.9-9.3 ms in fights (mvc2_psp.log), stealing wall-clock time directly from rendering. Currently mix_psp.c evaluates a 4-point float cubic Hermite polynomial (herm, 11 float ops + 4 fetches) per sample at 48 kHz for every active SPU2 voice and stereo ADX BGM, and audio_render + device_fill walk the 2048-float stereo buffer in 4 separate passes (SFX trim, BGM scratch mix, master gain + clamp, float-to-s16). Replace cubic Hermite with linear/fixed-point interpolation, fold gains into voice/BGM mix so BGM accumulates in place without A.scratch, and fuse clamp + s16 conversion into one pass.",
+  "done_when": "Audio fill mean and worst-case time on PSP-2003 reduced by >= 50% (recorded in PSP.md with a PROFILE slot on device_fill); no audible regressions.",
+  "note": "Fixed-point mixer: linear interpolation, gains folded into voice/BGM mixes, own int BGM resampler, voices mixed in tight runs per decoded block, integer clamp to s16. PSP-2003 fight6: mean fill 2.96 -> 1.53 ms, worst 19.1 -> 5.9 ms (PSP.md); listened on hardware, no regressions."
+ },
+ {
   "id": "P85",
   "order": 33,
   "phase": "P4",

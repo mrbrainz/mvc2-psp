@@ -239,7 +239,13 @@ PSP-2003, 333 MHz, PROFILE=1 over PSPLink, after P83-P85/P87 (ms a frame):
 
 Mesh draw = fl_clay_draw + packet build + the PSP mesh wrapper (fe_mesh.c
 func_003F0500, ~4 ms in fights). Game update is 1-2 ms; the GE waits
-~0.2 ms: the frame is CPU-bound in rendering. Next: P88-P91.
+~0.2 ms: the frame is CPU-bound in rendering. Next: P88-P94.
+
+Audio (P92, fight6 script, `[audio]` fill line, ms per 1024-frame fill):
+mean 2.96 -> 1.53 over the run, heaviest section 6.1 -> 2.1, worst 19.1 ->
+5.9. The mixer is fixed point with linear interpolation (mix_psp.c,
+audio_psp.c): on the Allegrex, cost follows instructions per sample (~2.5
+CPI), not float vs int, so steady voices mix in tight runs per decoded block.
 
 ## Real hardware (P82)
 

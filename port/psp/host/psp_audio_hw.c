@@ -12,7 +12,7 @@ static PspAudioFill fill_fn;
 static SceUID thid = -1, sema = -1;
 static volatile int running;
 static short buf[2][PSP_AUDIO_FRAMES * 2] __attribute__((aligned(64)));
-static volatile unsigned fills, underruns, worst_us;
+static volatile unsigned fills, underruns, worst_us, total_us;
 
 static unsigned now_us(void) { return (unsigned)sceKernelGetSystemTimeLow(); }
 
@@ -33,6 +33,7 @@ static int audio_thread(SceSize args, void *argp)
         fill_fn(buf[cur], PSP_AUDIO_FRAMES);
         dt = now_us() - t0;
         if (dt > worst_us) worst_us = dt;
+        total_us += dt;
         fills++;
         if (due && (int)(now_us() - due) > 0) underruns++;
         sceAudioSRCOutputBlocking(PSP_AUDIO_VOLUME_MAX, buf[cur]);
@@ -74,8 +75,9 @@ void psp_audio_hw_unlock(void) { sceKernelSignalSema(sema, 1); }
 
 void psp_audio_hw_report(void)
 {
-    char b[96];
-    sniprintf(b, sizeof b, "[audio] fills %u, worst fill %u us, underruns %u total\n", fills, worst_us, underruns);
+    char b[128];
+    sniprintf(b, sizeof b, "[audio] fills %u, mean fill %u us, worst fill %u us, underruns %u total\n", fills,
+              fills ? total_us / fills : 0, worst_us, underruns);
     psp_log(b);
-    fills = worst_us = 0;
+    fills = worst_us = total_us = 0;
 }
