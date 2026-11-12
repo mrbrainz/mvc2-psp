@@ -100,6 +100,12 @@ the PSP build reads nothing else, as a minimal ISO in DATA.PSAR):
 Release base EBOOT (no XMB art, no game data; never reads the ISO): configure
 with `-DMVC2_RELEASE=ON`, then `python3 port/psp/tools/check_release_eboot.py EBOOT.PBP`.
 
+Player-facing builder (Go, no runtime; `port/psp/builder/`): packs the release
+base EBOOT with the disc's XMB art and game data, checking the AFS SHA-1s.
+
+    cd port/psp/builder && go build -o mvc2-eboot-builder .
+    ./mvc2-eboot-builder [-base EBOOT.PBP] [-o OUTDIR] [-q] [game.iso]   # -> OUTDIR/MVC2/EBOOT.PBP
+
 A packed EBOOT holds copyrighted data: never commit or share it. `[disc]` lines log
 KB read and throughput every 5 s.
 

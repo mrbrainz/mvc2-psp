@@ -72,7 +72,8 @@ window.BACKLOG = {
   "P66",
   "P67",
   "P68",
-  "P69"
+  "P69",
+  "P70"
  ],
  "activities": [
   {
@@ -128,23 +129,6 @@ window.BACKLOG = {
    "title": "Release packaging",
    "description": "EBOOT icon/title, user guide for supplying own disc data.",
    "done_when": "Installable EBOOT + PSP section in USER_GUIDE.md."
-  },
-  {
-   "id": "P70",
-   "order": 18,
-   "phase": "P5",
-   "size": "M",
-   "status": "Backlog",
-   "depends": [
-    "P69"
-   ],
-   "read": [
-    "port/psp/pack/psp_pack.py",
-    "port/psp/tools/xmb_art.py"
-   ],
-   "title": "EBOOT builder tool (Go, single binary)",
-   "description": "Port psp_pack.py and xmb_art.py to one Go program: check the ISO against known hashes (clear errors for wrong region, .bin/.cue, .cso), generate ICON0/PIC1, pack AFS00-03 as DATA.PSAR, write MVC2/EBOOT.PBP. Drag-and-drop or file picker on Windows/macOS, CLI argument on Linux.",
-   "done_when": "Output is byte-identical to the Python tools for the same ISO and base EBOOT; the packed EBOOT boots in PPSSPP with no ISO present."
   },
   {
    "id": "P71",

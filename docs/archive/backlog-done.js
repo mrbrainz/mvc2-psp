@@ -703,6 +703,24 @@ window.BACKLOG_ARCHIVE = [
   "note": "psp_1p.c --wrap func_00128CA0 returns 1, so the main-menu cursor skips VS MODE (the game's own one-pad skip; PSP flags read both pads present). Verified in PPSSPP: ARCADE -> right x2 -> OPTION, left -> TRAINING. The VS bubble is still drawn, as on a one-pad PS2."
  },
  {
+  "id": "P70",
+  "order": 18,
+  "phase": "P5",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P69"
+  ],
+  "read": [
+   "port/psp/pack/psp_pack.py",
+   "port/psp/tools/xmb_art.py"
+  ],
+  "title": "EBOOT builder tool (Go, single binary)",
+  "description": "Port psp_pack.py and xmb_art.py to one Go program: check the ISO against known hashes (clear errors for wrong region, .bin/.cue, .cso), generate ICON0/PIC1, pack AFS00-03 as DATA.PSAR, write MVC2/EBOOT.PBP. Drag-and-drop or file picker on Windows/macOS, CLI argument on Linux.",
+  "done_when": "Output is byte-identical to the Python tools for the same ISO and base EBOOT; the packed EBOOT boots in PPSSPP with no ISO present.",
+  "note": "port/psp/builder: Go port of psp_pack.py + xmb_art.py with AFS SHA-1 check, clear errors for CSO/ZSO, CHD, raw BIN, archives and non-USA discs, file picker/dialogs when started without an ISO. Against the Python pipeline: DATA.PSAR byte-identical, ICON0/PIC1 pixel-identical (PNG compression differs); packed EBOOT boots in PPSSPP with no ISO. Bad-hash path and Windows/Linux pickers untested (cross-compile only)."
+ },
+ {
   "id": "P63",
   "order": 19,
   "phase": "P5",
