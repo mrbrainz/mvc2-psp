@@ -97,6 +97,9 @@ the PSP build reads nothing else, as a minimal ISO in DATA.PSAR):
     # project root, build/port-psp/EBOOT.PBP -> build/port-psp/packed/EBOOT.PBP
     # (any OS: python3 port/psp/pack/psp_pack.py <iso> <in> <out>)
 
+Release base EBOOT (no XMB art, no game data; never reads the ISO): configure
+with `-DMVC2_RELEASE=ON`, then `python3 port/psp/tools/check_release_eboot.py EBOOT.PBP`.
+
 A packed EBOOT holds copyrighted data: never commit or share it. `[disc]` lines log
 KB read and throughput every 5 s.
 

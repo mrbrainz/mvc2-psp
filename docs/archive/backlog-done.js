@@ -668,6 +668,23 @@ window.BACKLOG_ARCHIVE = [
   "note": "No change needed: P2 never connects (plat_pad_connected slot 0 only); a full scripted arcade run in PPSSPP reached the credits (frame 28091) with no challenger or P2 cursor."
  },
  {
+  "id": "P69",
+  "order": 17,
+  "phase": "P5",
+  "size": "XS",
+  "status": "Done",
+  "depends": [
+   "P68"
+  ],
+  "read": [
+   "port/psp/CMakeLists.txt"
+  ],
+  "title": "Release build never reads the ISO",
+  "description": "A release CMake option ignores MVC2_ISO, so the base EBOOT has no XMB art or game data; MVC2_ISO stays for local dev builds only.",
+  "done_when": "Release-config EBOOT.PBP has empty ICON0, PIC1 and DATA.PSAR sections, checked by a script.",
+  "note": "CMake option MVC2_RELEASE skips MVC2_ISO entirely; tools/check_release_eboot.py fails on any ICON0/ICON1/PIC0/PIC1/SND0/DATA.PSAR content. Release build passes, ISO dev build is rejected (ICON0, PIC1)."
+ },
+ {
   "id": "P62",
   "order": 18,
   "phase": "P5",

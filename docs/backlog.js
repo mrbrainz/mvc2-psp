@@ -71,7 +71,8 @@ window.BACKLOG = {
   "P65",
   "P66",
   "P67",
-  "P68"
+  "P68",
+  "P69"
  ],
  "activities": [
   {
@@ -127,22 +128,6 @@ window.BACKLOG = {
    "title": "Release packaging",
    "description": "EBOOT icon/title, user guide for supplying own disc data.",
    "done_when": "Installable EBOOT + PSP section in USER_GUIDE.md."
-  },
-  {
-   "id": "P69",
-   "order": 17,
-   "phase": "P5",
-   "size": "XS",
-   "status": "Backlog",
-   "depends": [
-    "P68"
-   ],
-   "read": [
-    "port/psp/CMakeLists.txt"
-   ],
-   "title": "Release build never reads the ISO",
-   "description": "A release CMake option ignores MVC2_ISO, so the base EBOOT has no XMB art or game data; MVC2_ISO stays for local dev builds only.",
-   "done_when": "Release-config EBOOT.PBP has empty ICON0, PIC1 and DATA.PSAR sections, checked by a script."
   },
   {
    "id": "P70",

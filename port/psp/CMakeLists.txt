@@ -58,7 +58,8 @@ set(MVC2_ISO "${MVC2_ROOT}/Marvel vs. Capcom 2 - New Age of Heroes (USA).iso" CA
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/psp_icon0.h"
   COMMAND python3 "${PSP_DIR}/tools/make_icon0.py" "${CMAKE_BINARY_DIR}/psp_icon0.h"
   DEPENDS "${PSP_DIR}/tools/make_icon0.py")
-if(EXISTS "${MVC2_ISO}")
+option(MVC2_RELEASE "release base EBOOT: never read MVC2_ISO (no XMB art, no game data)" OFF)
+if(NOT MVC2_RELEASE AND EXISTS "${MVC2_ISO}")
   add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/xmb/ICON0.PNG" "${CMAKE_BINARY_DIR}/xmb/PIC1.PNG"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/xmb"
     COMMAND python3 "${PSP_DIR}/tools/xmb_art.py" "${MVC2_ISO}" "${CMAKE_BINARY_DIR}/xmb"
@@ -67,7 +68,7 @@ if(EXISTS "${MVC2_ISO}")
   set(PBP_PIC1 xmb/PIC1.PNG)
   set(PBP_ART "${CMAKE_BINARY_DIR}/xmb/ICON0.PNG" "${CMAKE_BINARY_DIR}/xmb/PIC1.PNG")
 else()
-  message(STATUS "MVC2_ISO not found: EBOOT without XMB art")
+  message(STATUS "EBOOT without XMB art (MVC2_RELEASE or no MVC2_ISO)")
   set(PBP_ICON0 NULL)
   set(PBP_PIC1 NULL)
   set(PBP_ART "")
