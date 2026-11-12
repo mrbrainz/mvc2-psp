@@ -631,5 +631,77 @@ window.BACKLOG_ARCHIVE = [
   "description": "List every screen where a second player appears: title/mode menu entries (Versus etc.), 2P 'press start'/join prompts in attract, title, character select and fights, challenger join-in, P2 side of options/button config. Record each with the game state and the code/flag that drives it.",
   "done_when": "Audit list in this ticket's note, each item mapped to a follow-up ticket.",
   "note": "P2 pad already reports disconnected (plat_pad_connected: slot 0 only, platform_psp.c:109). Empty-side HUD prompt residual_00172B70 (src/nq121_b.c) draws PRESS START BUTTON / NO CHALLENGER via func_003D7350 -> P63; button config left/right controller prompts -> P64; mode-menu Versus is texture-drawn in front-end mode 1 (w20b0_e.c), sub-state untraced -> P62."
+ },
+ {
+  "id": "P61",
+  "order": 17,
+  "phase": "P5",
+  "size": "XS",
+  "status": "Done",
+  "depends": [
+   "P60"
+  ],
+  "read": [
+   "port/docs/PLATFORM_SURFACE.md",
+   "port/docs/BOOT_NOTES.md"
+  ],
+  "title": "Block 2P join-in",
+  "description": "P2 input is already dead on PSP (plat_pad_connected returns 0 for slot 1). Confirm in a full run that no challenger or P2 cursor can appear; add a mask only if one does.",
+  "done_when": "Pressing any input never spawns P2 in a full arcade run in PPSSPP.",
+  "note": "No change needed: P2 never connects (plat_pad_connected slot 0 only); a full scripted arcade run in PPSSPP reached the credits (frame 28091) with no challenger or P2 cursor."
+ },
+ {
+  "id": "P62",
+  "order": 18,
+  "phase": "P5",
+  "size": "S",
+  "status": "Done",
+  "depends": [
+   "P60"
+  ],
+  "read": [
+   "port/docs/PLATFORM_SURFACE.md",
+   "port/docs/BOOT_NOTES.md"
+  ],
+  "title": "Hide 2P modes from menus",
+  "description": "Trace which front-end sub-state (mode 1, src/w20b0_e.c, D_00477170) draws the mode menu, then skip Versus/2P entries from the PSP side. Entries are textures, not strings.",
+  "done_when": "Menus show only single-player modes; navigation wraps cleanly.",
+  "note": "psp_1p.c --wrap func_00128CA0 returns 1, so the main-menu cursor skips VS MODE (the game's own one-pad skip; PSP flags read both pads present). Verified in PPSSPP: ARCADE -> right x2 -> OPTION, left -> TRAINING. The VS bubble is still drawn, as on a one-pad PS2."
+ },
+ {
+  "id": "P63",
+  "order": 19,
+  "phase": "P5",
+  "size": "S",
+  "status": "Done",
+  "depends": [
+   "P61"
+  ],
+  "read": [
+   "port/docs/PLATFORM_SURFACE.md",
+   "port/docs/BOOT_NOTES.md"
+  ],
+  "title": "Hide 2P prompts and HUD text",
+  "description": "Skip func_003D7350 draws of gPressStartLabel_004B5640 / gNoChallengerLabel_004B5630 (from residual_00172B70) via a PSP-side --wrap, like the existing func_003D7400 wrap. Check attract/title for other 2P prompts.",
+  "done_when": "No 2P prompt visible anywhere in a full arcade run (screenshots).",
+  "note": "psp_1p_init blanks the PRESS START BUTTON / NO CHALLENGER debug labels before boot; fight HUD in PPSSPP shows no P2-side prompt."
+ },
+ {
+  "id": "P64",
+  "order": 20,
+  "phase": "P5",
+  "size": "XS",
+  "status": "Done",
+  "depends": [
+   "P60"
+  ],
+  "read": [
+   "port/docs/PLATFORM_SURFACE.md",
+   "port/docs/BOOT_NOTES.md"
+  ],
+  "title": "Drop P2 controls from options",
+  "description": "Hide the controller left/right side choice (gControllerLeftPrompt_004B3590 / gControllerRightPrompt_004B35B0) in button config so only P1 shows. PSP-side only.",
+  "done_when": "Options show P1 settings only; saves still load.",
+  "note": "The P2 surface was the whole PLAYER2 column, not the L/R prompts: psp_1p.c wraps func_00149690 (skip P2 column) and func_00149020 (P2 cursor bar placed off-screen for the call). PPSSPP button config shows PLAYER1 only; boot autoload still loads the save."
  }
 ];

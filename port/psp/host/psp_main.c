@@ -30,6 +30,7 @@ void r_gu_present(void);
 void fe_render_init(void);     /* port/host/fe/fe_render.c */
 int psp_audio_init(void);      /* psp_audio.c */
 int psp_disc_open(void);       /* psp_disc.c */
+void psp_1p_init(void);                  /* psp_1p.c */
 int psp_script_load(const char *path);   /* psp_script.c (testing) */
 void psp_script_step(uint16_t *b0, uint16_t *b1);
 static int script_on;
@@ -262,6 +263,7 @@ int mvc2_psp_run(int frames)
     if (r_init() == 0)
         fe_render_init();   /* the game's render-library calls draw with sceGu */
     psp_audio_init();
+    psp_1p_init();
     mvc2_boot(1);
     psp_mem_report("after boot");
     if (frames > 0) {
