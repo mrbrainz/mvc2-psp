@@ -12,7 +12,7 @@ env:
   PSPDEV_TAG: v20261101   # tested toolchain (port/docs/PSP.md)
 jobs:
   release:
-    runs-on: macos-14     # arm64, like the tested local setup (macos-15 arm64 often has no capacity)
+    runs-on: macos-latest  # arm64, like the tested local setup
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
