@@ -633,6 +633,23 @@ window.BACKLOG_ARCHIVE = [
   "note": "P2 pad already reports disconnected (plat_pad_connected: slot 0 only, platform_psp.c:109). Empty-side HUD prompt residual_00172B70 (src/nq121_b.c) draws PRESS START BUTTON / NO CHALLENGER via func_003D7350 -> P63; button config left/right controller prompts -> P64; mode-menu Versus is texture-drawn in front-end mode 1 (w20b0_e.c), sub-state untraced -> P62."
  },
  {
+  "id": "P68",
+  "order": 16,
+  "phase": "P5",
+  "size": "S",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/psp/host/psp_save.c",
+   "port/psp/CMakeLists.txt",
+   "port/psp/tools/make_icon0.py"
+  ],
+  "title": "Savedata icon from the EBOOT at runtime",
+  "description": "psp_save reads ICON0 from its own EBOOT.PBP (path from argv[0]) instead of the compiled-in psp_icon0.h; falls back to the make_icon0 plain icon when the section is absent.",
+  "done_when": "In PPSSPP the save icon is the real art from a packed EBOOT and the plain icon from an unpacked one; no ISO-derived data is compiled into the ELF.",
+  "note": "psp_save reads the savedata icon from its own EBOOT ICON0 (argv[0]), falling back to the plain make_icon0 icon; the ELF never holds ISO art (xmb_art output moved to build/xmb/). Verified in PPSSPP via a test autosave: packed EBOOT saves the disc-art icon, a corrupted ICON0 saves the plain one."
+ },
+ {
   "id": "P61",
   "order": 17,
   "phase": "P5",

@@ -8,7 +8,8 @@
 #include <psputility.h>
 #include <string.h>
 #include "psp_save.h"
-#include "psp_icon0.h"   /* generated: port/psp/tools/make_icon0.py */
+#include "psp_entry.h"
+#include "psp_icon0.h"   /* generated: port/psp/tools/make_icon0.py (fallback) */
 
 #define GAME "MVC2PSP00"
 #define SAVE "0000"
@@ -17,6 +18,33 @@
 
 static char names[2][20] = { SAVE, "" };
 static SceUtilitySavedataParam dlg;
+
+/* Savedata icon: the EBOOT's own ICON0 section (XMB art the builder adds from
+ * the player's disc), else the plain built-in icon. */
+static unsigned char icon_buf[64 * 1024];
+static const void *icon = psp_icon0;
+static unsigned icon_size = sizeof psp_icon0;
+
+static void load_icon(void)
+{
+    static int tried;
+    unsigned h[10];
+    SceUID fd;
+    if (tried || !psp_eboot_path) return;
+    tried = 1;
+    fd = sceIoOpen(psp_eboot_path, PSP_O_RDONLY, 0);
+    if (fd < 0) return;
+    if (sceIoRead(fd, h, sizeof h) == sizeof h && h[0] == 0x50425000) {
+        unsigned n = h[4] - h[3];               /* ICON0 runs to ICON1 */
+        if (n >= 8 && n <= sizeof icon_buf && sceIoLseek32(fd, h[3], PSP_SEEK_SET) == (int)h[3]
+            && sceIoRead(fd, icon_buf, n) == (int)n
+            && !memcmp(icon_buf, "\x89PNG", 4)) {
+            icon = icon_buf;
+            icon_size = n;
+        }
+    }
+    sceIoClose(fd);
+}
 static int dlg_on, dlg_closing;
 
 static void setup(SceUtilitySavedataParam *p, int mode)
@@ -39,9 +67,10 @@ static void setup(SceUtilitySavedataParam *p, int mode)
     strcpy(p->sfoParam.savedataTitle, "Game data");
     strcpy(p->sfoParam.detail, "Options, records and unlocks.");
     p->sfoParam.parentalLevel = 1;
-    p->icon0FileData.buf = (void *)psp_icon0;
-    p->icon0FileData.bufSize = sizeof psp_icon0;
-    p->icon0FileData.size = sizeof psp_icon0;
+    load_icon();
+    p->icon0FileData.buf = (void *)icon;
+    p->icon0FileData.bufSize = icon_size;
+    p->icon0FileData.size = icon_size;
 }
 
 static int run(SceUtilitySavedataParam *p)

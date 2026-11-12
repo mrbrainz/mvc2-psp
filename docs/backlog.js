@@ -70,7 +70,8 @@ window.BACKLOG = {
   "P64",
   "P65",
   "P66",
-  "P67"
+  "P67",
+  "P68"
  ],
  "activities": [
   {
@@ -126,22 +127,6 @@ window.BACKLOG = {
    "title": "Release packaging",
    "description": "EBOOT icon/title, user guide for supplying own disc data.",
    "done_when": "Installable EBOOT + PSP section in USER_GUIDE.md."
-  },
-  {
-   "id": "P68",
-   "order": 16,
-   "phase": "P5",
-   "size": "S",
-   "status": "Backlog",
-   "depends": [],
-   "read": [
-    "port/psp/host/psp_save.c",
-    "port/psp/CMakeLists.txt",
-    "port/psp/tools/make_icon0.py"
-   ],
-   "title": "Savedata icon from the EBOOT at runtime",
-   "description": "psp_save reads ICON0 from its own EBOOT.PBP (path from argv[0]) instead of the compiled-in psp_icon0.h; falls back to the make_icon0 plain icon when the section is absent.",
-   "done_when": "In PPSSPP the save icon is the real art from a packed EBOOT and the plain icon from an unpacked one; no ISO-derived data is compiled into the ELF."
   },
   {
    "id": "P69",

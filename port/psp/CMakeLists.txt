@@ -52,20 +52,22 @@ target_include_directories(psp_host_core SYSTEM PRIVATE ${PSP_INC})
 target_compile_options(psp_host_core PRIVATE -fno-common -Wall -Wno-unused-function)
 set_source_files_properties(${HOST_CORE_SRCS} PROPERTIES OBJECT_DEPENDS "${GLUE}/mvc2_host_protos.h")
 # ---- psp-gcc (EABI32) objects: module entry, sceGu shims; the rest is o32 --
-# XMB art (ICON0 + PIC1) from the user's ISO; without one, a plain generated icon.
+# XMB art (ICON0 + PIC1) from the user's ISO, dev builds only; the ELF never
+# holds ISO art (the savedata icon is read from the EBOOT's ICON0 at runtime).
 set(MVC2_ISO "${MVC2_ROOT}/Marvel vs. Capcom 2 - New Age of Heroes (USA).iso" CACHE FILEPATH "Retail ISO for XMB art")
+add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/psp_icon0.h"
+  COMMAND python3 "${PSP_DIR}/tools/make_icon0.py" "${CMAKE_BINARY_DIR}/psp_icon0.h"
+  DEPENDS "${PSP_DIR}/tools/make_icon0.py")
 if(EXISTS "${MVC2_ISO}")
-  add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/psp_icon0.h" "${CMAKE_BINARY_DIR}/ICON0.PNG" "${CMAKE_BINARY_DIR}/PIC1.PNG"
-    COMMAND python3 "${PSP_DIR}/tools/xmb_art.py" "${MVC2_ISO}" "${CMAKE_BINARY_DIR}"
+  add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/xmb/ICON0.PNG" "${CMAKE_BINARY_DIR}/xmb/PIC1.PNG"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/xmb"
+    COMMAND python3 "${PSP_DIR}/tools/xmb_art.py" "${MVC2_ISO}" "${CMAKE_BINARY_DIR}/xmb"
     DEPENDS "${PSP_DIR}/tools/xmb_art.py" "${MVC2_ISO}" VERBATIM)
-  set(PBP_ICON0 ICON0.PNG)
-  set(PBP_PIC1 PIC1.PNG)
-  set(PBP_ART "${CMAKE_BINARY_DIR}/ICON0.PNG" "${CMAKE_BINARY_DIR}/PIC1.PNG")
+  set(PBP_ICON0 xmb/ICON0.PNG)
+  set(PBP_PIC1 xmb/PIC1.PNG)
+  set(PBP_ART "${CMAKE_BINARY_DIR}/xmb/ICON0.PNG" "${CMAKE_BINARY_DIR}/xmb/PIC1.PNG")
 else()
   message(STATUS "MVC2_ISO not found: EBOOT without XMB art")
-  add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/psp_icon0.h"
-    COMMAND python3 "${PSP_DIR}/tools/make_icon0.py" "${CMAKE_BINARY_DIR}/psp_icon0.h"
-    DEPENDS "${PSP_DIR}/tools/make_icon0.py")
   set(PBP_ICON0 NULL)
   set(PBP_PIC1 NULL)
   set(PBP_ART "")
