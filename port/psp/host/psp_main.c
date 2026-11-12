@@ -260,8 +260,11 @@ int mvc2_psp_run(int frames)
     if (psp_disc_open() != 0)
         psp_log("[host] file loads will fail\n");
     settings_load();
-    if (r_init() == 0)
+    if (r_init() == 0) {
+        extern int psp_log_screen;
+        psp_log_screen = 0;   /* the log stays in mvc2_psp.log only */
         fe_render_init();   /* the game's render-library calls draw with sceGu */
+    }
     psp_audio_init();
     psp_1p_init();
     mvc2_boot(1);

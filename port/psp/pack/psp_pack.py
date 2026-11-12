@@ -2,7 +2,8 @@
 """Put the game data from the player's own MvC2 PS2 disc image into the PSP
 EBOOT.PBP, as its DATA.PSAR section.
 
-Only /PS2/AFS00-03.AFS are kept (the PSP build reads nothing else), written
+Only /SLUS_204.86 (the EE data the port fills from the executable) and
+/PS2/AFS00-03.AFS are kept (the PSP build reads nothing else), written
 as a minimal ISO9660 image so the port's disc reader is unchanged. The result
 holds copyrighted data: it is for the player's own use, never for git.
 
@@ -14,7 +15,7 @@ import struct
 import sys
 
 SECTOR = 2048
-KEEP = ["AFS00.AFS", "AFS01.AFS", "AFS02.AFS", "AFS03.AFS"]
+KEEP = ["/SLUS_204.86", "/PS2/AFS00.AFS", "/PS2/AFS01.AFS", "/PS2/AFS02.AFS", "/PS2/AFS03.AFS"]
 
 
 def die(msg):
@@ -77,7 +78,7 @@ def dirrec(lba, size, name, is_dir):
 
 
 def mini_iso(files):
-    """files: [(name, size, reader)] under /PS2. Yields the image in chunks."""
+    """files: [(path, size, reader)], path "/NAME" or "/PS2/NAME". Yields the image in chunks."""
     root_lba, ps2_lba, first = 18, 19, 20
     lbas, lba = [], first
     for _, size, _ in files:
@@ -86,9 +87,13 @@ def mini_iso(files):
     total = lba
     root = dirrec(root_lba, SECTOR, b"\0", True) + dirrec(root_lba, SECTOR, b"\1", True) + dirrec(ps2_lba, SECTOR, "PS2", True)
     ps2 = dirrec(ps2_lba, SECTOR, b"\0", True) + dirrec(root_lba, SECTOR, b"\1", True)
-    for (name, size, _), l in zip(files, lbas):
-        ps2 += dirrec(l, size, name + ";1", False)
-    if len(ps2) > SECTOR:
+    for (path, size, _), l in zip(files, lbas):
+        rec = dirrec(l, size, path.rsplit("/", 1)[1] + ";1", False)
+        if path.startswith("/PS2/"):
+            ps2 += rec
+        else:
+            root += rec
+    if len(ps2) > SECTOR or len(root) > SECTOR:
         die("directory too large")
     pvd = bytearray(SECTOR)
     pvd[0:8] = b"\x01CD001\x01\x00"
@@ -148,12 +153,11 @@ def main():
         if "/SLUS_204.86" not in found:
             die(iso_path + " is not Marvel vs. Capcom 2 for PS2 (SLUS-20486)")
         files = []
-        for name in KEEP:
-            key = "/PS2/" + name
+        for key in KEEP:
             if key not in found:
                 die(iso_path + ": no " + key)
             lba, size = found[key]
-            files.append((name, size, lba))
+            files.append((key, size, lba))
         total = 0
         with open(pbp_out, "wb") as out:
             out.write(pbp)

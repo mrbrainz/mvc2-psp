@@ -837,5 +837,20 @@ window.BACKLOG_ARCHIVE = [
   "description": "Started from a file manager the Linux builder showed nothing (dropped ISO printed to an invisible stdout; no zenity meant a hidden prompt), and ARM64 Linux had no build.",
   "done_when": "Double-click and dropped-ISO launches show progress and errors; a linux-arm64 package ships.",
   "note": "Without a terminal (TCGETS check) the builder reopens itself in x-terminal-emulator/xfce4-terminal/gnome-terminal/konsole/xterm and waits for Enter, else reports via zenity; the prompted path keeps spaces; package.sh adds linux-arm64. Checked in an arm64 Alpine container (relaunch args, relaunched run, no-picker error, spaced path); not yet in a real desktop."
+ },
+ {
+  "id": "P82",
+  "order": 30,
+  "phase": "P4",
+  "size": "M",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/docs/PSP.md"
+  ],
+  "title": "Boot on real hardware (PSP-2003, ARK-4)",
+  "description": "Packed EBOOTs ran in PPSSPP but failed on hardware: 800200D9 at load, then a freeze in early boot.",
+  "done_when": "A packed EBOOT boots and plays on a PSP-2000+ with ARK-4.",
+  "note": "PRX link, -mno-check-zero-division (112 teq traps), FPU traps cleared, SLUS_204.86 packed, log closed per line; no mvc2_memcard folder (mkdir wrap), boot text only in debug. Found with mvc2exc.prx watchdog and crumb trampolines; plays on a PSP-2003, but fights run at 17-21 fps (P41)."
  }
 ];

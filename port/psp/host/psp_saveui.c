@@ -134,3 +134,15 @@ int __wrap_func_0038B2E0(int a, int slot, int c)   /* card writer: save block */
     fprintf(stderr, "[save] autosave: %d\n", r);
     return r == 0 ? 0 : -0x10000;
 }
+
+/* mc.c (the PS2 card emulation the autosave screens still query) creates
+ * ./mvc2_memcard on sceMcInit / sceMcGetInfo.  Saves go to PSP savedata, so
+ * nothing is ever written there: report the folder made without making it
+ * (mkdir is --wrap'ed; every other path is passed through). */
+int __real_mkdir(const char *path, unsigned mode);
+int __wrap_mkdir(const char *path, unsigned mode)
+{
+    if (!strncmp(path, "mvc2_memcard", 12))
+        return 0;
+    return __real_mkdir(path, mode);
+}

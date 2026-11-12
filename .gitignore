@@ -20,3 +20,8 @@ __pycache__/
 
 # Built PSP EBOOTs (contain game data)
 /MVC2/
+
+# PSP crash-reporter module build outputs (make -C port/psp/exc)
+/port/psp/exc/*.o
+/port/psp/exc/*.elf
+/port/psp/exc/*.prx

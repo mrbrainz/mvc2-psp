@@ -192,6 +192,26 @@ never drops below 8 MB.
 `-DMVC2_PSP_HEAPMAP=ON` logs free gaps and live bytes by caller with
 `DRAWLOG=1`.
 
+## Real hardware (P82)
+
+Verified on a PSP-2003 with ARK-4. PPSSPP accepts all of these; hardware does not:
+- The game links as a relocatable PRX (`MVC2_PSP_PRX`, default ON): a static
+  ELF at 0x08804000 fails to load (800200D9).
+- `-mno-check-zero-division` (psp-clang.cmake): clang's `teq` divide guard is
+  not an Allegrex instruction (reserved-instruction exception, PSP freezes).
+- FPU exception enables are cleared (psp_fpu.c, audio thread): PSP threads
+  start with invalid/divide/overflow traps on.
+- Packed EBOOTs carry `/SLUS_204.86` (EE data filled from it); zeroed data
+  reads near address 0, which PPSSPP tolerates.
+- Under ARK-4 any CPU exception freezes the PSP (then it powers off), with no
+  error. The log closes after every line, so it ends at the real stop.
+
+Debugging on hardware: put `port/psp/exc/mvc2exc.prx` (`make -C port/psp/exc`)
+next to the EBOOT to get a 1 s watchdog of the main thread and on-screen log;
+`CRASHTEST=1` in env.txt tests the reporter. `-DMVC2_PSP_CRUMBS=ON` logs entry
+to the functions listed in `port/psp/debug/psp_crumbs.S`. `SCREENLOG=1` shows
+the boot log on screen without the module.
+
 ## Platform shell (P11)
 
 `port/platform/platform_psp.c` implements the loop and lifecycle parts of

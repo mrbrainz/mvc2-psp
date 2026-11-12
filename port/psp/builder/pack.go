@@ -12,13 +12,17 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
-var keep = []struct{ name, sha1 string }{
-	{"AFS00.AFS", "b703d7a41c47006fb109ccf81aff3cc5ad920ab1"},
-	{"AFS01.AFS", "175728f45aff10006f1c87224e6e919d9af78b95"},
-	{"AFS02.AFS", "7593be944b1a026e4b74fd54a5ee60aa6699f568"},
-	{"AFS03.AFS", "95fb23891755f9c666f8756c6c731efc081e5696"},
+// The files the PSP build reads from the disc: the executable (EE data the
+// port fills from it) and the four AFS archives.
+var keep = []struct{ path, sha1 string }{
+	{"/SLUS_204.86", "dd8558a04891b0b1472ea1d8ae2bb84947ae8937"},
+	{"/PS2/AFS00.AFS", "b703d7a41c47006fb109ccf81aff3cc5ad920ab1"},
+	{"/PS2/AFS01.AFS", "175728f45aff10006f1c87224e6e919d9af78b95"},
+	{"/PS2/AFS02.AFS", "7593be944b1a026e4b74fd54a5ee60aa6699f568"},
+	{"/PS2/AFS03.AFS", "95fb23891755f9c666f8756c6c731efc081e5696"},
 }
 
 var (
@@ -87,7 +91,7 @@ func dirrec(lba, size uint32, name []byte, dir bool) []byte {
 
 func pad(b []byte, n int) []byte { return append(b, make([]byte, n-len(b))...) }
 
-// writeMiniISO writes /PS2/AFS00-03.AFS from the disc as a minimal ISO9660
+// writeMiniISO writes the keep files from the disc as a minimal ISO9660
 // image, checking each file's SHA-1 as it goes.
 func writeMiniISO(w io.Writer, d *iso, progress func(done, total int64)) error {
 	const rootLBA, ps2LBA = 18, 19
@@ -95,9 +99,9 @@ func writeMiniISO(w io.Writer, d *iso, progress func(done, total int64)) error {
 	var lbas []uint32
 	var total int64
 	for _, k := range keep {
-		e, ok := d.files["/PS2/"+k.name]
+		e, ok := d.files[k.path]
 		if !ok {
-			return fmt.Errorf("no /PS2/%s on the disc", k.name)
+			return fmt.Errorf("no %s on the disc", k.path)
 		}
 		lbas = append(lbas, lba)
 		lba += (e.size + sector - 1) / sector
@@ -107,7 +111,12 @@ func writeMiniISO(w io.Writer, d *iso, progress func(done, total int64)) error {
 	root = append(root, dirrec(ps2LBA, sector, []byte("PS2"), true)...)
 	ps2 := append(dirrec(ps2LBA, sector, []byte{0}, true), dirrec(rootLBA, sector, []byte{1}, true)...)
 	for i, k := range keep {
-		ps2 = append(ps2, dirrec(lbas[i], d.files["/PS2/"+k.name].size, []byte(k.name+";1"), false)...)
+		rec := dirrec(lbas[i], d.files[k.path].size, []byte(k.path[strings.LastIndex(k.path, "/")+1:]+";1"), false)
+		if strings.HasPrefix(k.path, "/PS2/") {
+			ps2 = append(ps2, rec...)
+		} else {
+			root = append(root, rec...)
+		}
 	}
 	pvd := make([]byte, sector)
 	copy(pvd, "\x01CD001\x01\x00")
@@ -128,7 +137,7 @@ func writeMiniISO(w io.Writer, d *iso, progress func(done, total int64)) error {
 	var done int64
 	buf := make([]byte, 1<<20)
 	for _, k := range keep {
-		e := d.files["/PS2/"+k.name]
+		e := d.files[k.path]
 		h := sha1.New()
 		r := io.NewSectionReader(d.f, int64(e.lba)*sector, int64(e.size))
 		for {

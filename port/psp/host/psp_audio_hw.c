@@ -18,6 +18,12 @@ static unsigned now_us(void) { return (unsigned)sceKernelGetSystemTimeLow(); }
 
 static int audio_thread(SceSize args, void *argp)
 {
+    {   /* no FPU exception traps on this thread either (see psp_fpu.c) */
+        unsigned f;
+        __asm__ volatile("cfc1 %0, $31" : "=r"(f));
+        f &= ~(0x1F80u | 0x3F000u);
+        __asm__ volatile("ctc1 %0, $31" : : "r"(f));
+    }
     const unsigned period = PSP_AUDIO_FRAMES * 1000000u / 48000u;
     unsigned due = 0;   /* when the queued buffer runs out */
     int cur = 0;

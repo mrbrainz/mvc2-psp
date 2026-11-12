@@ -21,7 +21,10 @@ static void fcsr_apply(void)
 {
     unsigned fcsr;
     __asm__ volatile("cfc1 %0, $31" : "=r"(fcsr));
-    fcsr = (fcsr & ~3u) | (nearest ? 0u : 1u) | (1u << 24);
+    /* RM, FS = 1; and no FPU exceptions: PSP threads start with the
+     * invalid / divide-by-zero / overflow traps enabled (0x0e00), the EE
+     * never traps (enables 7-11 and causes 12-17 cleared) */
+    fcsr = (fcsr & ~(3u | 0x1F80u | 0x3F000u)) | (nearest ? 0u : 1u) | (1u << 24);
     __asm__ volatile("ctc1 %0, $31" : : "r"(fcsr));
 }
 

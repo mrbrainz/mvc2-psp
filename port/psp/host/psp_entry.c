@@ -6,6 +6,8 @@
 #include <psppower.h>
 #include <stdio.h>
 #include <malloc.h>
+#include <string.h>
+#include <kubridge.h>
 #include "psp_entry.h"
 
 PSP_MODULE_INFO("mvc2", 0, 1, 0);
@@ -16,11 +18,23 @@ PSP_HEAP_SIZE_KB(-1024);   /* all user memory but 1 MB (kernel free below = what
 #define MVC2_PSP_FRAMES 0   /* 0: real time until HOME -> Exit; N: headless N frames */
 #endif
 
-static FILE *logf;
+#define LOG_PATH "ms0:/PSP/GAME/mvc2/mvc2_psp.log"
+static int log_ok;
+
+/* Each line is appended and the file closed again: on a memory stick a
+ * flushed but open file keeps its old size, so a crash lost the last lines. */
+/* Log lines on the debug screen too: debug builds only (mvc2exc.prx next to
+ * the EBOOT, or SCREENLOG=1 in env.txt); cleared once the renderer owns the
+ * display either way.  The log file always gets every line. */
+int psp_log_screen;
 
 void psp_log(const char *s) {
-    pspDebugScreenPrintf("%s", s);
-    if (logf) { fputs(s, logf); fflush(logf); }
+    if (psp_log_screen)   /* the debug screen draws into the game's framebuffer */
+        pspDebugScreenPrintf("%s", s);
+    if (log_ok) {
+        SceUID fd = sceIoOpen(LOG_PATH, PSP_O_WRONLY | PSP_O_APPEND | PSP_O_CREAT, 0777);
+        if (fd >= 0) { sceIoWrite(fd, s, strlen(s)); sceIoClose(fd); }
+    }
 }
 
 /* newlib's fseeko; o32 callers reach __wrap_fseeko (libc_o32.c, --wrap) */
@@ -89,15 +103,91 @@ int psp_shot_fb(void **pix, int *stride) {
 
 const char *psp_eboot_path;   /* argv[0]: the EBOOT.PBP that was started */
 
+/* Debug builds: mvc2exc.prx next to the EBOOT (port/psp/exc) is a kernel
+ * module that shows a register dump when any thread faults; loaded through
+ * the CFW's kubridge.  The code base lets EPC/RA be matched to mvc2_psp.elf. */
+int main(int argc, char **argv);
+
+/* Debug builds (with mvc2exc.prx): a watchdog logs the main thread's state
+ * every second, so a hang shows whether it spins or waits, and on what. */
+static SceUID main_thid;
+static int watchdog(SceSize a, void *b)
+{
+    char line[200];
+    int sec = 0;
+    (void)a; (void)b;
+    for (;;) {
+        SceKernelThreadInfo ti;
+        sceKernelDelayThread(1000000);
+        sec++;
+        memset(&ti, 0, sizeof ti);
+        ti.size = sizeof ti;
+        if (sceKernelReferThreadStatus(main_thid, &ti) < 0) continue;
+        sniprintf(line, sizeof line, "[wd] %ds main: status %x wait type %x wait id %x pc? entry %p run clocks %u\n",
+                  sec, (unsigned)ti.status, (unsigned)ti.waitType, (unsigned)ti.waitId, ti.entry,
+                  (unsigned)ti.runClocks.low);
+        psp_log(line);
+    }
+    return 0;
+}
+
+static int env_has(const char *key)
+{
+    char buf[512];
+    SceUID fd = sceIoOpen("ms0:/PSP/GAME/mvc2/env.txt", PSP_O_RDONLY, 0);
+    int n;
+    if (fd < 0) return 0;
+    n = sceIoRead(fd, buf, sizeof buf - 1);
+    sceIoClose(fd);
+    if (n <= 0) return 0;
+    buf[n] = 0;
+    return strstr(buf, key) != NULL;
+}
+
+static void exc_load(void)
+{
+    char path[256], line[160];
+    const char *e = psp_eboot_path ? strrchr(psp_eboot_path, '/') : NULL;
+    SceUID m;
+    int r = -1;
+    sniprintf(line, sizeof line, "[host] code base: main %p\n", (void *)main);
+    psp_log(line);
+    if (!e || (size_t)(e - psp_eboot_path) + 16 > sizeof path) return;
+    memcpy(path, psp_eboot_path, (size_t)(e - psp_eboot_path));
+    strcpy(path + (e - psp_eboot_path), "/mvc2exc.prx");
+    m = kuKernelLoadModule(path, 0, NULL);
+    if (m >= 0) r = sceKernelStartModule(m, 0, NULL, NULL, NULL);
+    if (m >= 0 || m != (SceUID)0x80010002) {   /* not "file not found" */
+        sniprintf(line, sizeof line, "[host] mvc2exc.prx: load %08x start %08x\n", (unsigned)m, (unsigned)r);
+        psp_log(line);
+    }
+    if (m < 0) return;
+    psp_log_screen = 1;
+    main_thid = sceKernelGetThreadId();
+    {
+        SceUID t = sceKernelCreateThread("mvc2_wd", watchdog, 0x10, 0x2000, PSP_THREAD_ATTR_USER, NULL);
+        if (t >= 0) sceKernelStartThread(t, 0, NULL);
+    }
+    if (env_has("CRASHTEST=1")) {
+        psp_log("[host] CRASHTEST: writing to address 0\n");
+        *(volatile int *)0 = 1;
+    }
+}
+
 int main(int argc, char **argv) {
     psp_eboot_path = argc > 0 ? argv[0] : NULL;
     int t = sceKernelCreateThread("cb", cb_thread, 0x11, 0x1000, 0, 0);
     if (t >= 0) sceKernelStartThread(t, 0, 0);
     scePowerSetClockFrequency(333, 333, 166);   /* full speed (default 222 MHz) */
     pspDebugScreenInit();
-    logf = fopen("ms0:/PSP/GAME/mvc2/mvc2_psp.log", "w");
+    {
+        SceUID fd = sceIoOpen(LOG_PATH, PSP_O_WRONLY | PSP_O_CREAT | PSP_O_TRUNC, 0777);
+        if (fd >= 0) { sceIoClose(fd); log_ok = 1; }
+    }
+    if (env_has("SCREENLOG=1"))
+        psp_log_screen = 1;
+    exc_load();
     mvc2_psp_run(MVC2_PSP_FRAMES);
-    if (logf) fclose(logf);
     main_done = 1;
     sceKernelExitGame();
     return 0;

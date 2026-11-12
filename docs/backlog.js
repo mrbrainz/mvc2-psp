@@ -79,7 +79,8 @@ window.BACKLOG = {
   "P69",
   "P70",
   "P71",
-  "P81"
+  "P81",
+  "P82"
  ],
  "activities": [
   {

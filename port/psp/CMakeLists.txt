@@ -109,7 +109,7 @@ target_include_directories(mvc2_psp PRIVATE "${MVC2_ROOT}/port/stubs" "${PSP_DIR
 target_include_directories(mvc2_psp SYSTEM PRIVATE ${PSP_INC})
 target_compile_options(mvc2_psp PRIVATE -fno-common)
 target_link_libraries(mvc2_psp PRIVATE "-Wl,--whole-archive" psp_game_data "-Wl,--no-whole-archive"
-  mvc2_game pspgu pspdebug pspdisplay pspge pspctrl psprtc psppower pspaudio psputility pspdmac m)
+  mvc2_game pspkubridge pspgu pspdebug pspdisplay pspge pspctrl psprtc psppower pspaudio psputility pspdmac m)
 # --sort-section=name: the .data.ee_<address> sections in EE order (R18).
 # --wrap: o32 replacements and PSP-side hooks (port/psp/host).
 target_link_options(mvc2_psp PRIVATE -no-pie "@${GLUE}/link_extra.rsp" -Wl,--sort-section=name
@@ -128,7 +128,21 @@ target_link_options(mvc2_psp PRIVATE -no-pie "@${GLUE}/link_extra.rsp" -Wl,--sor
   -Wl,--wrap=vag_decode -Wl,--wrap=vag_free -Wl,--wrap=dcse_apply
   -Wl,--wrap=func_001044E0 -Wl,--wrap=host_ee_heap_base -Wl,--wrap=host_ee_heap_top
   -Wl,--wrap=func_0041DF70 -Wl,--wrap=func_0041EE80
-  -Wl,--wrap=func_00130040 -Wl,--wrap=func_0038B2E0 -Wl,--wrap=func_00128CA0 -Wl,--wrap=func_00149690 -Wl,--wrap=func_00149020 -Wl,--wrap=func_0016B440)
+  -Wl,--wrap=func_00130040 -Wl,--wrap=func_0038B2E0 -Wl,--wrap=func_00128CA0 -Wl,--wrap=func_00149690 -Wl,--wrap=func_00149020 -Wl,--wrap=func_0016B440
+  -Wl,--wrap=mkdir)
+# Debug: log entry to the functions listed in debug/psp_crumbs.S (hardware
+# hang hunting): -DMVC2_PSP_CRUMBS=ON.
+option(MVC2_PSP_CRUMBS "log entry to the functions in debug/psp_crumbs.S" OFF)
+if(MVC2_PSP_CRUMBS)
+  set(_crumbs_s "${PSP_DIR}/debug/psp_crumbs.S")
+  set_source_files_properties("${_crumbs_s}" PROPERTIES LANGUAGE C COMPILE_OPTIONS "-xassembler-with-cpp")
+  target_sources(mvc2_psp PRIVATE "${_crumbs_s}" "${PSP_DIR}/debug/psp_crumb.c")
+  file(STRINGS "${_crumbs_s}" _crumb_lines REGEX "^    CRUMB ")
+  foreach(l IN LISTS _crumb_lines)
+    string(REGEX REPLACE "^    CRUMB ([A-Za-z0-9_]+).*" "\\1" _fn "${l}")
+    target_link_options(mvc2_psp PRIVATE "-Wl,--wrap=${_fn}")
+  endforeach()
+endif()
 # Diagnostic heap map (psp_heapmap.c): -DMVC2_PSP_HEAPMAP=ON, dumped with DRAWLOG.
 option(MVC2_PSP_HEAPMAP "track malloc blocks for [heapmap] logs" OFF)
 if(MVC2_PSP_HEAPMAP)
@@ -136,11 +150,26 @@ if(MVC2_PSP_HEAPMAP)
   target_link_options(mvc2_psp PRIVATE -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc
     -Wl,--wrap=memalign -Wl,--wrap=free)
 endif()
-# ---- EBOOT.PBP: fixup imports, strip, SFO (MEMSIZE=1: Slim memory), pack --
+# Relocatable PRX (PSPSDK BUILD_PRX=1): custom firmware on 6.xx cannot place a
+# static ELF at its fixed 0x08804000 (error 800200D9 on a PSP-2000 with ARK-4).
+option(MVC2_PSP_PRX "link the game as a relocatable PRX (needed on hardware)" ON)
+if(MVC2_PSP_PRX)
+  target_link_options(mvc2_psp PRIVATE -specs=${PSPDEV}/psp/sdk/lib/prxspecs
+    -Wl,-q,-T${PSPDEV}/psp/sdk/lib/linkfile.prx ${PSPDEV}/psp/sdk/lib/prxexports.o)
+  set(PSP_MODULE_CMDS
+    COMMAND ${PSPDEV}/bin/psp-fixup-imports -o mvc2_psp.elf mvc2_psp
+    COMMAND ${PSPDEV}/bin/psp-prxgen mvc2_psp.elf mvc2_psp.prx)
+  set(PSP_MODULE mvc2_psp.prx)
+else()
+  set(PSP_MODULE_CMDS
+    COMMAND ${PSPDEV}/bin/psp-fixup-imports -o mvc2_psp.elf mvc2_psp
+    COMMAND ${PSPDEV}/bin/psp-strip mvc2_psp.elf -o mvc2_psp.strip.elf)
+  set(PSP_MODULE mvc2_psp.strip.elf)
+endif()
+# ---- EBOOT.PBP: fixup imports, PRX/strip, SFO (MEMSIZE=1: Slim memory), pack --
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/EBOOT.PBP"
-  COMMAND ${PSPDEV}/bin/psp-fixup-imports -o mvc2_psp.elf mvc2_psp
-  COMMAND ${PSPDEV}/bin/psp-strip mvc2_psp.elf -o mvc2_psp.strip.elf
+  ${PSP_MODULE_CMDS}
   COMMAND ${PSPDEV}/bin/mksfoex -d MEMSIZE=1 "MvC2 PSP" PARAM.SFO
-  COMMAND ${PSPDEV}/bin/pack-pbp EBOOT.PBP PARAM.SFO ${PBP_ICON0} NULL NULL ${PBP_PIC1} NULL mvc2_psp.strip.elf NULL
+  COMMAND ${PSPDEV}/bin/pack-pbp EBOOT.PBP PARAM.SFO ${PBP_ICON0} NULL NULL ${PBP_PIC1} NULL ${PSP_MODULE} NULL
   DEPENDS mvc2_psp ${PBP_ART} WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
 add_custom_target(mvc2_eboot ALL DEPENDS "${CMAKE_BINARY_DIR}/EBOOT.PBP")
