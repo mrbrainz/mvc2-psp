@@ -854,6 +854,24 @@ window.BACKLOG_ARCHIVE = [
   "note": "PRX link, -mno-check-zero-division (112 teq traps), FPU traps cleared, SLUS_204.86 packed, log closed per line; no mvc2_memcard folder (mkdir wrap), boot text only in debug. Found with mvc2exc.prx watchdog and crumb trampolines; plays on a PSP-2003, but fights run at 17-21 fps (P41)."
  },
  {
+  "id": "P85",
+  "order": 33,
+  "phase": "P4",
+  "size": "S",
+  "status": "Done",
+  "depends": [
+   "P82"
+  ],
+  "read": [
+   "port/psp/host/psp_fe_sync.c",
+   "port/docs/PSP.md"
+  ],
+  "title": "Hardware speed: texture sync / select per mesh",
+  "description": "Hardware profile (PSP-2003, PROFILE=1, 3v3 fight): frame 45-47 ms; game update 3; fl_clay_draw 17; func_003F0500__game packet build 13.5; fe_sync_handle 4.5 + func_003EA660 tex select 4.2; GE wait 0.2 (CPU-bound). fe_sync_handle and func_003EA660 tex select run for every mesh: skip them when the handle/state has not changed (memo), PSP-side.",
+  "done_when": "Texture sync + select <= 2 ms/frame in a 3v3 fight on hardware; no texture regressions.",
+  "note": "Sync: exact recheck is bound by ~220 ns a sampled byte (uncached no faster), so per user choice a quarter of each texture's samples is checked a frame (descriptors, palettes, unlocks every frame); fe_sync_handle 5.8 -> ~0.2 ms + check, frame 42.5 -> 40.9 ms, fight screenshot bit-identical, MVC2_EXACT_TEX_SYNC=1 for the old path. Tex select (func_003EA660__game, 4.3 ms) is game code, left to P84. Also fixed: the GU_DIRECT list was written cached, so the GE could read stale commands (garbled frame when the memory layout moved); now written uncached."
+ },
+ {
   "id": "P87",
   "order": 35,
   "phase": "P4",

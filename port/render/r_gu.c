@@ -136,11 +136,23 @@ static int mesh_tex_ok;
 static uint32_t mesh_bd_key[8];
 static int mesh_bd_ok;
 
+/* The GE runs a GU_DIRECT list while it is still being written and fetches
+ * it from RAM, so commands and sceGuGetMemory data still in the CPU's data
+ * cache would be read stale (a frame drawn with a wrong pixel format when
+ * the memory layout moved, P85). The list is written through the uncached
+ * mirror instead; its cache lines are dropped once first. */
+static unsigned int *list_ptr(void)
+{
+    static int done;
+    if (!done) { sceKernelDcacheWritebackInvalidateRange(list, sizeof list); done = 1; }
+    return (unsigned int *)((uintptr_t)list | 0x40000000u);
+}
+
 static void list_open(void)
 {
     if (R.list_open) return;
     mesh_tex_ok = mesh_bd_ok = 0;
-    sceGuStart(GU_DIRECT, list);
+    sceGuStart(GU_DIRECT, list_ptr());
     R.list_open = 1;
     sceGuEnable(GU_SCISSOR_TEST);
     apply_scissor();
@@ -176,7 +188,7 @@ int r_init(void)
 
     /* VRAM: draw + display 8888 (512x272 each; 5650 with COLOR16), depth 16-bit */
     sceGuInit();
-    sceGuStart(GU_DIRECT, list);
+    sceGuStart(GU_DIRECT, list_ptr());
     {
         int bpp = present_c16 ? 2 : 4;
         sceGuDrawBuffer(present_c16 ? GU_PSM_5650 : GU_PSM_8888, (void *)0, BUF_W);

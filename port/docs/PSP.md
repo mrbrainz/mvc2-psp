@@ -212,6 +212,13 @@ first bind (about 600 KB; reset at a frame boundary when full, off while a
 system dialog is up): the GE reading them from RAM slowed the CPU through bus
 contention (3v3 fight: frame 45.2 -> 42.5 ms). `MVC2_NO_VRAM_TEX=1` turns it off.
 
+Texture/palette sync (P85, `psp_fe_sync.c`): descriptors, palettes and each
+texture's last byte are checked every frame, a quarter of the texture samples
+in turn; the real sync runs on any change. A texture rewritten without the
+game's unlock call can show up to 4 frames late. `MVC2_EXACT_TEX_SYNC=1`
+restores the per-frame upstream check. The display list is written through
+the uncached mirror: the GE reads a GU_DIRECT list while it is being built.
+
 ## Real hardware (P82)
 
 Verified on a PSP-2003 with ARK-4. PPSSPP accepts all of these; hardware does not:

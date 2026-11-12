@@ -81,6 +81,7 @@ window.BACKLOG = {
   "P71",
   "P81",
   "P82",
+  "P85",
   "P87"
  ],
  "activities": [
@@ -335,23 +336,6 @@ window.BACKLOG = {
    "title": "Hardware speed: skip or cache the PS2 VU1 packet build",
    "description": "Hardware profile (PSP-2003, PROFILE=1, 3v3 fight): frame 45-47 ms; game update 3; fl_clay_draw 17; func_003F0500__game packet build 13.5; fe_sync_handle 4.5 + func_003EA660 tex select 4.2; GE wait 0.2 (CPU-bound). The game builds VU1 packets (func_003F0500__game) that the renderer parses back. Cache packets of unchanged (static stage) meshes across frames, or have the PSP renderer read mesh data directly, PSP-side only (--wrap).",
    "done_when": "Packet build <= 4 ms/frame in a 3v3 fight on hardware; logic hashes unchanged over a scripted run."
-  },
-  {
-   "id": "P85",
-   "order": 33,
-   "phase": "P4",
-   "size": "S",
-   "status": "Ready",
-   "depends": [
-    "P82"
-   ],
-   "read": [
-    "port/psp/host/psp_fe_sync.c",
-    "port/docs/PSP.md"
-   ],
-   "title": "Hardware speed: texture sync / select per mesh",
-   "description": "Hardware profile (PSP-2003, PROFILE=1, 3v3 fight): frame 45-47 ms; game update 3; fl_clay_draw 17; func_003F0500__game packet build 13.5; fe_sync_handle 4.5 + func_003EA660 tex select 4.2; GE wait 0.2 (CPU-bound). fe_sync_handle and func_003EA660 tex select run for every mesh: skip them when the handle/state has not changed (memo), PSP-side.",
-   "done_when": "Texture sync + select <= 2 ms/frame in a 3v3 fight on hardware; no texture regressions."
   },
   {
    "id": "P86",

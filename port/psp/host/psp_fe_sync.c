@@ -9,6 +9,7 @@
  * game body, then fe_sync_handle per record) calls it within its own file,
  * where --wrap does not reach, so it is wrapped too, with the same steps. */
 #include <string.h>
+#include <stdint.h>
 
 extern volatile long mvc2_host_frame;
 void __real_fe_sync_handle(unsigned h);
@@ -16,11 +17,102 @@ void __real_fe_sync_handle(unsigned h);
 #define SLOTS 1024   /* direct-mapped by handle; a collision just syncs again */
 static struct { unsigned h; long frame; } seen[SLOTS];
 
+/* P85: the real sync hashes the texture and palette at a stride (fe_render.c
+ * sample_sig, ~1 KB each) and converts them when the hash moved; on hardware
+ * those strided texture reads cost ~225 us a handle (a cache miss a byte),
+ * ~6 ms a fight frame, and uncached reads are no faster. Here both
+ * descriptors, the palette samples and the texture's last byte are checked
+ * every frame, and a quarter of the texture samples in turn (all of them
+ * every 4 frames); the real sync runs when any of that changed. A texture
+ * rewritten without the game's unlock call (func_003EA070, which syncs at
+ * once) can so show up to 4 frames late; palettes and unlocks are as before. */
+extern unsigned char mvc2_ee_bss[];
+extern int func_003DD030(int);
+#define SYNC_BSS(a) (mvc2_ee_bss + ((unsigned)(a) - 0x004C2580u))
+#define CK_SLOTS 0x800
+#define PARTS 4
+static struct { unsigned h, fixed, part[PARTS]; int ok; } ck[CK_SLOTS];
+
+static unsigned fnv(unsigned x, const unsigned char *p, unsigned n)
+{
+    for (unsigned i = 0; i < n; i++) x = (x ^ p[i]) * 16777619u;
+    return x;
+}
+
+/* sample_sig's samples (fe_render.c); part >= 0: only every PARTS-th of them */
+static unsigned samples(unsigned x, const unsigned char *p, unsigned n, int part)
+{
+    unsigned i, step;
+    if (!p || !n) return x;
+    step = n > 1024 ? (n / 1024) | 1 : 1;
+    if (part < 0) {
+        for (i = 0; i < n; i += step) x = (x ^ p[i]) * 16777619u;
+        return (x ^ p[n - 1]) * 16777619u;
+    }
+    for (i = (unsigned)part * step; i < n; i += step * PARTS) x = (x ^ p[i]) * 16777619u;
+    return x;
+}
+
+static const unsigned char *tex_src(unsigned ti, unsigned *size)
+{
+    const unsigned char *e = SYNC_BSS(0x006207A0) + (ti - 1) * 64;
+    if (!*(const short *)(e + 0x2C) || !*(const int *)(e + 0x28)) return 0;
+    *size = *(const unsigned *)(e + 8);
+    return (const unsigned char *)(uintptr_t)(unsigned)func_003DD030(*(const int *)(e + 0x28));
+}
+
+/* everything but the texture's strided samples */
+static unsigned check_fixed(unsigned h)
+{
+    unsigned ti = h & 0xFFFF, pi = h >> 16, x = 2166136261u ^ h, size;
+    if (ti && ti < 0x181) {
+        const unsigned char *src;
+        x = fnv(x, SYNC_BSS(0x006207A0) + (ti - 1) * 64, 64);
+        src = tex_src(ti, &size);
+        x ^= (unsigned)(uintptr_t)src * 2654435761u;
+        if (src && size) x = (x ^ src[size - 1]) * 16777619u;
+    }
+    if (pi && pi < 0x101) {
+        const unsigned char *e = SYNC_BSS(0x0061C7A0) + (pi - 1) * 64;
+        x = fnv(x, e, 64);
+        if (*(const short *)(e + 0x2C) && *(const int *)(e + 0x28)) {
+            const unsigned char *src = (const unsigned char *)(uintptr_t)(unsigned)func_003DD030(*(const int *)(e + 0x28));
+            int n = *(const short *)(e + 0x18) * *(const short *)(e + 0x1A), cpsm = *(const int *)(e + 0x1C);
+            if (n <= 0 || n > 256) n = 16;
+            x ^= (unsigned)(uintptr_t)src * 2654435761u;
+            x = samples(x, src, (unsigned)(cpsm == 2 ? n * 2 : n * 4), -1);
+        }
+    }
+    return x;
+}
+
+static unsigned check_part(unsigned h, int part)
+{
+    unsigned ti = h & 0xFFFF, size;
+    const unsigned char *src;
+    if (!ti || ti >= 0x181 || !(src = tex_src(ti, &size))) return 0;
+    return samples(2166136261u, src, size, part);
+}
+
 void __wrap_fe_sync_handle(unsigned h)
 {
     unsigned k = (h ^ (h >> 16) * 31u) & (SLOTS - 1);
+    unsigned c = (h * 2654435761u >> 21) & (CK_SLOTS - 1), fixed, pt;
+    int part = (int)(mvc2_host_frame & (PARTS - 1));
     if (seen[k].h == h && seen[k].frame == mvc2_host_frame)
         return;
+    seen[k].h = h;
+    seen[k].frame = mvc2_host_frame;
+    {
+        static int exact = -1;   /* MVC2_EXACT_TEX_SYNC=1: every frame, as upstream */
+        if (exact < 0) { extern char *getenv(const char *); exact = getenv("MVC2_EXACT_TEX_SYNC") != 0; }
+        if (exact) { __real_fe_sync_handle(h); return; }
+    }
+    fixed = check_fixed(h);
+    if (ck[c].ok && ck[c].h == h && ck[c].fixed == fixed) {
+        pt = check_part(h, part);
+        if (ck[c].part[part] == pt) return;   /* nothing checked has changed */
+    }
     {
         extern int psp_prof_on(void);
         extern unsigned long long psp_prof_now(void);
@@ -29,8 +121,8 @@ void __wrap_fe_sync_handle(unsigned h)
         __real_fe_sync_handle(h);
         if (t) psp_prof_add(42, "      fe_sync_handle (real)", psp_prof_now() - t);
     }
-    seen[k].h = h;
-    seen[k].frame = mvc2_host_frame;
+    ck[c].h = h; ck[c].fixed = fixed; ck[c].ok = 1;
+    for (int q = 0; q < PARTS; q++) ck[c].part[q] = check_part(h, q);
 }
 
 void func_003EA660__game(int n, void *list);
@@ -138,3 +230,4 @@ int __wrap_func_00420BF0(void *writer, void *quad)
         fe_cnt[7]++;
     return r;
 }
+

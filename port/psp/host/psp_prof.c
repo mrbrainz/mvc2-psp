@@ -8,8 +8,8 @@
 #include <stdlib.h>
 
 static int on = -1, frames;
-static unsigned long long acc[48];   /* 0-9 frame stages; 10+ nested inside them (not subtracted) */
-static const char *names[48];
+static unsigned long long acc[64];   /* 0-9 frame stages; 10+ nested inside them (not subtracted) */
+static const char *names[64];
 
 static unsigned long long now(void)
 {
@@ -117,7 +117,7 @@ void __wrap_mvc2_frame(void)
     names[0] = "frame other (top hooks, small steps)";
     if (++frames < 300)
         return;
-    for (i = 0; i < 48; i++) {
+    for (i = 0; i < 64; i++) {
         if (names[i] && acc[i] / 300 >= 100)   /* >= 0.1 ms */
             fprintf(stderr, "[prof] %6.2f ms  %s\n", acc[i] / 300 / 1000.0, names[i]);
         acc[i] = 0;
@@ -131,7 +131,7 @@ int psp_prof_fine(void) { return on >= 2; }   /* PROFILE=2: per-draw splits (the
 unsigned long long psp_prof_now(void) { return now(); }
 void psp_prof_add(int slot, const char *label, unsigned long long us)
 {
-    if (on <= 0 || slot < 20 || slot >= 48) return;
+    if (on <= 0 || slot < 16 || slot >= 64) return;
     acc[slot] += us;
     names[slot] = label;
 }
