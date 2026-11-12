@@ -166,7 +166,7 @@ void psp_script_step(u16 *b0, u16 *b1)
             char path[512];
             if (!S.phase) { S.phase = 1; return; }   /* the frame after: displayed */
             S.phase = 0;
-            snprintf(path, sizeof path, "ms0:/PSP/GAME/mvc2/shots/%s.bmp", a1);
+            { extern const char *psp_game_dir(void); snprintf(path, sizeof path, "%s/shots/%s.bmp", psp_game_dir(), a1); }
             write_shot(path);
             S.pc++; continue;
         } else if (!strcmp(cmd, "quit")) {

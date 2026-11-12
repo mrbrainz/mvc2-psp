@@ -123,9 +123,19 @@ static void apply_scissor(void)
     sceGuScissor(x0, y0, x1 - x0, y1 - y0);   /* PSPSDK: x, y, width, height */
 }
 
+/* P83: the last mesh texture binding (tex_bind) still in the GE: mesh draws
+ * in a row with the same texture skip re-sending it. Anything else that can
+ * change texture state or texture/CLUT memory clears it. */
+static uint32_t mesh_tex_key[7];
+static int mesh_tex_ok;
+/* the same for blend + depth state (apply_blend_depth) */
+static uint32_t mesh_bd_key[8];
+static int mesh_bd_ok;
+
 static void list_open(void)
 {
     if (R.list_open) return;
+    mesh_tex_ok = mesh_bd_ok = 0;
     sceGuStart(GU_DIRECT, list);
     R.list_open = 1;
     sceGuEnable(GU_SCISSOR_TEST);
@@ -133,6 +143,7 @@ static void list_open(void)
 }
 
 int psp_prof_on(void);
+int psp_prof_fine(void);
 unsigned long long psp_prof_now(void);
 void psp_prof_add(int slot, const char *label, unsigned long long us);
 
@@ -249,6 +260,7 @@ static void canvas_bind(void)
     list_open();
     if (R.clear_pending) {
         uint32_t c = R.clear_color;
+        mesh_bd_ok = 0;   /* depth mask */
         sceGuScissor(0, 0, SCR_W, SCR_H);
         sceGuDepthMask(GU_FALSE);
         sceGuClearColor(0xFF000000u | (c & 0xFF) << 16 | (c & 0xFF00) | ((c >> 16) & 0xFF));
@@ -289,6 +301,7 @@ void r_flush(void)
 {
     GuVtx *v;
     if (!R.nverts || !R.inited) { R.nverts = 0; return; }
+    mesh_tex_ok = mesh_bd_ok = 0;   /* the 2D batch sets its own texture, blend and depth state */
     canvas_bind();
     if (sceGuCheckList() > LIST_BYTES - (int)sizeof R.verts - 4096) {   /* nearly full */
         list_close();
@@ -708,6 +721,7 @@ void fl_frame_end(void) { r_flush(); }
  * change those earlier draws too (P28: grey water). Run the list first. */
 static void in_use_sync(unsigned gen)
 {
+    mesh_tex_ok = 0;   /* a texture or CLUT is about to change */
     if (R.list_open && gen == R.list_gen) r_gu_sync();
 }
 
@@ -989,6 +1003,7 @@ int fl_fill_screen(int mode, uint32_t c)
     r_flush();
     if (!R.inited) return 0;
     canvas_bind();
+    mesh_bd_ok = 0;
     sceGuDepthMask(GU_FALSE);
     sceGuClearDepth(0);
     if (mode == 1) {
@@ -1017,13 +1032,22 @@ uint8_t r_gs_to_unorm(unsigned g) { return gs_to_unorm(g); }
  * sceGuGetMemory (a restart later would overwrite it) */
 void r_gu_begin(unsigned bytes)
 {
+    unsigned long long t = 0;
+    if (psp_prof_fine()) {
+        t = psp_prof_now();
+        if (R.nverts) psp_prof_add(46, "          r_gu_begin: 2D batches flushed (count)", 1000);
+        psp_prof_add(47, "          r_gu_begin: 2D verts flushed (count)", 1000ull * R.nverts);
+    }
     r_flush();
+    if (t) { psp_prof_add(44, "          r_gu_begin: r_flush", psp_prof_now() - t); t = psp_prof_now(); }
     canvas_bind();
     if (sceGuCheckList() > LIST_BYTES - (int)bytes - 65536) {
         list_close();
         list_open();
         canvas_bind();
+        if (t) psp_prof_add(41, "          r_gu_begin: list restarts (count)", 1000);
     }
+    if (t) psp_prof_add(45, "          r_gu_begin: check list", psp_prof_now() - t);
 }
 
 /* canvas NDC (640x480, as r_mesh.c's u_vp output) -> GE clip space for the
@@ -1049,20 +1073,45 @@ int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const 
                    float su, float sv, float ou, float ov)
 {
     static ScePspFMatrix4 ident = { {1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1} };
+    static unsigned ident_gen = ~0u;   /* list_gen whose GE state already has VIEW/MODEL = identity */
     ScePspFMatrix4 proj;
+    const int prof = psp_prof_fine();
+    unsigned long long t0 = prof ? psp_prof_now() : 0, t1;
     int i = (int)(tex & 0xFFFF) - 1, p = (int)(tex >> 16) - 1;
     if (!R.inited || count <= 0) return 0;
     r_flush();
     canvas_bind();
+    if (prof) { t1 = psp_prof_now(); psp_prof_add(37, "          submit: flush + canvas", t1 - t0); t0 = t1; }
     if (tex && i >= 0 && i < MAX_TEX && R.tex[i].used && R.tex[i].pw <= 512 && R.tex[i].ph <= 512) {
         TexRec *t = &R.tex[i];
         GuTexScaleArgs ts = { su * t->w / t->pw, sv * t->h / t->ph, ou * t->w / t->pw, ov * t->h / t->ph };
-        tex_bind(t, p);
+        const uint32_t *clut = (t->fmt == FL_TEX_IDX4 || t->fmt == FL_TEX_IDX8) && p >= 0 && p < MAX_PAL && R.pal[p].used
+                                   ? R.pal[p].clut : NULL;
+        uint32_t key[7] = { (uint32_t)i, (uint32_t)p, (uint32_t)(uintptr_t)t->pix, (uint32_t)t->pw << 16 | (uint32_t)t->ph,
+                            (uint32_t)t->fmt, (uint32_t)(uintptr_t)clut, R.state_ad0 & 0x30000u };
+        if (mesh_tex_ok && !memcmp(key, mesh_tex_key, sizeof key)) {
+            t->gen = R.list_gen;   /* still in use by this list (in_use_sync) */
+            if (clut) R.pal[p].gen = R.list_gen;
+        } else {
+            tex_bind(t, p);
+            memcpy(mesh_tex_key, key, sizeof key);
+            mesh_tex_ok = 1;
+        }
         gu_texscale(&ts);
     } else {
         sceGuDisable(GU_TEXTURE_2D);
+        mesh_tex_ok = 0;
     }
-    apply_blend_depth();
+    if (prof) { t1 = psp_prof_now(); psp_prof_add(38, "          submit: tex bind", t1 - t0); t0 = t1; }
+    {
+        uint32_t bk[8] = { (uint32_t)R.blend_ok, (uint32_t)R.bl_op, (uint32_t)R.bl_src, (uint32_t)R.bl_dst,
+                           (uint32_t)R.bl_srcfix, (uint32_t)R.bl_dstfix, (uint32_t)R.ztest, (uint32_t)R.zwrite };
+        if (!mesh_bd_ok || memcmp(bk, mesh_bd_key, sizeof bk)) {
+            apply_blend_depth();
+            memcpy(mesh_bd_key, bk, sizeof bk);
+            mesh_bd_ok = 1;
+        }
+    }
     memcpy(&proj, clip, sizeof proj);   /* sceGuSetMatrix copies the values into the list */
     {   /* depth zoom: z' = (z + w) * DEPTH_ZOOM - w, as depth_of.  A mesh
          * wholly nearer than the zoomed window (the ending's CAPCOM logo at
@@ -1091,13 +1140,18 @@ int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const 
      * (r_gu_mesh.c) stands in for the GS's own guard-band handling */
     sceGuDisable(GU_CLIP_PLANES);
     sceGuSetMatrix(GU_PROJECTION, &proj);
-    sceGuSetMatrix(GU_VIEW, &ident);
-    sceGuSetMatrix(GU_MODEL, &ident);
+    if (ident_gen != R.list_gen) {   /* nothing else sets VIEW/MODEL (2D draws do not transform) */
+        sceGuSetMatrix(GU_VIEW, &ident);
+        sceGuSetMatrix(GU_MODEL, &ident);
+        ident_gen = R.list_gen;
+    }
+    if (prof) { t1 = psp_prof_now(); psp_prof_add(39, "          submit: blend/depth + matrices", t1 - t0); t0 = t1; }
     {
         GuDrawArgs d = { GU_TRIANGLES, GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_INDEX_16BIT | GU_TRANSFORM_3D,
                          count, idx, verts };
         gu_draw(&d);
     }
+    if (prof) psp_prof_add(40, "          submit: draw", psp_prof_now() - t0);
     R.cur_tex = -1; R.cur_mode = -1;   /* texture state changed: the next 2D batch rebinds */
     return 1;
 }

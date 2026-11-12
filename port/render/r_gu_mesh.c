@@ -65,6 +65,8 @@ typedef struct MMesh {
     uint32_t ckey[3];        /* what gv's colours were computed for */
     int cvalid;
     long used;               /* host frame gv was last handed to the GE (+1) */
+    int bbok;                /* bb holds the cpu positions' bounding box */
+    float bb[6];             /* min xyz, max xyz */
 } MMesh;
 
 #define MAX_CLAY 0x402
@@ -259,6 +261,7 @@ static void build_mesh(MMesh *me, const Pol *p, size_t mo)
     me->nidx = (int)nidx;
     r_gu_mesh_bytes += nv * (int)(sizeof(MVtx) + sizeof(GVtx)) + (int)nidx * 2 + (me->nrange + 1) * (int)sizeof(MRange);
     me->dirty = 1;
+    me->bbok = 0;
     me->cvalid = 0;
 }
 
@@ -312,7 +315,7 @@ FlMeshVtx *fl_clay_vertices(int h, int *nv)
 
 void fl_clay_vertices_changed(int h)
 {
-    if (CLAY && h > 0 && h < MAX_CLAY) CLAY[h].dirty = 1;
+    if (CLAY && h > 0 && h < MAX_CLAY) { CLAY[h].dirty = 1; CLAY[h].bbok = 0; }
 }
 
 void fl_clay_release(int h)
@@ -325,6 +328,29 @@ void fl_clay_release(int h)
 
 /* ---------------- func_003F0500 ---------------- */
 static float gsf(uint32_t c, int sh) { return (float)((c >> sh) & 0xFF); }
+
+/* P83: exact inline stand-ins for the libm calls on the per-vertex path.
+ * ffl matches floorf for every finite value (|x| >= 2^23 is already whole);
+ * fmn matches fminf including NaN operands. */
+static inline float ffl(float x)
+{
+    if (!(x > -8388608.f && x < 8388608.f)) return floorf(x);
+    float t = (float)(int)x;
+    return t > x ? t - 1.f : t;
+}
+static inline float fmn(float a, float b) { return b < a ? b : (a == a ? a : b); }
+#define floorf ffl
+#define fminf fmn
+
+/* r_gs_to_unorm for 0..1023 (ge_color's clamp range), filled on first use */
+static uint8_t unorm_lut[1024];
+static int unorm_ok;
+static void unorm_init(void)
+{
+    for (unsigned k = 0; k < 1024; k++) unorm_lut[k] = r_gs_to_unorm(k);
+    unorm_ok = 1;
+}
+#define r_gs_to_unorm(g) unorm_lut[g]
 
 /* GS colour (0x80 = 1.0 when modulating a texture) -> GE 8888 */
 static uint32_t ge_color(const float c[4], int textured)
@@ -398,14 +424,14 @@ static void colours_lit(MMesh *me, GVtx *g, const float modv[4], float cscale)
         memcpy(&a0, r_light(0) + 0x24 + 4 * k, 4); memcpy(&a1, r_light(1) + 0x24 + 4 * k, 4); memcpy(&a2, r_light(2) + 0x24 + 4 * k, 4);
         lamb_base[k] = cscale * (a2 + (a0 + a1)) + gsf(e, 16 - 8 * k) / 255.f * cscale;
     }
+    float lcols[3][3];
+    for (int k = 0; k < 3; k++) memcpy(lcols[k], r_light(k) + 0x04, 12);
     for (int r = 0; r < me->nrange; r++) {
         const MRange *rg = &me->range[r];
         float lc[3][3], la[4];
         for (int k = 0; k < 3; k++) {
-            const uint8_t *l = r_light(k);
             for (int c = 0; c < 3; c++) {
-                float lcol;
-                memcpy(&lcol, l + 0x04 + 4 * c, 4);
+                float lcol = lcols[k][c];
                 lc[k][c] = fminf(cscale, cscale * rg->diffuse[c] * lcol);
             }
         }
@@ -474,6 +500,22 @@ static CVtx lerp_c(const CVtx *a, const CVtx *b, float t)
 static uint8_t *cl_code;
 static float *cl_xyw;
 static int cl_cap;
+
+static int bbox_corners(MMesh *me, const float cm[16], float k[8][4], float *smaxp);
+
+/* P83: no outcode can be set when every bounding-box corner is inside the
+ * near plane and the guard band with a rounding margin (convex, linear) */
+static int clip_bbox_inside(MMesh *me, const float clip[16])
+{
+    float k[8][4], smax, m;
+    if (!bbox_corners(me, clip, k, &smax)) return 0;
+    m = 1e-5f * smax * (GUARD + 1.f);
+    for (int c = 0; c < 8; c++) {
+        float gw = GUARD * k[c][3] - m;
+        if (!(k[c][3] - m >= NEAR_W) || !(fabsf(k[c][0]) < gw) || !(fabsf(k[c][1]) < gw)) return 0;
+    }
+    return 1;
+}
 
 static int clip_prepare(const float clip[16], const GVtx *g, int nverts)
 {
@@ -545,9 +587,61 @@ static int near_clip(const GVtx *g, const uint16_t *idx, int count, GVtx **ov, u
     return n;
 }
 
+/* P83: when every corner of the mesh's bounding box is inside the ADC box
+ * with w > 0 (with a margin above float rounding), every vertex is too: the
+ * box is a convex cone and the transform is linear, so the per-vertex test
+ * would mark nothing and can be skipped. */
+static int bbox_corners(MMesh *me, const float cm[16], float k[8][4], float *smaxp)
+{
+    float smax = 0.f;
+    if (!me->bbok) {
+        for (int j = 0; j < 3; j++) { me->bb[j] = 3e38f; me->bb[3 + j] = -3e38f; }
+        for (int i = 0; i < me->nverts; i++)
+            for (int j = 0; j < 3; j++) {
+                float q = me->cpu[i].pos[j];
+                if (!(q == q)) return 0;
+                if (q < me->bb[j]) me->bb[j] = q;
+                if (q > me->bb[3 + j]) me->bb[3 + j] = q;
+            }
+        me->bbok = 1;
+    }
+    for (int c = 0; c < 8; c++) {
+        float q[3] = { me->bb[(c & 1) ? 3 : 0], me->bb[(c & 2) ? 4 : 1], me->bb[(c & 4) ? 5 : 2] };
+        for (int j = 0; j < 4; j++) {
+            float sa = fabsf(q[0] * cm[j]) + fabsf(q[1] * cm[4 + j]) + fabsf(q[2] * cm[8 + j]) + fabsf(cm[12 + j]);
+            k[c][j] = q[0] * cm[j] + q[1] * cm[4 + j] + q[2] * cm[8 + j] + cm[12 + j];
+            if (sa > smax) smax = sa;
+        }
+    }
+    *smaxp = smax;
+    return smax < 1e30f;
+}
+
+static int bbox_inside(MMesh *me, const float cm[16])
+{
+    float k[8][4], smax;
+    if (!bbox_corners(me, cm, k, &smax)) return 0;
+    {
+        float m = 1e-5f * smax;
+        for (int c = 0; c < 8; c++) {
+            float w = k[c][3] - m;
+            if (!(w > 0.f) || !(fabsf(k[c][0]) + m < w) || !(fabsf(k[c][1]) + m < w) || !(fabsf(k[c][2]) + m < w)) return 0;
+        }
+    }
+    return 1;
+}
+
+/* PROFILE=1 split of fl_clay_draw (psp_prof.c slots 30-35) */
+int psp_prof_fine(void);
+unsigned long long psp_prof_now(void);
+void psp_prof_add(int slot, const char *label, unsigned long long us);
+#define PT(v) unsigned long long v = prof ? psp_prof_now() : 0
+#define PA(slot, label, v) do { if (prof) psp_prof_add(slot, label, psp_prof_now() - v); } while (0)
+
 static int clay_draw(int h)
 {
     static int *adc_count, adc_cap;
+    const int prof = psp_prof_fine();
     int dump;
     MMesh *me;
     uint32_t fmt, gm;
@@ -557,6 +651,7 @@ static int clay_draw(int h)
     GVtx *g;
     if (!CLAY || h <= 0 || h >= MAX_CLAY) return 0;
     me = &CLAY[h];
+    if (!unorm_ok) unorm_init();
     if (me->desc < 0 || !me->nidx) return 0;
     {
         static long at = -2;
@@ -577,6 +672,12 @@ static int clay_draw(int h)
     gm = r_global_mod();
     if (mod) { modv[0] = gsf(gm, 16) / 255.f; modv[1] = gsf(gm, 8) / 255.f; modv[2] = gsf(gm, 0) / 255.f; modv[3] = gsf(gm, 24) / 255.f; }
 
+    if (prof) {
+        psp_prof_add(33, "        clay draws per frame (count)", 1000);
+        psp_prof_add(34, "        clay verts per frame (count)", 1000ull * (unsigned)me->nverts);
+        psp_prof_add(35, "        clay lit draws per frame (count)", lit ? 1000 : 0);
+    }
+    PT(t_col);
     r_gu_begin((unsigned)me->nverts * sizeof(GVtx) + (unsigned)me->nidx * 2 + 64 +
                ((me->desc == 19 || (me->desc >= 44 && me->desc <= 46)) ? (unsigned)me->nidx * (6 * sizeof(GVtx) + 12) + 32 : 0));
     if (lit) {
@@ -610,6 +711,8 @@ static int clay_draw(int h)
         }
     }
 
+    PA(30, "        clay colours + vertex copy", t_col);
+    PT(t_adc);
     /* world * view * projection, then the viewport (func_003DD5D0, canvas NDC), then the screen */
     fl_mat_mul(wv, r_matrix(0x19), r_matrix(0x16));
     fl_mat_mul(mvp, wv, r_matrix(0x17));
@@ -652,6 +755,10 @@ static int clay_draw(int h)
             float cm[16];
             int any = 0;
             fl_mat_mul(cm, wv, clipm);
+            if (bbox_inside(me, cm)) {
+                if (prof) psp_prof_add(36, "        clay ADC bbox skips per frame (count)", 1000);
+                for (int r = 0; r < me->nrange; r++) adc_count[r] = me->range[r].count;
+            } else {
             if (out_cap < me->nverts) {
                 free(out);
                 out_cap = me->nverts;
@@ -681,19 +788,32 @@ static int clay_draw(int h)
                 idx = f;
             }
             if (!any) for (int r = 0; r < me->nrange; r++) adc_count[r] = me->range[r].count;
+            }
         } else {
             for (int r = 0; r < me->nrange; r++) adc_count[r] = me->range[r].count;
         }
     }
 
-    clipping = (me->desc == 19 || (me->desc >= 44 && me->desc <= 46)) && clip_prepare(clip, g, me->nverts);
+    PA(31, "        clay matrices + ADC reject", t_adc);
+    PT(t_sub);
+    { PT(t_cp);
+    clipping = (me->desc == 19 || (me->desc >= 44 && me->desc <= 46)) && !clip_bbox_inside(me, clip) &&
+               clip_prepare(clip, g, me->nverts);
+    PA(26, "        clay clip_prepare", t_cp);
+    if (prof && (me->desc == 19 || (me->desc >= 44 && me->desc <= 46))) {
+        psp_prof_add(27, "        clay clipping-program draws (count)", 1000);
+        psp_prof_add(28, "        clay clipping-program verts (count)", 1000ull * (unsigned)me->nverts);
+        if (clipping) psp_prof_add(29, "        clay draws needing near_clip (count)", 1000);
+    } }
     for (int r = 0; r < me->nrange; r++) {
         const MRange *rg = &me->range[r];
         if (!adc_count[r]) continue;
         if (clipping) {
             GVtx *cv;
             uint16_t *ci;
+            PT(t_nc);
             int n = near_clip(g, idx + rg->first, adc_count[r], &cv, &ci);
+            PA(25, "        clay near_clip", t_nc);
             if (n >= 0) {
                 if (n) r_gu_mesh_draw(clip, me->textured ? rg->tex : 0, cv, ci, n, su, sv, ou, ov);
                 continue;
@@ -720,5 +840,6 @@ static int clay_draw(int h)
         r_gu_mesh_cnt[0]++;
         r_gu_mesh_cnt[1] += adc_count[r] / 3;
     }
+    PA(32, "        clay GU submit (r_gu_mesh_draw)", t_sub);
     return 1;
 }

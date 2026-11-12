@@ -18,7 +18,18 @@ PSP_HEAP_SIZE_KB(-1024);   /* all user memory but 1 MB (kernel free below = what
 #define MVC2_PSP_FRAMES 0   /* 0: real time until HOME -> Exit; N: headless N frames */
 #endif
 
-#define LOG_PATH "ms0:/PSP/GAME/mvc2/mvc2_psp.log"
+/* The game folder: ms0:/PSP/GAME/mvc2, or the EBOOT's own folder when it was
+ * started from PSPLink's host0: (env.txt, the log, shots, settings). */
+static char game_dir[160] = "ms0:/PSP/GAME/mvc2";
+const char *psp_game_dir(void) { return game_dir; }
+static const char *gpath(char *b, unsigned n, const char *name)
+{   /* no snprintf here: varargs differ across the o32/EABI boundary */
+    if (strlen(game_dir) + 1 + strlen(name) >= n) { b[0] = 0; return b; }
+    strcpy(b, game_dir); strcat(b, "/"); strcat(b, name);
+    return b;
+}
+static char lp[200];
+#define LOG_PATH (lp[0] ? lp : gpath(lp, sizeof lp, "mvc2_psp.log"))
 static int log_ok;
 
 /* Each line is appended and the file closed again: on a memory stick a
@@ -87,7 +98,7 @@ static int cb_thread(SceSize a, void *b) {
 int psp_shot_fb(void **pix, int *stride) {
     void *top; int bufw, fmt;
     static int made;
-    if (!made) { sceIoMkdir("ms0:/PSP/GAME/mvc2/shots", 0777); made = 1; }
+    if (!made) { { char sd[200]; sceIoMkdir(gpath(sd, sizeof sd, "shots"), 0777); }; made = 1; }
     if (sceDisplayGetFrameBuf(&top, &bufw, &fmt, PSP_DISPLAY_SETBUF_NEXTFRAME) < 0 || !top || fmt != PSP_DISPLAY_PIXEL_FORMAT_8888) return -1;
     /* DMAC copy: PPSSPP keeps the frame on the GPU and only downloads it to
      * VRAM for a copy it can see; a plain read gets a stale frame */
@@ -134,7 +145,8 @@ static int watchdog(SceSize a, void *b)
 static int env_has(const char *key)
 {
     char buf[512];
-    SceUID fd = sceIoOpen("ms0:/PSP/GAME/mvc2/env.txt", PSP_O_RDONLY, 0);
+    char ep[200];
+    SceUID fd = sceIoOpen(gpath(ep, sizeof ep, "env.txt"), PSP_O_RDONLY, 0);
     int n;
     if (fd < 0) return 0;
     n = sceIoRead(fd, buf, sizeof buf - 1);
@@ -176,6 +188,11 @@ static void exc_load(void)
 
 int main(int argc, char **argv) {
     psp_eboot_path = argc > 0 ? argv[0] : NULL;
+    if (psp_eboot_path && !strncmp(psp_eboot_path, "host", 4)) {
+        const char *e = strrchr(psp_eboot_path, '/');
+        unsigned n = e ? (unsigned)(e - psp_eboot_path) : 0;
+        if (n && n < sizeof game_dir) { memcpy(game_dir, psp_eboot_path, n); game_dir[n] = 0; }
+    }
     int t = sceKernelCreateThread("cb", cb_thread, 0x11, 0x1000, 0, 0);
     if (t >= 0) sceKernelStartThread(t, 0, 0);
     scePowerSetClockFrequency(333, 333, 166);   /* full speed (default 222 MHz) */

@@ -107,7 +107,7 @@ void __wrap_mvc2_frame(void)
     unsigned long long t, staged = 0;
     int i;
     if (on < 0)
-        on = getenv("PROFILE") != NULL;
+        { const char *e = getenv("PROFILE"); on = e ? (atoi(e) >= 2 ? 2 : 1) : 0; }
     if (!on) { __real_mvc2_frame(); return; }
     t = now();
     for (i = 1; i < 10; i++) staged += acc[i];
@@ -127,6 +127,7 @@ void __wrap_mvc2_frame(void)
 
 /* renderer-side timings (r_gu.c): slot 20+ */
 int psp_prof_on(void) { return on > 0; }
+int psp_prof_fine(void) { return on >= 2; }   /* PROFILE=2: per-draw splits (their timer calls cost time) */
 unsigned long long psp_prof_now(void) { return now(); }
 void psp_prof_add(int slot, const char *label, unsigned long long us)
 {

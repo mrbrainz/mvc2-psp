@@ -42,7 +42,9 @@ int r_gu_stretch(void);
  * and "color=32|16" (16: dithered 5650 frame buffers, faster fill, read at
  * start). Written with the defaults when missing; L+R+Select in game swaps
  * the screen mode and saves it. */
-#define SETTINGS "ms0:/PSP/GAME/mvc2/settings.txt"
+const char *psp_game_dir(void);   /* psp_entry.c: ms0:/PSP/GAME/mvc2 or the host0: folder */
+static const char *gpath(const char *name) { static char b[200]; snprintf(b, sizeof b, "%s/%s", psp_game_dir(), name); return b; }
+#define SETTINGS gpath("settings.txt")
 static int set_c16;
 
 static void settings_save(void)
@@ -110,7 +112,7 @@ static void selftest(void)
 static int load_env(int frames)
 {
     char ln[4096];
-    FILE *f = fopen("ms0:/PSP/GAME/mvc2/env.txt", "r");
+    FILE *f = fopen(gpath("env.txt"), "r");
     if (!f)
         return frames;
     while (fgets(ln, sizeof ln, f)) {

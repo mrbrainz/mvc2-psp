@@ -192,6 +192,21 @@ never drops below 8 MB.
 `-DMVC2_PSP_HEAPMAP=ON` logs free gaps and live bytes by caller with
 `DRAWLOG=1`.
 
+## PSPLink (hardware over USB)
+
+Build the PSP side from source (`git clone https://github.com/pspdev/psplinkusb`
+into `private/psplink/src`, `make -f Makefile.psp`) and copy `psplink.prx`,
+`psplink.ini`, `psplink_user.prx`, `usbhostfs.prx`, `usbgdb.prx` and
+`bootstrap/EBOOT.PBP` to `ms0:/PSP/GAME/PSPLINK/`; start it from the XMB, USB
+cable in, not in USB-storage mode. Mac: `brew install libusb`, then
+
+    port/psp/tools/psplink.sh host    # keep running
+    port/psp/tools/psplink.sh run     # starts build/port-psp/mvc2_psp.prx from host0: (not the PBP: 0x80020148)
+
+`host0:` is `private/psplink/host`: the build, the ISO (symlinks), `env.txt`,
+and the log, shots and settings the run writes. `psp-gdb` works through
+`usbgdb.prx`.
+
 ## Real hardware (P82)
 
 Verified on a PSP-2003 with ARK-4. PPSSPP accepts all of these; hardware does not:

@@ -45,6 +45,12 @@ int psp_disc_open(void)
     char b[200];
     for (int i = -2; i < (int)(sizeof paths / sizeof *paths); i++) {
         const char *p = i == -2 ? env : i == -1 ? psp_eboot_path : paths[i];
+        char gp[200];
+        if (i == 0) {   /* the game folder (host0: under PSPLink) */
+            extern const char *psp_game_dir(void);
+            snprintf(gp, sizeof gp, "%s/mvc2.iso", psp_game_dir());
+            p = gp;
+        }
         unsigned lo, hi;
         int fd;
         if (!p || !*p) continue;
