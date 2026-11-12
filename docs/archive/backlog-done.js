@@ -872,6 +872,25 @@ window.BACKLOG_ARCHIVE = [
   "note": "Sync: exact recheck is bound by ~220 ns a sampled byte (uncached no faster), so per user choice a quarter of each texture's samples is checked a frame (descriptors, palettes, unlocks every frame); fe_sync_handle 5.8 -> ~0.2 ms + check, frame 42.5 -> 40.9 ms, fight screenshot bit-identical, MVC2_EXACT_TEX_SYNC=1 for the old path. Tex select (func_003EA660__game, 4.3 ms) is game code, left to P84. Also fixed: the GU_DIRECT list was written cached, so the GE could read stale commands (garbled frame when the memory layout moved); now written uncached."
  },
  {
+  "id": "P86",
+  "order": 34,
+  "phase": "P4",
+  "size": "S",
+  "status": "Done",
+  "depends": [
+   "P83",
+   "P84",
+   "P85"
+  ],
+  "read": [
+   "port/docs/PSP.md"
+  ],
+  "title": "Hardware speed: re-profile fights and menus",
+  "description": "Hardware profile (PSP-2003, PROFILE=1, 3v3 fight): frame 45-47 ms; game update 3; fl_clay_draw 17; func_003F0500__game packet build 13.5; fe_sync_handle 4.5 + func_003EA660 tex select 4.2; GE wait 0.2 (CPU-bound). After P83-P85, profile intro, character select and a 3v3 fight on hardware again (menus were 19-23 ms) and ticket what remains.",
+  "done_when": "PSP.md has the new hardware profile; fights and menus at 59.94 fps or new tickets for the rest.",
+  "note": "PSP.md 'Hardware profile (P86)': intro/title 59.94 fps, attract demo fights 25-27 ms, character select 38 ms, 3v3 fights 36-50 ms; rendering-bound. Remaining work ticketed as P88-P91."
+ },
+ {
   "id": "P87",
   "order": 35,
   "phase": "P4",

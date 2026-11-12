@@ -226,6 +226,21 @@ packet rebuild, texture selection and the globals the body sets, and skips
 the rest (3v3 fight: frame 45.3 -> 39.8 ms). `MVC2_PACKET_FULL=1` runs the
 game's own body.
 
+## Hardware profile (P86)
+
+PSP-2003, 333 MHz, PROFILE=1 over PSPLink, after P83-P85/P87 (ms a frame):
+
+| Scene | Frame | Mesh draw | fl_clay_draw | Packet build | Tex select | Other render |
+|---|---|---|---|---|---|---|
+| Intro, title | 4-17 (59.94 fps) | - | - | - | - | - |
+| Attract demo fight | 25-27 | 13 | 7.6 | 3.7 | 1.8 | 5 |
+| Character select | 38 | 20 | 13 | 2.7 | 0.7 | 12 |
+| 3v3 fight | 36-50 | 28 | 15 | 9 | 4.5 | 9 |
+
+Mesh draw = fl_clay_draw + packet build + the PSP mesh wrapper (fe_mesh.c
+func_003F0500, ~4 ms in fights). Game update is 1-2 ms; the GE waits
+~0.2 ms: the frame is CPU-bound in rendering. Next: P88-P91.
+
 ## Real hardware (P82)
 
 Verified on a PSP-2003 with ARK-4. PPSSPP accepts all of these; hardware does not:

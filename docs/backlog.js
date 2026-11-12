@@ -82,6 +82,7 @@ window.BACKLOG = {
   "P81",
   "P82",
   "P85",
+  "P86",
   "P87"
  ],
  "activities": [
@@ -339,22 +340,73 @@ window.BACKLOG = {
    "note": "Partial: psp_packet.c replaces the draw body, skipping the VU1 setup callbacks, vertex/UV packets, DMA tags and kicks; same-binary A/B (MVC2_PACKET_FULL) over PSPLink: frame 45.3 -> 39.8 ms, packet build 14.9 -> 9.4, 6 fight shots over ~1500 frames identical (ra_state_hash covers the skipped packet memory, so screenshots are the check). Left: func_003EA660__game tex select ~4.5 ms, of which func_003EBA40 (linear walk of the GS-resident list D_004C2AB4, ~220 calls, ~18 us each) is 3.9 ms; dropping the GS upload packets saved only ~0.3 ms (not kept). An exact O(1) lookup needs every list mutator wrapped (~10 functions in 7 files)."
   },
   {
-   "id": "P86",
-   "order": 34,
+   "id": "P88",
+   "order": 36,
    "phase": "P4",
-   "size": "S",
+   "size": "L",
    "status": "Ready",
    "depends": [
-    "P83",
-    "P84",
-    "P85"
+    "P86"
+   ],
+   "read": [
+    "port/render/r_gu_mesh.c",
+    "port/render/r_gu.c",
+    "port/docs/PSP.md"
+   ],
+   "title": "Hardware speed: per-draw cost of mesh submits",
+   "description": "P86 profile: fl_clay_draw 13-15 ms in character select and fights for ~100 draws (~150 us each), mostly fixed per-draw cost (GU submit, matrices, clip prep, list restarts), not per-vertex work. Options: record each static mesh's GE commands once and replay them with sceGuCallList, merge ranges sharing a texture, fewer list restarts. Output must stay bit-identical.",
+   "done_when": "fl_clay_draw <= 6 ms in the scripted 3v3 fight over PSPLink; screenshots bit-identical."
+  },
+  {
+   "id": "P89",
+   "order": 37,
+   "phase": "P4",
+   "size": "M",
+   "status": "Ready",
+   "depends": [
+    "P86"
+   ],
+   "read": [
+    "port/host/fe/fe_mesh.c",
+    "port/psp/host/psp_packet.c"
+   ],
+   "title": "Hardware speed: PSP mesh wrapper (fe_mesh func_003F0500)",
+   "description": "P86 profile: mesh draw minus fl_clay_draw minus packet build leaves ~4 ms a fight frame in the port's func_003F0500 wrapper (format check, vertex-write pull, texture sync per clay, render-state hand-off). Measure its parts on hardware and move the hot ones PSP-side (no upstream changes).",
+   "done_when": "Wrapper <= 1 ms in the scripted 3v3 fight; screenshots bit-identical."
+  },
+  {
+   "id": "P90",
+   "order": 38,
+   "phase": "P4",
+   "size": "M",
+   "status": "Ready",
+   "depends": [
+    "P86"
+   ],
+   "read": [
+    "src/b10s_0_f.c",
+    "src/s9b_a.c",
+    "port/psp/host/psp_packet.c"
+   ],
+   "title": "Hardware speed: GS-resident list lookup (func_003EBA40)",
+   "description": "P84 note: tex select is ~4.5 ms in fights, 3.9 of it func_003EBA40 walking the resident list D_004C2AB4 (~220 calls, ~18 us each). An exact O(1) index needs every list mutator wrapped (~10 functions in 7 src files, some busy-wait on the list); or prove the PSP needs less of the GS bookkeeping.",
+   "done_when": "Tex select <= 1 ms in the scripted 3v3 fight; screenshots and fight outcome unchanged."
+  },
+  {
+   "id": "P91",
+   "order": 39,
+   "phase": "P4",
+   "size": "M",
+   "status": "Ready",
+   "depends": [
+    "P86"
    ],
    "read": [
     "port/docs/PSP.md"
    ],
-   "title": "Hardware speed: re-profile fights and menus",
-   "description": "Hardware profile (PSP-2003, PROFILE=1, 3v3 fight): frame 45-47 ms; game update 3; fl_clay_draw 17; func_003F0500__game packet build 13.5; fe_sync_handle 4.5 + func_003EA660 tex select 4.2; GE wait 0.2 (CPU-bound). After P83-P85, profile intro, character select and a 3v3 fight on hardware again (menus were 19-23 ms) and ticket what remains.",
-   "done_when": "PSP.md has the new hardware profile; fights and menus at 59.94 fps or new tickets for the rest."
+   "title": "Hardware speed: non-mesh rendering in fights and character select",
+   "description": "P86 profile: render pass minus mesh draw is ~9 ms in fights and ~12 ms in character select (2D sprites, effects, characters, HUD). Split it with PROFILE timers on hardware and ticket the hot parts.",
+   "done_when": "Split recorded in PSP.md; tickets for parts over 2 ms."
   }
  ]
 };
