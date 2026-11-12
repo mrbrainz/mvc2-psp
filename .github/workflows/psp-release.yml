@@ -1,0 +1,54 @@
+# PSP release: base EBOOT (no game data) + EBOOT builders, as packages.
+# A v* tag attaches them to a DRAFT release (publish by hand); a manual run
+# only uploads them as workflow artifacts. See port/docs/PSP.md.
+name: psp-release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+permissions:
+  contents: write
+env:
+  PSPDEV_TAG: v20261101   # tested toolchain (port/docs/PSP.md)
+jobs:
+  release:
+    runs-on: macos-15     # arm64, like the tested local setup
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          brew install llvm emscripten ninja go libmpc gmp mpfr libusb readline gpgme libarchive openssl
+          gh release download "$PSPDEV_TAG" --repo pspdev/pspdev -p pspdev-macos-latest-arm64.tar.gz -D "$RUNNER_TEMP"
+          tar -xzf "$RUNNER_TEMP/pspdev-macos-latest-arm64.tar.gz" -C "$RUNNER_TEMP"
+          echo "PSPDEV=$RUNNER_TEMP/pspdev" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP/pspdev/bin" >> "$GITHUB_PATH"
+          E="$RUNNER_TEMP/emsdk-brew/upstream"; mkdir -p "$E"
+          ln -s "$(brew --prefix emscripten)/libexec/llvm/bin" "$E/bin"
+          ln -s "$(brew --prefix emscripten)/libexec" "$E/emscripten"
+          echo "EMSDK=$RUNNER_TEMP/emsdk-brew" >> "$GITHUB_ENV"
+      - name: Base EBOOT (MVC2_RELEASE)
+        run: |
+          cmake -S port/psp -B build/port-psp-rel -G Ninja -DMVC2_RELEASE=ON \
+                -DCMAKE_TOOLCHAIN_FILE="$PWD/port/cmake/psp-clang.cmake"
+          ninja -C build/port-psp-rel mvc2_eboot
+          python3 port/psp/tools/check_release_eboot.py build/port-psp-rel/EBOOT.PBP
+      - name: Packages
+        run: |
+          VER="${GITHUB_REF_NAME}"
+          [ "$GITHUB_REF_TYPE" = tag ] || VER="dev-${GITHUB_SHA::7}"
+          port/psp/release/package.sh "$VER" build/port-psp-rel/EBOOT.PBP dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: psp-packages
+          path: dist/
+      - name: Draft release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* --draft --verify-tag \
+             --title "MvC2 PSP $GITHUB_REF_NAME" \
+             --notes "Download the package for your computer, open the builder and choose your own Marvel vs. Capcom 2 (USA) PS2 .iso. Copy the MVC2 folder it makes into PSP/GAME/. No game data is included."

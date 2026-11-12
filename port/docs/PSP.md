@@ -106,6 +106,11 @@ base EBOOT with the disc's XMB art and game data, checking the AFS SHA-1s.
     cd port/psp/builder && go build -o mvc2-eboot-builder .
     ./mvc2-eboot-builder [-base EBOOT.PBP] [-o OUTDIR] [-q] [game.iso]   # -> OUTDIR/MVC2/EBOOT.PBP
 
+Release packages: `port/psp/release/package.sh VERSION BASE_EBOOT OUTDIR`
+(macOS: needs go, lipo, codesign, ditto). CI (`.github/workflows/psp-release.yml`)
+runs it on a `v*` tag and attaches the packages to a draft GitHub release;
+a manual run only uploads them as workflow artifacts.
+
 A packed EBOOT holds copyrighted data: never commit or share it. `[disc]` lines log
 KB read and throughput every 5 s.
 

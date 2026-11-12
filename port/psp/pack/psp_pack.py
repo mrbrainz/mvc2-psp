@@ -6,7 +6,9 @@ Only /PS2/AFS00-03.AFS are kept (the PSP build reads nothing else), written
 as a minimal ISO9660 image so the port's disc reader is unchanged. The result
 holds copyrighted data: it is for the player's own use, never for git.
 
-    psp_pack.py <your MvC2 PS2 .iso> <EBOOT.PBP in> <EBOOT.PBP out>
+    psp_pack.py [--icon0 PNG] [--pic1 PNG] <your MvC2 PS2 .iso> <EBOOT.PBP in> <EBOOT.PBP out>
+
+--icon0/--pic1 replace those sections (XMB art from tools/xmb_art.py).
 """
 import struct
 import sys
@@ -114,14 +116,27 @@ def mini_iso(files):
 
 
 def main():
-    if len(sys.argv) != 4:
-        die("usage: psp_pack.py <your MvC2 PS2 .iso> <EBOOT.PBP in> <EBOOT.PBP out>")
-    iso_path, pbp_in, pbp_out = sys.argv[1:]
+    args, art = sys.argv[1:], {}
+    while args and args[0] in ("--icon0", "--pic1") and len(args) > 1:
+        art[1 if args[0] == "--icon0" else 4] = open(args[1], "rb").read()
+        args = args[2:]
+    if len(args) != 3:
+        die("usage: psp_pack.py [--icon0 PNG] [--pic1 PNG] <your MvC2 PS2 .iso> <EBOOT.PBP in> <EBOOT.PBP out>")
+    iso_path, pbp_in, pbp_out = args
     with open(pbp_in, "rb") as f:
         pbp = f.read()
     if pbp[:4] != b"\0PBP":
         die(pbp_in + " is not an EBOOT.PBP")
     offs = list(struct.unpack_from("<8I", pbp, 8))
+    if art:                                   # rebuild sections 0-6 with the new art
+        secs = [pbp[offs[i]:offs[i + 1]] for i in range(7)]
+        for i, b in art.items():
+            secs[i] = b
+        pbp = pbp[:8] + bytes(32)
+        for i in range(7):
+            offs[i] = len(pbp)
+            pbp += secs[i]
+        offs[7] = len(pbp)
     pbp = pbp[:offs[7]]                       # drop any DATA.PSAR already packed
     pad = (-len(pbp)) % SECTOR                # data at a sector boundary
     pbp += bytes(pad)

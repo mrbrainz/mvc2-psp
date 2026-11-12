@@ -135,7 +135,7 @@ window.BACKLOG = {
    "order": 19,
    "phase": "P5",
    "size": "S",
-   "status": "Backlog",
+   "status": "In progress",
    "depends": [
     "P70"
    ],
@@ -143,8 +143,9 @@ window.BACKLOG = {
     "port/docs/PSP.md"
    ],
    "title": "Release CI and packages",
-   "description": "CI fetches PSPSDK (never committed), builds the base EBOOT and builders, and publishes mvc2-psp-vX-windows.zip (exe + base/EBOOT.PBP), -macos.zip (universal .app with the base EBOOT inside), -linux-x64.tar.gz, -pypack.zip (base EBOOT + Python tools) and SHA256SUMS, each with README.txt and LICENSE.txt.",
-   "done_when": "A tagged push produces all four archives plus SHA256SUMS; none contain copyrighted data."
+   "description": "GitHub Actions: on a v* tag, fetch PSPSDK (never committed), build the MVC2_RELEASE base EBOOT (checked with check_release_eboot.py) and the builders, package mvc2-psp-vX-windows.zip (exe + base/EBOOT.PBP), -macos.zip (universal .app with the base EBOOT inside), -linux-x64.tar.gz, -pypack.zip (base EBOOT + Python tools) and SHA256SUMS, each with README.txt and LICENSE.txt, and attach them to a draft GitHub Release. Manual runs upload the packages as workflow artifacts only.",
+   "done_when": "A v* tag creates a draft release with all four archives plus SHA256SUMS; nothing is published without a manual click; no archive contains copyrighted data.",
+   "note": "package.sh builds all four packages + SHA256SUMS locally (signed universal .app, pypack flow checked; psp_pack.py gained --icon0/--pic1). Workflow written, not yet run on GitHub."
   },
   {
    "id": "P72",
