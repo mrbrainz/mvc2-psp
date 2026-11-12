@@ -93,7 +93,11 @@ window.BACKLOG = {
     "P25",
     "P31",
     "P13",
-    "P09"
+    "P09",
+    "P83",
+    "P84",
+    "P85",
+    "P86"
    ],
    "read": [
     "port/docs/ORACLE_FUZZ.md"
@@ -294,6 +298,76 @@ window.BACKLOG = {
    "title": "Last resort: load game data from the memory stick on demand (low profile)",
    "description": "Only if P75-P78 cannot reach the PSP-1000 budget: in the low profile, read rarely used data from the EBOOT's DATA.PSAR when needed instead of keeping it resident. Full profile unchanged. Close as Won't fix if P79 passes without it.",
    "done_when": "Either closed as not needed after P79, or the low profile fits with on-demand loading and no load stalls during fights."
+  },
+  {
+   "id": "P83",
+   "order": 31,
+   "phase": "P4",
+   "size": "M",
+   "status": "Ready",
+   "depends": [
+    "P82"
+   ],
+   "read": [
+    "port/render/r_gu_mesh.c",
+    "port/docs/PSP.md"
+   ],
+   "title": "Hardware speed: GU mesh renderer (fl_clay_draw)",
+   "description": "Hardware profile (PSP-2003, PROFILE=1, 3v3 fight): frame 45-47 ms; game update 3; fl_clay_draw 17; func_003F0500__game packet build 13.5; fe_sync_handle 4.5 + func_003EA660 tex select 4.2; GE wait 0.2 (CPU-bound). fl_clay_draw does ~3.7k vertices/frame at ~1500 cycles each: remove soft-double maths (__extendsfdf2), inline fminf/floorf, move per-vertex transform/lighting (r_light, r_matrix) to GU hardware transform/lighting or the VFPU. Output must stay identical.",
+   "done_when": "fl_clay_draw <= 4 ms/frame in a 3v3 fight on hardware (PROFILE=1), screenshots unchanged in PPSSPP."
+  },
+  {
+   "id": "P84",
+   "order": 32,
+   "phase": "P4",
+   "size": "L",
+   "status": "Ready",
+   "depends": [
+    "P82"
+   ],
+   "read": [
+    "port/psp/host/psp_fe_sync.c",
+    "port/render/r_gu_mesh.c",
+    "port/docs/PSP.md"
+   ],
+   "title": "Hardware speed: skip or cache the PS2 VU1 packet build",
+   "description": "Hardware profile (PSP-2003, PROFILE=1, 3v3 fight): frame 45-47 ms; game update 3; fl_clay_draw 17; func_003F0500__game packet build 13.5; fe_sync_handle 4.5 + func_003EA660 tex select 4.2; GE wait 0.2 (CPU-bound). The game builds VU1 packets (func_003F0500__game) that the renderer parses back. Cache packets of unchanged (static stage) meshes across frames, or have the PSP renderer read mesh data directly, PSP-side only (--wrap).",
+   "done_when": "Packet build <= 4 ms/frame in a 3v3 fight on hardware; logic hashes unchanged over a scripted run."
+  },
+  {
+   "id": "P85",
+   "order": 33,
+   "phase": "P4",
+   "size": "S",
+   "status": "Ready",
+   "depends": [
+    "P82"
+   ],
+   "read": [
+    "port/psp/host/psp_fe_sync.c",
+    "port/docs/PSP.md"
+   ],
+   "title": "Hardware speed: texture sync / select per mesh",
+   "description": "Hardware profile (PSP-2003, PROFILE=1, 3v3 fight): frame 45-47 ms; game update 3; fl_clay_draw 17; func_003F0500__game packet build 13.5; fe_sync_handle 4.5 + func_003EA660 tex select 4.2; GE wait 0.2 (CPU-bound). fe_sync_handle and func_003EA660 tex select run for every mesh: skip them when the handle/state has not changed (memo), PSP-side.",
+   "done_when": "Texture sync + select <= 2 ms/frame in a 3v3 fight on hardware; no texture regressions."
+  },
+  {
+   "id": "P86",
+   "order": 34,
+   "phase": "P4",
+   "size": "S",
+   "status": "Ready",
+   "depends": [
+    "P83",
+    "P84",
+    "P85"
+   ],
+   "read": [
+    "port/docs/PSP.md"
+   ],
+   "title": "Hardware speed: re-profile fights and menus",
+   "description": "Hardware profile (PSP-2003, PROFILE=1, 3v3 fight): frame 45-47 ms; game update 3; fl_clay_draw 17; func_003F0500__game packet build 13.5; fe_sync_handle 4.5 + func_003EA660 tex select 4.2; GE wait 0.2 (CPU-bound). After P83-P85, profile intro, character select and a 3v3 fight on hardware again (menus were 19-23 ms) and ticket what remains.",
+   "done_when": "PSP.md has the new hardware profile; fights and menus at 59.94 fps or new tickets for the rest."
   }
  ]
 };
