@@ -17,3 +17,6 @@ __pycache__/
 *.iso
 *.ISO
 /.claude/
+
+# Built PSP EBOOTs (contain game data)
+/MVC2/
