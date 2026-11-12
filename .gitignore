@@ -16,3 +16,4 @@ __pycache__/
 # Disc images (never commit)
 *.iso
 *.ISO
+/.claude/
