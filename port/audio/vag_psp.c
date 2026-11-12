@@ -108,16 +108,40 @@ static void materialize(VagPcm *v)
     v->pcm = pcm;
 }
 
+/* P32: the PS2 recordings sit below the Dreamcast common SFX that dcse puts
+ * in, so every sample dcse did not replace gets this boost. */
+#define PSP_PS2_GAIN 2.239f   /* +7 dB */
+#define NDC 256
+static const VagPcm *dc_smp[NDC];   /* samples now holding Dreamcast PCM */
+
 int __wrap_dcse_apply(HdBank *b)
 {
-    if (dcse_loaded() && b && b->vag)
-        for (size_t r = 0; r < sizeof DCSE_MAP / sizeof DCSE_MAP[0]; r++) {
-            if (DCSE_MAP[r].vag >= b->nvag) continue;
-            VagPcm *v = &b->vag[DCSE_MAP[r].vag];
-            if (!v->looped && (uint32_t)v->first_len == DCSE_MAP[r].ps2_len && v->rate == DCSE_MAP[r].ps2_hz)
-                materialize(v);
-        }
-    return __real_dcse_apply(b);
+    enum { NM = sizeof DCSE_MAP / sizeof DCSE_MAP[0] };
+    const int16_t *was[NM];
+    for (int k = 0; k < NDC; k++)   /* forget this bank's old marks */
+        if (b && dc_smp[k] >= b->vag && dc_smp[k] < b->vag + b->nvag) dc_smp[k] = NULL;
+    for (size_t r = 0; r < NM; r++) {
+        was[r] = NULL;
+        if (!dcse_loaded() || !b || !b->vag || DCSE_MAP[r].vag >= b->nvag) continue;
+        VagPcm *v = &b->vag[DCSE_MAP[r].vag];
+        if (!v->looped && (uint32_t)v->first_len == DCSE_MAP[r].ps2_len && v->rate == DCSE_MAP[r].ps2_hz)
+            materialize(v);
+        was[r] = v->pcm;
+    }
+    int ret = __real_dcse_apply(b);
+    for (size_t r = 0; r < NM; r++) {
+        if (!was[r]) continue;
+        const VagPcm *v = &b->vag[DCSE_MAP[r].vag];
+        if (v->pcm == was[r]) continue;
+        for (int k = 0; k < NDC; k++) if (!dc_smp[k]) { dc_smp[k] = v; break; }
+    }
+    return ret;
+}
+
+float vag_psp_gain(const VagPcm *v)
+{
+    for (int k = 0; k < NDC; k++) if (dc_smp[k] == v) return 1.0f;
+    return PSP_PS2_GAIN;
 }
 
 /* ---- decoding while playing (mix_psp.c) ---- */

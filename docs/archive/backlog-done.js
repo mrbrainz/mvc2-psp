@@ -295,6 +295,24 @@ window.BACKLOG_ARCHIVE = [
   "note": "port/audio/audio_psp.c + psp_audio_hw.c: 48 kHz sceAudio SRC thread; mix_psp.c (--wrap) replaces the sinc/double inner loops with 4-point Hermite on 32.32 fixed point and unlocks during bank decode. 3060-frame fight: 0 underruns, 59.94 fps, ~12 ms/frame (+0.4 ms); MIXCMP=1 shows SFX within -0.5 dB of upstream."
  },
  {
+  "id": "P32",
+  "order": 5.15,
+  "phase": "P3",
+  "size": "S",
+  "status": "Done",
+  "depends": [
+   "P31"
+  ],
+  "read": [
+   "port/docs/AUDIO.md",
+   "port/audio/audio_psp.c"
+  ],
+  "title": "PSP sound effects too quiet against music",
+  "description": "In PPSSPP the SFX/voices sit noticeably below the ADX music, unlike the web build at 100/100. The PSP mix matches upstream's synth level (MIXCMP=1), so find the cause PSP-side (output path, clamp, sceAudio, gains) and fix it in PSP files only; no upstream changes.",
+  "done_when": "In a PPSSPP fight the SFX/music balance matches the web build at default volumes (user listens).",
+  "note": "PSP mixer trims music -4 dB and SFX -2 dB and boosts PS2 samples +7 dB (Dreamcast SE_COMN replacements, when loaded, stay at 1.0) in audio_psp.c / vag_psp.c / mix_psp.c. Per-port peaks and voice gains matched upstream, so the gap is the PS2 recordings; balance confirmed by ear in PPSSPP, some 8 kHz announcer lines still a little soft."
+ },
+ {
   "id": "P12",
   "order": 5.2,
   "phase": "P1",

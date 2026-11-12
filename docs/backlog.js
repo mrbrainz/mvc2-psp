@@ -52,6 +52,7 @@ window.BACKLOG = {
   "P27",
   "P28",
   "P31",
+  "P32",
   "P33",
   "P34",
   "P35",
@@ -65,23 +66,6 @@ window.BACKLOG = {
   "P60"
  ],
  "activities": [
-  {
-   "id": "P32",
-   "order": 5.15,
-   "phase": "P3",
-   "size": "S",
-   "status": "Ready",
-   "depends": [
-    "P31"
-   ],
-   "read": [
-    "port/docs/AUDIO.md",
-    "port/audio/audio_psp.c"
-   ],
-   "title": "PSP sound effects too quiet against music",
-   "description": "In PPSSPP the SFX/voices sit noticeably below the ADX music, unlike the web build at 100/100. The PSP mix matches upstream's synth level (MIXCMP=1), so find the cause PSP-side (output path, clamp, sceAudio, gains) and fix it in PSP files only; no upstream changes.",
-   "done_when": "In a PPSSPP fight the SFX/music balance matches the web build at default volumes (user listens)."
-  },
   {
    "id": "P41",
    "order": 13,

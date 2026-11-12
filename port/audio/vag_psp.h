@@ -36,4 +36,6 @@ static inline int vag_psp_fast(const VagDec *d, const VagLazy *z, int lo)
     return lo - base;
 }
 int16_t vag_psp_get(VagDec *d, const VagPcm *v, const VagLazy *z, int i);
+float vag_psp_gain(const VagPcm *v);   /* P32: 1 for Dreamcast SFX, boost for PS2 samples */
+
 #endif

@@ -5,6 +5,9 @@
 #include "psp_audio_hw.h"
 #include "audio.h"
 #include "adx.h"
+/* P32 PSP bus trims: music -4 dB, SFX -2 dB (SFX +2 dB against music, headroom before the clip). */
+#define PSP_MUSIC_TRIM 0.6310f
+#define PSP_SFX_TRIM 0.7943f
 #include "dcse.h"
 #include "resample.h"
 #include "tsd.h"
@@ -119,8 +122,8 @@ static void bgm_render(Bgm *b, float *out, int frames)
         }
         float l = s[2 * i], r = s[2 * i + 1];
         if (b->mono) l = r = 0.5f * (l + r);
-        out[2 * i] += l * b->cur * A.music;
-        out[2 * i + 1] += r * b->cur * A.music;
+        out[2 * i] += l * b->cur * A.music * PSP_MUSIC_TRIM;
+        out[2 * i + 1] += r * b->cur * A.music * PSP_MUSIC_TRIM;
     }
     b->played += (uint32_t)frames;
 }
@@ -194,8 +197,7 @@ void audio_render(float *out, int frames)
 {
     memset(out, 0, sizeof(float) * 2 * frames);
     tsd_render(&A.tsd, out, frames);
-    if (A.sfx != 1.0f)
-        for (int i = 0; i < 2 * frames; i++) out[i] *= A.sfx;
+    for (int i = 0; i < 2 * frames; i++) out[i] *= A.sfx * PSP_SFX_TRIM;
     bgm_render(&A.bgm, out, frames);
     float g = A.master;
     for (int i = 0; i < 2 * frames; i++) {

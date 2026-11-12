@@ -87,7 +87,8 @@ static void mix_render(Synth *s, float *out, int frames)
         fx_from(v->pos, &pi, &pf);
         fx_from(v->step, &si, &sf);
         float cl = v->cl, cr = v->cr;
-        const float gl = v->gl, gr = v->gr;
+        const float bg = vag_psp_gain(src);
+        const float gl = v->gl * bg, gr = v->gr * bg;
         for (int o = 0; o < frames; o++) {
             if (!src->looped && pi >= src->len) { v->active = 0; break; }
             float env;
