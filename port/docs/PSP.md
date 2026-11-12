@@ -219,6 +219,13 @@ game's unlock call can show up to 4 frames late. `MVC2_EXACT_TEX_SYNC=1`
 restores the per-frame upstream check. The display list is written through
 the uncached mirror: the GE reads a GU_DIRECT list while it is being built.
 
+Mesh draw body (P84, `psp_packet.c`): the game's func_003F0500 builds VU1
+packets per draw (microcode setup, vertex/UV packets, DMA tags and kicks)
+that the PSP renderer never reads; the PSP body keeps the format word and
+packet rebuild, texture selection and the globals the body sets, and skips
+the rest (3v3 fight: frame 45.3 -> 39.8 ms). `MVC2_PACKET_FULL=1` runs the
+game's own body.
+
 ## Real hardware (P82)
 
 Verified on a PSP-2003 with ARK-4. PPSSPP accepts all of these; hardware does not:

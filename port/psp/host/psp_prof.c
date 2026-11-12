@@ -53,7 +53,6 @@ STAGE(8, func_003ECD00, "func_003ECD00 vsync/flip")
     }
 SUB(10, int, func_003F0500, (int h), (h), "  func_003F0500 mesh draw (game body + fl_clay_draw)")
 SUB(11, int, fl_clay_draw, (int h), (h), "    fl_clay_draw (GU)")
-SUB(15, int, func_003F0500__game, (int h), (h), "    func_003F0500__game (VU1 packet build)")
 #define VSUB(i, fn, params, args, label)                   \
     void __real_##fn params;                              \
     void __wrap_##fn params                               \
@@ -181,3 +180,4 @@ void __wrap_func_003D7400(void)
         task_frames = 0;
     }
 }
+
