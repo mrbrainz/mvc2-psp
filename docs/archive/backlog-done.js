@@ -819,5 +819,23 @@ window.BACKLOG_ARCHIVE = [
   "description": "Build ICON0 (also the savedata icon) and PIC1 at EBOOT build time from three AFS02 entries (DM13TEX, DM0ATEX, GAL39) per the agreed crop/scale/composite recipe; fall back to the generated icon when no ISO.",
   "done_when": "EBOOT.PBP carries ICON0 144x80 and PIC1 480x272 built from the ISO; no art in git.",
   "note": "port/psp/tools/xmb_art.py (pure Python, <1 s) writes ICON0.PNG, PIC1.PNG, psp_icon0.h; CMake MVC2_ISO var, pack-pbp gets both. Verified PBP section sizes and images by eye; not yet viewed in the PPSSPP game list."
+ },
+ {
+  "id": "P81",
+  "order": 29,
+  "phase": "P5",
+  "size": "S",
+  "status": "Done",
+  "depends": [
+   "P70"
+  ],
+  "read": [
+   "port/psp/builder/main.go",
+   "port/psp/release/package.sh"
+  ],
+  "title": "Linux builder: file-manager launch and ARM64 package",
+  "description": "Started from a file manager the Linux builder showed nothing (dropped ISO printed to an invisible stdout; no zenity meant a hidden prompt), and ARM64 Linux had no build.",
+  "done_when": "Double-click and dropped-ISO launches show progress and errors; a linux-arm64 package ships.",
+  "note": "Without a terminal (TCGETS check) the builder reopens itself in x-terminal-emulator/xfce4-terminal/gnome-terminal/konsole/xterm and waits for Enter, else reports via zenity; the prompted path keeps spaces; package.sh adds linux-arm64. Checked in an arm64 Alpine container (relaunch args, relaunched run, no-picker error, spaced path); not yet in a real desktop."
  }
 ];

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Release packages from a checked base EBOOT (MVC2_RELEASE build).
 #   port/psp/release/package.sh VERSION BASE_EBOOT OUTDIR
-# Writes OUTDIR/mvc2-psp-VERSION-{windows.zip,macos.zip,linux-x64.tar.gz,pypack.zip}
+# Writes OUTDIR/mvc2-psp-VERSION-{windows.zip,macos.zip,linux-x64.tar.gz,linux-arm64.tar.gz,pypack.zip}
 # and OUTDIR/SHA256SUMS. Needs go; the macOS package needs lipo, codesign, ditto.
 set -eu
 [ $# -eq 3 ] || { echo "usage: $0 VERSION BASE_EBOOT OUTDIR" >&2; exit 2; }
@@ -29,9 +29,11 @@ d=$(dist win); mkdir "$d/base"; cp "$BASE" "$d/base/EBOOT.PBP"
 gob windows amd64 "$d/MvC2 EBOOT Builder.exe"
 (cd "$W/win" && rm -f "$OUT/$NAME-windows.zip" && zip -qr -X "$OUT/$NAME-windows.zip" "$NAME")
 
-d=$(dist linux); mkdir "$d/base"; cp "$BASE" "$d/base/EBOOT.PBP"
-gob linux amd64 "$d/mvc2-eboot-builder"
-tar -C "$W/linux" -czf "$OUT/$NAME-linux-x64.tar.gz" "$NAME"
+for a in x64:amd64 arm64:arm64; do
+  d=$(dist "linux-${a%%:*}"); mkdir "$d/base"; cp "$BASE" "$d/base/EBOOT.PBP"
+  gob linux "${a#*:}" "$d/mvc2-eboot-builder"
+  tar -C "$W/linux-${a%%:*}" -czf "$OUT/$NAME-linux-${a%%:*}.tar.gz" "$NAME"
+done
 
 d=$(dist mac); app="$d/MvC2 EBOOT Builder.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"

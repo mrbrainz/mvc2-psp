@@ -60,10 +60,12 @@ your `.iso`. Your disc image is only read; nothing is uploaded anywhere.
 
 ### Linux
 
-`mvc2-psp-<version>-linux-x64.tar.gz`
+`mvc2-psp-<version>-linux-x64.tar.gz` (Intel/AMD) or `-linux-arm64.tar.gz`
+(ARM: Raspberry Pi, ARM laptops, VMs on Apple Silicon). Run `uname -m` if
+unsure: `x86_64` or `aarch64`.
 
-- **GUI:** extract, then double-click `mvc2-eboot-builder` and choose your
-  `.iso` (the file picker needs `zenity`; without it, run it from a terminal).
+- **GUI:** extract, then double-click `mvc2-eboot-builder` (or drop your `.iso`
+  on it). It opens in a terminal window; the file picker needs `zenity`.
 - **Command line:**
 
   ```sh

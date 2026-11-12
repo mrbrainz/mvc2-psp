@@ -8,6 +8,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"flag"
 	"fmt"
@@ -30,10 +31,25 @@ func main() {
 	flag.Parse()
 	isoPath := flag.Arg(0)
 	pause = runtime.GOOS == "windows" && !*quiet // drag-and-drop opens a console that would close at once
+	if runtime.GOOS == "linux" && !*quiet && !isTerminal() {
+		// Started from a file manager (double-click or a dropped ISO): no
+		// terminal to show progress or errors in, so reopen in one.
+		if os.Getenv(termEnv) == "" && relaunchInTerminal() {
+			return
+		}
+		gui = true // no terminal program: report through zenity dialogs
+	}
+	if os.Getenv(termEnv) != "" {
+		pause = true
+	}
 	if isoPath == "" {
 		gui = true
 		var err error
-		if isoPath, err = pickFile(); err != nil || isoPath == "" {
+		isoPath, err = pickFile()
+		if _, cancelled := err.(*exec.ExitError); err != nil && !cancelled {
+			fail(err.Error())
+		}
+		if isoPath == "" {
 			fail("No disc image chosen.")
 		}
 	}
@@ -151,6 +167,39 @@ func findBase() string {
 	return ""
 }
 
+const termEnv = "MVC2_BUILDER_IN_TERMINAL"
+
+// relaunchInTerminal reopens the builder, with the same arguments, in the
+// first terminal program found; false if there is none.
+func relaunchInTerminal() bool {
+	exe, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	cmd := append([]string{exe}, os.Args[1:]...)
+	for _, t := range []struct {
+		name string
+		flag []string
+	}{
+		{"x-terminal-emulator", []string{"-e"}},
+		{"xfce4-terminal", []string{"-x"}},
+		{"gnome-terminal", []string{"--"}},
+		{"konsole", []string{"-e"}},
+		{"xterm", []string{"-e"}},
+	} {
+		path, err := exec.LookPath(t.name)
+		if err != nil {
+			continue
+		}
+		c := exec.Command(path, append(t.flag, cmd...)...)
+		c.Env = append(os.Environ(), termEnv+"=1")
+		if c.Start() == nil {
+			return true
+		}
+	}
+	return false
+}
+
 const prompt = "Choose your Marvel vs. Capcom 2 (USA) PS2 disc image (.iso)"
 
 func pickFile() (string, error) {
@@ -166,12 +215,13 @@ func pickFile() (string, error) {
 	default:
 		if _, err := exec.LookPath("zenity"); err == nil {
 			cmd = exec.Command("zenity", "--file-selection", "--title="+prompt)
-		} else {
+		} else if isTerminal() {
 			gui = false
 			fmt.Print(prompt + ": ")
-			var s string
-			fmt.Scanln(&s)
-			return strings.Trim(s, `"' `), nil
+			s, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+			return strings.Trim(strings.TrimSpace(s), `"'`), nil
+		} else {
+			return "", fmt.Errorf("no file picker: install zenity, or run from a terminal with the .iso path")
 		}
 	}
 	b, err := cmd.Output()
