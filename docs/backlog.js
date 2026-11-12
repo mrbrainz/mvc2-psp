@@ -26,6 +26,10 @@ window.BACKLOG = {
   {
    "id": "P5",
    "name": "Release"
+  },
+  {
+   "id": "P6",
+   "name": "PSP-1000"
   }
  ],
  "completed_ids": [
@@ -73,7 +77,8 @@ window.BACKLOG = {
   "P67",
   "P68",
   "P69",
-  "P70"
+  "P70",
+  "P71"
  ],
  "activities": [
   {
@@ -131,23 +136,6 @@ window.BACKLOG = {
    "done_when": "Installable EBOOT + PSP section in USER_GUIDE.md."
   },
   {
-   "id": "P71",
-   "order": 19,
-   "phase": "P5",
-   "size": "S",
-   "status": "In progress",
-   "depends": [
-    "P70"
-   ],
-   "read": [
-    "port/docs/PSP.md"
-   ],
-   "title": "Release CI and packages",
-   "description": "GitHub Actions: on a v* tag, fetch PSPSDK (never committed), build the MVC2_RELEASE base EBOOT (checked with check_release_eboot.py) and the builders, package mvc2-psp-vX-windows.zip (exe + base/EBOOT.PBP), -macos.zip (universal .app with the base EBOOT inside), -linux-x64.tar.gz, -pypack.zip (base EBOOT + Python tools) and SHA256SUMS, each with README.txt and LICENSE.txt, and attach them to a draft GitHub Release. Manual runs upload the packages as workflow artifacts only.",
-   "done_when": "A v* tag creates a draft release with all four archives plus SHA256SUMS; nothing is published without a manual click; no archive contains copyrighted data.",
-   "note": "package.sh builds all four packages + SHA256SUMS locally (signed universal .app, pypack flow checked; psp_pack.py gained --icon0/--pic1). Workflow written, not yet run on GitHub."
-  },
-  {
    "id": "P72",
    "order": 20,
    "phase": "P5",
@@ -162,6 +150,148 @@ window.BACKLOG = {
    "title": "User README and unsigned-binary guidance",
    "description": "Five-step README.txt (drop ISO, get MVC2 folder, copy to PSP/GAME, play, do not share the built EBOOT) plus Gatekeeper/SmartScreen first-launch steps; sign binaries if certificates are available.",
    "done_when": "README.txt is in every package; a new user can build and install from it alone."
+  },
+  {
+   "id": "P73",
+   "order": 21,
+   "phase": "P6",
+   "size": "S",
+   "status": "Backlog",
+   "depends": [],
+   "read": [
+    "port/docs/PSP.md",
+    "port/psp/host/psp_ee_heap.c",
+    "port/psp/host/psp_ee_hwm.c"
+   ],
+   "title": "PSP-1000 memory budget",
+   "description": "Measure every consumer against the PSP-1000's user memory (~24 MB): ELF sections (largest static symbols), EE heap high-water, renderer (textures, atlases, mesh buffers, CLUTs), audio, PSPSDK/newlib and kernel allocations. Run a full arcade run in PPSSPP with the PSP-1000 model. Set a per-consumer target budget for the low profile.",
+   "done_when": "PSP.md has the per-consumer table, the PSP-1000 total and a target budget per consumer that fits with headroom, without loading game data from the memory stick (or the shortfall if it cannot)."
+  },
+  {
+   "id": "P74",
+   "order": 22,
+   "phase": "P6",
+   "size": "S",
+   "status": "Backlog",
+   "depends": [
+    "P73"
+   ],
+   "read": [
+    "port/psp/host/psp_ee_heap.c",
+    "port/psp/host/psp_entry.c",
+    "port/docs/PSP.md"
+   ],
+   "title": "Boot-time memory profile (full / low)",
+   "description": "At boot, choose a memory profile from the user memory actually available (MEMSIZE=1 is granted on PSP-2000+, not on the PSP-1000): full = today's sizes, low = the P73 budgets. Log the profile and free memory. Sizes read from the profile instead of constants. PSP-side only (new code under port/psp/ or --wrap).",
+   "done_when": "PPSSPP with the PSP-2000+ model logs 'full' and behaves byte-for-byte as before (same logic hashes over a scripted run); with the PSP-1000 model it logs 'low'."
+  },
+  {
+   "id": "P75",
+   "order": 23,
+   "phase": "P6",
+   "size": "M",
+   "status": "Backlog",
+   "depends": [
+    "P74"
+   ],
+   "read": [
+    "port/psp/host/psp_ee_heap.c",
+    "port/psp/host/psp_ee_hwm.c",
+    "port/host/boot.c"
+   ],
+   "title": "Low profile: smaller EE heap and game arena",
+   "description": "In the low profile, size the EE heap and the game's arena/handle pool to the P54 high-water (arena 16.3 MB written of 22 MB, pool 4.6 of 6 MB) plus a measured margin, from the PSP side (no upstream change). Full profile unchanged.",
+   "done_when": "Low profile: full arcade run in PPSSPP completes with the smaller heap, [hwm] shows the margin kept; full profile logic hashes unchanged."
+  },
+  {
+   "id": "P76",
+   "order": 24,
+   "phase": "P6",
+   "size": "M",
+   "status": "Backlog",
+   "depends": [
+    "P74"
+   ],
+   "read": [
+    "port/render/r_gu.c",
+    "port/render/r_gu_char.c",
+    "port/render/r_gu_mesh.c",
+    "port/docs/PSP.md"
+   ],
+   "title": "Low profile: renderer memory budgets",
+   "description": "In the low profile, cap the texture cache, character atlas pages and mesh buffers to the P73 budgets (evict sooner, 16-bit textures where they look the same), without visible changes in normal play. Full profile unchanged.",
+   "done_when": "Low profile 3v3 fight and full arcade run in PPSSPP stay within the renderer budget with no missing or corrupt textures (DRAWLOG counters, screenshots compared with the full profile)."
+  },
+  {
+   "id": "P77",
+   "order": 25,
+   "phase": "P6",
+   "size": "M",
+   "status": "Backlog",
+   "depends": [
+    "P73"
+   ],
+   "read": [
+    "port/docs/PSP.md"
+   ],
+   "title": "Smaller program image (all models)",
+   "description": "Find the largest static data in the 9.2 MB ELF (debug tables, unused upstream data, zero-filled arrays that can move to the heap) and shrink it without behaviour changes. Applies to every model, so only changes that cost the full profile nothing.",
+   "done_when": "ELF size reduction recorded in PSP.md; full-profile scripted run logic hashes and frame times unchanged."
+  },
+  {
+   "id": "P78",
+   "order": 26,
+   "phase": "P6",
+   "size": "S",
+   "status": "Backlog",
+   "depends": [
+    "P74"
+   ],
+   "read": [
+    "port/audio/mix_psp.c",
+    "port/audio/vag_psp.c",
+    "port/psp/host/psp_audio.c"
+   ],
+   "title": "Low profile: audio buffers",
+   "description": "Measure audio memory (sample bank, PCM replacements, mixer and stream buffers) and trim it in the low profile where it is inaudible. Full profile unchanged.",
+   "done_when": "Low profile audio memory within the P73 budget; no audible difference in a full arcade run."
+  },
+  {
+   "id": "P79",
+   "order": 27,
+   "phase": "P6",
+   "size": "M",
+   "status": "Backlog",
+   "depends": [
+    "P75",
+    "P76",
+    "P77",
+    "P78"
+   ],
+   "read": [
+    "port/docs/PSP.md",
+    "port/psp/scripts/arcade_psp.txt"
+   ],
+   "title": "PSP-1000 full arcade run",
+   "description": "Full scripted arcade run in PPSSPP with the PSP-1000 model and the low profile, game data loaded as today (no memory-stick streaming). Record memory headroom and frame times.",
+   "done_when": "Arcade run completes on the PSP-1000 model with headroom recorded in PSP.md; README minimum model updated."
+  },
+  {
+   "id": "P80",
+   "order": 28,
+   "phase": "P6",
+   "size": "L",
+   "status": "Backlog",
+   "depends": [
+    "P79"
+   ],
+   "read": [
+    "port/psp/host/psp_disc.c",
+    "port/psp/host/psp_disc_io.c"
+   ],
+   "title": "Last resort: load game data from the memory stick on demand (low profile)",
+   "description": "Only if P75-P78 cannot reach the PSP-1000 budget: in the low profile, read rarely used data from the EBOOT's DATA.PSAR when needed instead of keeping it resident. Full profile unchanged. Close as Won't fix if P79 passes without it.",
+   "done_when": "Either closed as not needed after P79, or the low profile fits with on-demand loading and no load stalls during fights."
   }
  ]
 };

@@ -739,6 +739,23 @@ window.BACKLOG_ARCHIVE = [
   "note": "psp_1p_init blanks the PRESS START BUTTON / NO CHALLENGER debug labels before boot; fight HUD in PPSSPP shows no P2-side prompt."
  },
  {
+  "id": "P71",
+  "order": 19,
+  "phase": "P5",
+  "size": "S",
+  "status": "Done",
+  "depends": [
+   "P70"
+  ],
+  "read": [
+   "port/docs/PSP.md"
+  ],
+  "title": "Release CI and packages",
+  "description": "GitHub Actions: on a v* tag, fetch PSPSDK (never committed), build the MVC2_RELEASE base EBOOT (checked with check_release_eboot.py) and the builders, package mvc2-psp-vX-windows.zip (exe + base/EBOOT.PBP), -macos.zip (universal .app with the base EBOOT inside), -linux-x64.tar.gz, -pypack.zip (base EBOOT + Python tools) and SHA256SUMS, each with README.txt and LICENSE.txt, and attach them to a draft GitHub Release. Manual runs upload the packages as workflow artifacts only.",
+  "done_when": "A v* tag creates a draft release with all four archives plus SHA256SUMS; nothing is published without a manual click; no archive contains copyrighted data.",
+  "note": "package.sh builds the four packages + SHA256SUMS (signed universal .app, pypack checked; psp_pack.py gained --icon0/--pic1). Manual CI run 43196580690 on macos-latest built, checked and packaged end to end; the draft-release step is only exercised by a v* tag."
+ },
+ {
   "id": "P64",
   "order": 20,
   "phase": "P5",
