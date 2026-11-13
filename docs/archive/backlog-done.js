@@ -933,6 +933,26 @@ window.BACKLOG_ARCHIVE = [
   "note": "PSP.md 'Hardware profile (P86)': intro/title 59.94 fps, attract demo fights 25-27 ms, character select 38 ms, 3v3 fights 36-50 ms; rendering-bound. Remaining work ticketed as P88-P91."
  },
  {
+  "id": "P89",
+  "order": 34,
+  "phase": "P4",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P86"
+  ],
+  "read": [
+   "port/host/fe/fe_mesh.c",
+   "port/psp/host/psp_packet.c",
+   "port/render/r_gu.c",
+   "port/render/r_gu_mesh.c"
+  ],
+  "title": "Hardware speed: PSP mesh wrapper (fe_mesh func_003F0500)",
+  "description": "P86 profile: mesh draw minus fl_clay_draw minus packet build leaves ~4 ms a fight frame in the port's func_003F0500 wrapper (format check, vertex-write pull, texture sync per clay, render-state hand-off). Measure its parts on hardware and move the hot ones PSP-side (no upstream changes).",
+  "done_when": "Wrapper <= 1 ms in the scripted 3v3 fight; screenshots bit-identical.",
+  "note": "Measured on hardware: the wrapper middle is 2.6-3.1 ms a fight frame (P86's ~4 ms included ~1 ms of profiler syscalls), 1.6-1.8 of it the per-draw render-state hand-off. r_gu.c/r_gu_mesh.c now skip unchanged light, matrix and clip copies (lights not renormalized): fight wrapper 3.83 -> 3.36 ms in the profile, game-state trace unchanged. The rest needs fe_mesh.c (P96)."
+ },
+ {
   "id": "P87",
   "order": 35,
   "phase": "P4",

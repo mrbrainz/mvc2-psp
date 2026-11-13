@@ -586,7 +586,7 @@ int fl_set_render_state(int id, uintptr_t val)
 {
     uint32_t v = (uint32_t)val;
     if (id >= 0x19 && id < 0x39) {
-        if (val) memcpy(R.matrices[id], (const void *)val, 64);
+        if (val && memcmp(R.matrices[id], (const void *)val, 64)) memcpy(R.matrices[id], (const void *)val, 64);
         return 1;
     }
     if (id >= 0x39 && id < 0x59) {
@@ -594,9 +594,15 @@ int fl_set_render_state(int id, uintptr_t val)
         return 1;
     }
     if (id >= 0x59 && id < 0x5C) {
+        /* P89: fe_mesh.c hands these over on every mesh draw; they change
+         * at scene setup. Same source bytes, same normalized light. */
+        static uint8_t raw[3][100];
+        static int raw_ok[3];
         uint8_t *l = R.lights[id - 0x59];
         float d[3], n;
-        if (val) memcpy(l, (const void *)val, 100);
+        if (val && raw_ok[id - 0x59] && !memcmp(raw[id - 0x59], (const void *)val, 100)) return 1;
+        if (val) { memcpy(l, (const void *)val, 100); memcpy(raw[id - 0x59], l, 100); raw_ok[id - 0x59] = 1; }
+        else raw_ok[id - 0x59] = 0;
         memcpy(d, l + 0x34, 12);
         n = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
         if (n > 0.f) { d[0] /= n; d[1] /= n; d[2] /= n; }
@@ -636,8 +642,9 @@ int fl_set_render_state(int id, uintptr_t val)
         R.tex_slots[id - 4] = v;
         break;
     case 0x14: fl_set_clear_color(v); break;
-    case 0x16: memcpy(R.matrices[0x16], (const void *)val, 64); break;
-    case 0x17: memcpy(R.matrices[0x17], (const void *)val, 64); break;
+    case 0x16: case 0x17:   /* P89: skip the store when unchanged */
+        if (memcmp(R.matrices[id], (const void *)val, 64)) memcpy(R.matrices[id], (const void *)val, 64);
+        break;
     case 0x18:
         if (val) {
             const int32_t *q = (const int32_t *)val;

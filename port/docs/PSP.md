@@ -241,6 +241,10 @@ Mesh draw = fl_clay_draw + packet build + the PSP mesh wrapper (fe_mesh.c
 func_003F0500, ~4 ms in fights). Game update is 1-2 ms; the GE waits
 ~0.2 ms: the frame is CPU-bound in rendering. Next: P88-P94.
 
+Mesh wrapper (P89): 2.6-3.1 ms real in fights (profiler syscalls ~1 us each
+inflated P86's figure); change guards in r_gu.c save ~0.5 ms; the rest is
+fe_mesh.c's per-draw hand-off (P96).
+
 Tex select (P90, fight6): 3.8-4.9 -> 1.0-1.4 ms in fights (O(1) resident
 lookup, psp_reslist.c); the rest is GS upload bookkeeping (P95).
 

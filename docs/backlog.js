@@ -84,6 +84,7 @@ window.BACKLOG = {
   "P85",
   "P86",
   "P87",
+  "P89",
   "P90",
   "P92"
  ],
@@ -130,24 +131,22 @@ window.BACKLOG = {
    "note": "Partial: psp_packet.c replaces the draw body, skipping the VU1 setup callbacks, vertex/UV packets, DMA tags and kicks; same-binary A/B (MVC2_PACKET_FULL) over PSPLink: frame 45.3 -> 39.8 ms, packet build 14.9 -> 9.4, 6 fight shots over ~1500 frames identical (ra_state_hash covers the skipped packet memory, so screenshots are the check). Left in func_003F0500__game (~9 ms): (1) func_003EA660__game tex select ~4.5 ms (ticketed as P90); (2) the other ~4.5 ms inside lite_body is __wrap_fe_sync_handle (~3.7 ms, called from __wrap_func_003EA660 in psp_fe_sync.c:139) plus o->wC != D_004C2AD4 format-toggle packet rebuilds (psp_packet.c:43 calling func_003EE8C0). In psp_fe_sync.c, seen[] is keyed on combined (pi<<16)|ti (re-checking shared textures/palettes) and check_fixed hashes 64 B descriptors + up to 1024 B palette byte-by-byte every frame; either wrap func_003EA130/func_003EBD00 (src/nq235_a.c, where all tex/pal loads, frees and unlocks pass) to set a dirty bitmap, or deduplicate ti (1..384) and pi (1..256) separately and hash uint32_t words. On o->wC != D_004C2AD4 when pol_ofs is unchanged, lite_body only needs func_003EE930(o) + func_003E0F60 unless cmap[h].ever is set."
   },
   {
-   "id": "P89",
-   "order": 34,
+   "id": "P96",
+   "order": 35,
    "phase": "P4",
    "size": "M",
    "status": "Ready",
    "depends": [
-    "P86"
+    "P89"
    ],
    "read": [
     "port/host/fe/fe_mesh.c",
-    "port/psp/host/psp_packet.c",
     "port/render/r_gu.c",
     "port/render/r_gu_mesh.c"
    ],
-   "title": "Hardware speed: PSP mesh wrapper (fe_mesh func_003F0500)",
-   "description": "P86 profile: mesh draw minus fl_clay_draw minus packet build leaves ~4 ms a fight frame in the port's func_003F0500 wrapper (format check, vertex-write pull, texture sync per clay, render-state hand-off). Measure its parts on hardware and move the hot ones PSP-side (no upstream changes).",
-   "done_when": "Wrapper <= 1 ms in the scripted 3v3 fight; screenshots bit-identical.",
-   "note": "Code inspection of fe_mesh.c:204-270 (~115-168 calls/frame) shows three main costs: (1) fe_mesh.c:230-237 calls fl_set_render_state 7 times + fl_set_clip_matrix every draw (memcpying four 64 B matrices, clipm, and three 100 B light structs 0x59..0x5B), and r_gu.c:586-606 runs sqrtf + 3 float divides to normalize each light direction vector 3 times per mesh draw (~350-500 sqrtf and >1000 divides/frame) even though 0x16, 0x17, clipm and lights 0x59..0x5B only change at scene/camera setup — guard them with a memcmp/direction check in r_gu.c or read directly in a PSP wrapper. (2) fe_mesh.c:224-226 calls fl_clay_textures + fe_sync_handle on every draw, duplicating the __wrap_func_003EA660 sync that just ran at line 203. (3) fe_mesh.c:207-209 calls fl_clay_build whenever D_004C2AD4 != fl_clay_format(h), which calls r_gu_sync(), frees all mesh buffers and re-parses the POL chunk from scratch when only the format word toggled; if pol_ofs is unchanged, update me->fmt, me->desc = desc_select(fmt, me->key) and me->cvalid = 0 in place."
+   "title": "Hardware speed: per-draw state hand-off in fe_mesh.c (upstream change)",
+   "description": "After P89 the func_003F0500 wrapper is still ~2.3 ms a fight frame: fe_mesh.c re-hands view/proj, world, clip and three lights (fl_set_render_state x7 + fl_set_clip_matrix) and re-syncs the clay's textures on every mesh draw, cache-miss bound on the PSP. Needs a change to shared fe_mesh.c (ask first): hand over only what changed, or let the renderer read the game's state at draw time; drop the texture re-sync that __wrap_func_003EA660 already did; update the format in place instead of fl_clay_build when only the format word toggles.",
+   "done_when": "Wrapper <= 1 ms in the scripted 3v3 fight; native/browser port unaffected; game-state trace and rendering unchanged."
   },
   {
    "id": "P88",
@@ -268,7 +267,8 @@ window.BACKLOG = {
     "P92",
     "P93",
     "P94",
-    "P95"
+    "P95",
+    "P96"
    ],
    "read": [
     "port/docs/ORACLE_FUZZ.md"

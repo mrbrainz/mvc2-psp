@@ -93,7 +93,7 @@ void fl_mat_mul(float out[16], const float a[16], const float b[16])
 
 void fl_set_clip_matrix(const float m[16])
 {
-    if (m) memcpy(clipm, m, sizeof clipm);
+    if (m && memcmp(clipm, m, sizeof clipm)) memcpy(clipm, m, sizeof clipm);   /* P89 */
     have_clipm = m != NULL;
 }
 
