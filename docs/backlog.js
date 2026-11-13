@@ -86,7 +86,8 @@ window.BACKLOG = {
   "P87",
   "P89",
   "P90",
-  "P92"
+  "P92",
+  "P93"
  ],
  "activities": [
   {
@@ -166,25 +167,6 @@ window.BACKLOG = {
    "description": "P86 profile: fl_clay_draw 13-15 ms in character select and fights for ~100 draws (~150 us each), mostly fixed per-draw cost (GU submit, matrices, clip prep, list restarts), not per-vertex work. Options: record each static mesh's GE commands once and replay them with sceGuCallList, merge ranges sharing a texture, fewer list restarts. Output must stay bit-identical.",
    "done_when": "fl_clay_draw <= 6 ms in the scripted 3v3 fight over PSPLink; screenshots match visually (bit-identical relaxed by user choice: VFPU rounding, range order).",
    "note": "Specific hotspots from PROFILE=2 (mvc2_psp.log) and code inspection: (1) Uncached RAM CPU read-back stalls: since P85 moved list_buf to 0x40000000, sceGuGetMemory returns uncached pointers, yet r_gu.c:1186 reads vv[idx[...]].x back from verts for depth-zoom z (use cached me->cpu or me->bb instead) and r_gu_mesh.c:569 (near_clip) reads from uncached vsrc when lit; also skip sceKernelDcacheWritebackRange (r_gu_mesh.c:585,700) when (uintptr_t)ptr & 0x40000000. (2) Pre-multiply scene-invariant matrices VP_full = view * proj * vpm * ge and VC = view * clipm once when 0x16/0x17/0x18/clipm change instead of 5-6 fl_mat_mul calls per draw (r_gu_mesh.c:708-751), and share bbox_corners between bbox_inside (line 756) and clip_bbox_inside (line 798). (3) 6-plane AABB frustum culling (all_out &= corner_code) in clip_bbox_inside/bbox_inside: in char select, 168/168 draws use clipping descriptors (desc 19/44..46) and 167 fail clip_bbox_inside, running clip_prepare on all 6324 verts (3.56 ms) when only 1 draw needs near_clip because off-screen meshes fail the guard-band check instead of being culled. (4) submit: tex bind takes 2.7 ms despite 95% VRAM hits because multi-material meshes alternate textures across me->range[], thrashing the 1-entry mesh_tex_key memo and sceGuTexFlush(); sort/merge MRange by (tex, diffuse, c0) at build_mesh time and move sceGuDisable(GU_CLIP_PLANES) (r_gu.c:1181) to list_open. Progress: psp_vfpu.S (psp-gcc) does fl_mat_mul and the ADC/clip_prepare vertex transforms on the VFPU, self-tested at startup (MVC2_NO_VFPU for A/B): fight fl_clay_draw ~15 -> ~13 ms, matrices + ADC 5.1 -> 3.5 ms (PROFILE=2), game-state trace unchanged. Whole-mesh culling and skipping uncached writebacks gave nothing in fights (~0.25 culls/frame). Next: sort ranges by texture (tex bind ~2 ms), VFPU outcodes, lighting."
-  },
-  {
-   "id": "P93",
-   "order": 36,
-   "phase": "P4",
-   "size": "S",
-   "status": "Ready",
-   "depends": [
-    "P86",
-    "P88"
-   ],
-   "read": [
-    "port/render/r_gu_mesh.c",
-    "port/platform/platform_psp.c",
-    "port/docs/PSP.md"
-   ],
-   "title": "Hardware speed: Allegrex VFPU for mesh matrices, clipping and lighting",
-   "description": "All 4x4 matrix multiplies (fl_mat_mul), bounding-box corner transforms (bbox_corners), per-vertex clip preparation (clip_prepare), ADC transforms, and 3-light normal dot products (colours_lit) in r_gu_mesh.c currently run in scalar MIPS FPU C (~7-8 ms/frame in fights and character select). Enable THREAD_ATTR_VFPU on the main thread and add VFPU routines (vmmul.q, vtfm4.q, vdot.t) for matrix multiply and vertex/lighting loops while preserving visual fidelity.",
-   "done_when": "Matrices + ADC + clip_prepare + colours_lit time in PROFILE=2 drops by >= 50% on PSP-2003; fight and character-select screenshots match."
   },
   {
    "id": "P94",

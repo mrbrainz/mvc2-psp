@@ -254,6 +254,11 @@ mean 2.96 -> 1.53 over the run, heaviest section 6.1 -> 2.1, worst 19.1 ->
 audio_psp.c): on the Allegrex, cost follows instructions per sample (~2.5
 CPI), not float vs int, so steady voices mix in tight runs per decoded block.
 
+VFPU (P88, P93; psp_vfpu.S, fight6, PROFILE=2, MVC2_NO_VFPU A/B):
+fl_clay_draw 17.6 -> 17.0 ms; clip_prepare 1.72 -> 1.25, matrices + ADC
+4.9 -> 4.4. Mesh cost is per draw (~115 draws, ~15 us each), not vertex
+math; fights have no lit draws.
+
 ## Real hardware (P82)
 
 Verified on a PSP-2003 with ARK-4. PPSSPP accepts all of these; hardware does not:

@@ -969,5 +969,25 @@ window.BACKLOG_ARCHIVE = [
   "description": "Hardware A/B (P83): with mesh submits off, the VU1 packet build (CPU only) also ran 3.4 ms faster, so the GE reading textures/CLUTs from main RAM seems to slow the CPU through bus contention, and each GU submit costs ~25 us. Keep the hottest mesh textures and CLUTs in free VRAM (~0.9 MB past the frame and depth buffers), PSP-side, and measure.",
   "done_when": "Hardware fight profile before/after over PSPLink; screenshot bit-identical; kept if the frame gets faster.",
   "note": "Textures (mesh and 2D) copied to free VRAM on first bind, dropped on update, reset at frame end when full, paused while a system dialog is up. Same-binary A/B (MVC2_NO_VRAM_TEX) over PSPLink: 3v3 fight 45.2 -> 42.5 ms (packet build 17.8 -> 16.0, fl_clay_draw 14.9 -> 14.2), fight screenshot bit-identical; save dialog not tested on hardware."
+ },
+ {
+  "id": "P93",
+  "order": 36,
+  "phase": "P4",
+  "size": "S",
+  "status": "Done",
+  "depends": [
+   "P86",
+   "P88"
+  ],
+  "read": [
+   "port/render/r_gu_mesh.c",
+   "port/platform/platform_psp.c",
+   "port/docs/PSP.md"
+  ],
+  "title": "Hardware speed: Allegrex VFPU for mesh matrices, clipping and lighting",
+  "description": "All 4x4 matrix multiplies (fl_mat_mul), bounding-box corner transforms (bbox_corners), per-vertex clip preparation (clip_prepare), ADC transforms, and 3-light normal dot products (colours_lit) in r_gu_mesh.c currently run in scalar MIPS FPU C (~7-8 ms/frame in fights and character select). Enable THREAD_ATTR_VFPU on the main thread and add VFPU routines (vmmul.q, vtfm4.q, vdot.t) for matrix multiply and vertex/lighting loops while preserving visual fidelity.",
+  "done_when": "Matrices + ADC + clip_prepare + colours_lit time in PROFILE=2 drops by >= 50% on PSP-2003; fight and character-select screenshots match.",
+  "note": "Partial: VFPU kernels for ADC/clip outcodes, bbox build and corners, and colours_lit (deduped per range) in psp_vfpu.S. fight6 PROFILE=2 A/B (MVC2_NO_VFPU): fl_clay_draw 17.6 -> 17.0 ms, clip_prepare 1.72 -> 1.25, matrices+ADC 4.9 -> 4.4; game-state trace unchanged. The 50% target is not reachable this way: the cost is per-draw overhead (~115 draws, ~15 us each), not vertex math, and fights have no lit draws."
  }
 ];

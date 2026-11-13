@@ -84,20 +84,12 @@ void fl_mat_identity(float m[16])
 /* P88: VFPU kernels (port/psp/host/psp_vfpu.S); MVC2_NO_VFPU (env.txt) keeps
  * the scalar C for A/B testing */
 void vfpu_mat_mul(float out[16], const float a[16], const float b[16]);
-void vfpu_xform_mvtx(const float m[16], const void *v, int n, float *out4);
-void vfpu_xform_gvtx(const float m[16], const void *v, int n, float *out4);
+int vfpu_adc_codes(const float m[16], const void *mvtx, int n, uint8_t *out);
+int vfpu_clip_codes(const float m[16], const void *gvtx, int n, void *out[2]);
+void vfpu_bbox_corners(const float m[16], float k[32], float *smax);
+void vfpu_bbox(const void *mvtx, int n, float out[6]);
+void vfpu_lit(const float p[26], const void *mvtx, const uint16_t *list, float *out3);
 static int use_vfpu = -1;
-static float *xf4;
-static int xf4_cap;
-static float *xf4_get(int n)
-{
-    if (xf4_cap < n) {
-        free(xf4);
-        xf4 = (float *)malloc((size_t)n * 4 * sizeof(float));
-        xf4_cap = xf4 ? n : 0;
-    }
-    return xf4;
-}
 static void fl_mat_mul_c(float out[16], const float a[16], const float b[16]);
 static void vfpu_init(void)
 {
@@ -108,6 +100,26 @@ static void vfpu_init(void)
     fl_mat_mul_c(r1, a, b);
     vfpu_mat_mul(r2, a, b);
     for (int i = 0; i < 16; i++) { float d = fabsf(r1[i] - r2[i]); if (d > e) e = d; }
+    {   /* P93: vfpu_lit against the scalar formula */
+        float p[26], o[3];
+        MVtx v;
+        uint16_t one = 0;
+        memset(&v, 0, sizeof v);
+        v.nrm[0] = 0.3f; v.nrm[1] = -0.5f; v.nrm[2] = 0.8f;
+        for (int i = 0; i < 18; i++) p[i] = (float)((i * 29) % 13) * 0.1f - 0.4f;
+        p[18] = 3.f; p[19] = 5.f; p[20] = 7.f; p[21] = 9.f; p[22] = 20.f; p[23] = 13.f; p[24] = 17.f;
+        { int n = 1; memcpy(&p[25], &n, 4); }
+        vfpu_lit(p, &v, &one, o);
+        for (int c = 0; c < 3; c++) {
+            float s = p[18 + c];
+            for (int j = 0; j < 3; j++) {
+                float d = v.nrm[0] * p[j * 3] + v.nrm[1] * p[j * 3 + 1] + v.nrm[2] * p[j * 3 + 2];
+                s += p[9 + j * 3 + c] * (d < 0.f ? 0.f : d);
+            }
+            float d = fabsf(floorf(fminf(s, p[21]) * p[22 + c]) - o[c]);
+            if (d > e) e = d;
+        }
+    }
     if (e > 1e-4f) { fprintf(stderr, "[gu] VFPU self-test failed (err %g): scalar path\n", (double)e); use_vfpu = 0; }
 }
 
@@ -443,6 +455,11 @@ static void v3norm(float v[3])
     if (n > 0.f) { v[0] /= n; v[1] /= n; v[2] /= n; }
 }
 
+static uint32_t *lit_stamp, lit_tag;
+static uint16_t *lit_list;
+static float *lit_out;
+static int lit_cap;
+
 /* lit programs (format 0x100), per draw: the world matrix moves the lights */
 static void colours_lit(MMesh *me, GVtx *g, const float modv[4], float cscale)
 {
@@ -463,6 +480,14 @@ static void colours_lit(MMesh *me, GVtx *g, const float modv[4], float cscale)
     }
     float lcols[3][3];
     for (int k = 0; k < 3; k++) memcpy(lcols[k], r_light(k) + 0x04, 12);
+    if (lit_cap < me->nverts) {
+        free(lit_stamp); free(lit_list); free(lit_out);
+        lit_cap = me->nverts;
+        lit_stamp = (uint32_t *)calloc((size_t)lit_cap, sizeof *lit_stamp);
+        lit_list = (uint16_t *)malloc((size_t)lit_cap * sizeof *lit_list);
+        lit_out = (float *)malloc((size_t)lit_cap * 3 * sizeof *lit_out);
+        if (!lit_stamp || !lit_list || !lit_out) { lit_cap = 0; return; }
+    }
     for (int r = 0; r < me->nrange; r++) {
         const MRange *rg = &me->range[r];
         float lc[3][3], la[4];
@@ -474,8 +499,28 @@ static void colours_lit(MMesh *me, GVtx *g, const float modv[4], float cscale)
         }
         for (int c = 0; c < 3; c++) la[c] = fminf(cscale, lamb_base[c] * rg->c0[c]);
         la[3] = floorf(128.f * rg->diffuse[3]);
+        /* P93: each vertex once per range (indices repeat across triangles) */
+        int nu = 0;
+        if (++lit_tag == 0) { memset(lit_stamp, 0, (size_t)lit_cap * sizeof *lit_stamp); lit_tag = 1; }
         for (int k = 0; k < rg->count; k++) {
             int i = me->idx[rg->first + k];
+            if (lit_stamp[i] != lit_tag) { lit_stamp[i] = lit_tag; lit_list[nu++] = (uint16_t)i; }
+        }
+        if (use_vfpu > 0) {
+            float p[26], col[4];
+            for (int j = 0; j < 3; j++) memcpy(&p[j * 3], ldir[j], 12);
+            for (int j = 0; j < 3; j++) memcpy(&p[9 + j * 3], lc[j], 12);
+            memcpy(&p[18], la, 12); p[21] = cscale; memcpy(&p[22], modv, 12); memcpy(&p[25], &nu, 4);
+            vfpu_lit(p, me->cpu, lit_list, lit_out);
+            col[3] = floorf(la[3] * modv[3]);
+            for (int q = 0; q < nu; q++) {
+                memcpy(col, &lit_out[q * 3], 12);
+                g[lit_list[q]].c = ge_color(col, me->textured);
+            }
+            continue;
+        }
+        for (int k = 0; k < nu; k++) {
+            int i = lit_list[k];
             const float *n = me->cpu[i].nrm;
             float d[3], col[4];
             for (int j = 0; j < 3; j++) {
@@ -564,17 +609,16 @@ static int clip_prepare(const float clip[16], const GVtx *g, int nverts)
         cl_xyw = (float *)malloc((size_t)nverts * 3 * sizeof(float));
         if (!cl_code || !cl_xyw) { cl_cap = 0; return 0; }
     }
-    const float *t4 = use_vfpu > 0 ? xf4_get(nverts) : NULL;
-    if (t4) vfpu_xform_gvtx(clip, g, nverts, (float *)t4);
+    if (use_vfpu > 0) {   /* P93: transform and outcodes on the VFPU */
+        void *o[2] = { cl_code, cl_xyw };
+        return vfpu_clip_codes(clip, g, nverts, o);
+    }
     for (int i = 0; i < nverts; i++) {
         const GVtx *p = &g[i];
         float x, y, w;
-        if (t4) { x = t4[4 * i]; y = t4[4 * i + 1]; w = t4[4 * i + 3]; }
-        else {
-            x = p->x * clip[0] + p->y * clip[4] + p->z * clip[8] + clip[12];
-            y = p->x * clip[1] + p->y * clip[5] + p->z * clip[9] + clip[13];
-            w = p->x * clip[3] + p->y * clip[7] + p->z * clip[11] + clip[15];
-        }
+        x = p->x * clip[0] + p->y * clip[4] + p->z * clip[8] + clip[12];
+        y = p->x * clip[1] + p->y * clip[5] + p->z * clip[9] + clip[13];
+        w = p->x * clip[3] + p->y * clip[7] + p->z * clip[11] + clip[15];
         float gw = GUARD * w;
         uint8_t c = (uint8_t)((w < NEAR_W) | (x > gw) << 1 | (-x > gw) << 2 | (y > gw) << 3 | (-y > gw) << 4);
         cl_code[i] = c; any |= c;
@@ -637,6 +681,12 @@ static int near_clip(const GVtx *g, const uint16_t *idx, int count, GVtx **ov, u
 static int bbox_corners(MMesh *me, const float cm[16], float k[8][4], float *smaxp)
 {
     float smax = 0.f;
+    if (!me->bbok && use_vfpu > 0 && me->nverts > 0) {   /* P93 */
+        vfpu_bbox(me->cpu, me->nverts, me->bb);
+        if (!(me->bb[0] == me->bb[0]) || !(me->bb[1] == me->bb[1]) || !(me->bb[2] == me->bb[2]) ||
+            !(me->bb[3] == me->bb[3]) || !(me->bb[4] == me->bb[4]) || !(me->bb[5] == me->bb[5])) return 0;
+        me->bbok = 1;
+    }
     if (!me->bbok) {
         for (int j = 0; j < 3; j++) { me->bb[j] = 3e38f; me->bb[3 + j] = -3e38f; }
         for (int i = 0; i < me->nverts; i++)
@@ -647,6 +697,14 @@ static int bbox_corners(MMesh *me, const float cm[16], float k[8][4], float *sma
                 if (q > me->bb[3 + j]) me->bb[3 + j] = q;
             }
         me->bbok = 1;
+    }
+    if (use_vfpu > 0) {   /* P93 */
+        for (int c = 0; c < 8; c++) {
+            k[c][0] = me->bb[(c & 1) ? 3 : 0]; k[c][1] = me->bb[(c & 2) ? 4 : 1]; k[c][2] = me->bb[(c & 4) ? 5 : 2];
+        }
+        vfpu_bbox_corners(cm, &k[0][0], &smax);
+        *smaxp = smax;
+        return smax < 1e30f;
     }
     for (int c = 0; c < 8; c++) {
         float q[3] = { me->bb[(c & 1) ? 3 : 0], me->bb[(c & 2) ? 4 : 1], me->bb[(c & 4) ? 5 : 2] };
@@ -807,13 +865,11 @@ static int clay_draw(int h)
                 out_cap = me->nverts;
                 out = (uint8_t *)malloc((size_t)out_cap);
             }
-            const float *t4 = use_vfpu > 0 ? xf4_get(me->nverts) : NULL;
-            if (t4) vfpu_xform_mvtx(cm, me->cpu, me->nverts, (float *)t4);
-            for (int i = 0; out && i < me->nverts; i++) {
+            if (out && use_vfpu > 0) any = vfpu_adc_codes(cm, me->cpu, me->nverts, out);   /* P93 */
+            else for (int i = 0; out && i < me->nverts; i++) {
                 const float *q = me->cpu[i].pos;
                 float k[4];
-                if (t4) memcpy(k, t4 + 4 * i, sizeof k);
-                else for (int j = 0; j < 4; j++) k[j] = q[0] * cm[j] + q[1] * cm[4 + j] + q[2] * cm[8 + j] + cm[12 + j];
+                for (int j = 0; j < 4; j++) k[j] = q[0] * cm[j] + q[1] * cm[4 + j] + q[2] * cm[8 + j] + cm[12 + j];
                 k[3] = fabsf(k[3]);
                 out[i] = fabsf(k[0]) > k[3] || fabsf(k[1]) > k[3] || fabsf(k[2]) > k[3];
                 any |= out[i];
