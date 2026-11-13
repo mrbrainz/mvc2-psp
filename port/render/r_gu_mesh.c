@@ -81,7 +81,44 @@ void fl_mat_identity(float m[16])
     m[0] = m[5] = m[10] = m[15] = 1.f;
 }
 
+/* P88: VFPU kernels (port/psp/host/psp_vfpu.S); MVC2_NO_VFPU (env.txt) keeps
+ * the scalar C for A/B testing */
+void vfpu_mat_mul(float out[16], const float a[16], const float b[16]);
+void vfpu_xform_mvtx(const float m[16], const void *v, int n, float *out4);
+void vfpu_xform_gvtx(const float m[16], const void *v, int n, float *out4);
+static int use_vfpu = -1;
+static float *xf4;
+static int xf4_cap;
+static float *xf4_get(int n)
+{
+    if (xf4_cap < n) {
+        free(xf4);
+        xf4 = (float *)malloc((size_t)n * 4 * sizeof(float));
+        xf4_cap = xf4 ? n : 0;
+    }
+    return xf4;
+}
+static void fl_mat_mul_c(float out[16], const float a[16], const float b[16]);
+static void vfpu_init(void)
+{
+    float a[16], b[16], r1[16], r2[16], e = 0.f;
+    use_vfpu = getenv("MVC2_NO_VFPU") == NULL;
+    if (!use_vfpu) return;
+    for (int i = 0; i < 16; i++) { a[i] = (float)((i * 37) % 11) - 4.5f; b[i] = (float)((i * 23) % 7) * 0.25f - 0.6f; }
+    fl_mat_mul_c(r1, a, b);
+    vfpu_mat_mul(r2, a, b);
+    for (int i = 0; i < 16; i++) { float d = fabsf(r1[i] - r2[i]); if (d > e) e = d; }
+    if (e > 1e-4f) { fprintf(stderr, "[gu] VFPU self-test failed (err %g): scalar path\n", (double)e); use_vfpu = 0; }
+}
+
 void fl_mat_mul(float out[16], const float a[16], const float b[16])
+{
+    if (use_vfpu < 0) vfpu_init();
+    if (use_vfpu) { vfpu_mat_mul(out, a, b); return; }
+    fl_mat_mul_c(out, a, b);
+}
+
+static void fl_mat_mul_c(float out[16], const float a[16], const float b[16])
 {
     float t[16];
     for (int i = 0; i < 4; i++)
@@ -527,11 +564,17 @@ static int clip_prepare(const float clip[16], const GVtx *g, int nverts)
         cl_xyw = (float *)malloc((size_t)nverts * 3 * sizeof(float));
         if (!cl_code || !cl_xyw) { cl_cap = 0; return 0; }
     }
+    const float *t4 = use_vfpu > 0 ? xf4_get(nverts) : NULL;
+    if (t4) vfpu_xform_gvtx(clip, g, nverts, (float *)t4);
     for (int i = 0; i < nverts; i++) {
         const GVtx *p = &g[i];
-        float x = p->x * clip[0] + p->y * clip[4] + p->z * clip[8] + clip[12];
-        float y = p->x * clip[1] + p->y * clip[5] + p->z * clip[9] + clip[13];
-        float w = p->x * clip[3] + p->y * clip[7] + p->z * clip[11] + clip[15];
+        float x, y, w;
+        if (t4) { x = t4[4 * i]; y = t4[4 * i + 1]; w = t4[4 * i + 3]; }
+        else {
+            x = p->x * clip[0] + p->y * clip[4] + p->z * clip[8] + clip[12];
+            y = p->x * clip[1] + p->y * clip[5] + p->z * clip[9] + clip[13];
+            w = p->x * clip[3] + p->y * clip[7] + p->z * clip[11] + clip[15];
+        }
         float gw = GUARD * w;
         uint8_t c = (uint8_t)((w < NEAR_W) | (x > gw) << 1 | (-x > gw) << 2 | (y > gw) << 3 | (-y > gw) << 4);
         cl_code[i] = c; any |= c;
@@ -764,10 +807,13 @@ static int clay_draw(int h)
                 out_cap = me->nverts;
                 out = (uint8_t *)malloc((size_t)out_cap);
             }
+            const float *t4 = use_vfpu > 0 ? xf4_get(me->nverts) : NULL;
+            if (t4) vfpu_xform_mvtx(cm, me->cpu, me->nverts, (float *)t4);
             for (int i = 0; out && i < me->nverts; i++) {
                 const float *q = me->cpu[i].pos;
                 float k[4];
-                for (int j = 0; j < 4; j++) k[j] = q[0] * cm[j] + q[1] * cm[4 + j] + q[2] * cm[8 + j] + cm[12 + j];
+                if (t4) memcpy(k, t4 + 4 * i, sizeof k);
+                else for (int j = 0; j < 4; j++) k[j] = q[0] * cm[j] + q[1] * cm[4 + j] + q[2] * cm[8 + j] + cm[12 + j];
                 k[3] = fabsf(k[3]);
                 out[i] = fabsf(k[0]) > k[3] || fabsf(k[1]) > k[3] || fabsf(k[2]) > k[3];
                 any |= out[i];

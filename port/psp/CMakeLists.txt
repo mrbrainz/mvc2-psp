@@ -83,6 +83,10 @@ foreach(f psp_entry psp_gu_shim psp_audio_hw psp_disc_io psp_save)
             "${PSP_DIR}/host/psp_save.h" "${CMAKE_BINARY_DIR}/psp_icon0.h")
   list(APPEND PSP_EABI_OBJS ${_o})
 endforeach()
+add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/psp_vfpu.o"   # P88: VFPU kernels (clang cannot assemble VFPU)
+  COMMAND ${PSPDEV}/bin/psp-gcc -c "${PSP_DIR}/host/psp_vfpu.S" -o "${CMAKE_BINARY_DIR}/psp_vfpu.o"
+  DEPENDS "${PSP_DIR}/host/psp_vfpu.S")
+list(APPEND PSP_EABI_OBJS "${CMAKE_BINARY_DIR}/psp_vfpu.o")
 # The ~16k EE data units go in through an archive (their paths overflow the
 # command line collect2 builds), whole: every unit is kept, as upstream links
 # them all; --sort-section=name puts them in EE order regardless.
