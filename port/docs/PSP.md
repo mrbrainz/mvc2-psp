@@ -241,6 +241,9 @@ Mesh draw = fl_clay_draw + packet build + the PSP mesh wrapper (fe_mesh.c
 func_003F0500, ~4 ms in fights). Game update is 1-2 ms; the GE waits
 ~0.2 ms: the frame is CPU-bound in rendering. Next: P88-P94.
 
+Tex select (P90, fight6): 3.8-4.9 -> 1.0-1.4 ms in fights (O(1) resident
+lookup, psp_reslist.c); the rest is GS upload bookkeeping (P95).
+
 Audio (P92, fight6 script, `[audio]` fill line, ms per 1024-frame fill):
 mean 2.96 -> 1.53 over the run, heaviest section 6.1 -> 2.1, worst 19.1 ->
 5.9. The mixer is fixed point with linear interpolation (mix_psp.c,

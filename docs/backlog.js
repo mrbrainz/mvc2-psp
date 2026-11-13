@@ -84,17 +84,18 @@ window.BACKLOG = {
   "P85",
   "P86",
   "P87",
+  "P90",
   "P92"
  ],
  "activities": [
   {
-   "id": "P90",
-   "order": 32,
+   "id": "P95",
+   "order": 33,
    "phase": "P4",
    "size": "M",
    "status": "Ready",
    "depends": [
-    "P86"
+    "P90"
    ],
    "read": [
     "src/b10s_0_f.c",
@@ -104,10 +105,9 @@ window.BACKLOG = {
     "port/psp/host/psp_packet.c",
     "port/psp/host/psp_fe_sync.c"
    ],
-   "title": "Hardware speed: GS-resident list lookup (func_003EBA40)",
-   "description": "P84 note: tex select is ~4.5 ms in fights, 3.9 of it func_003EBA40 walking the resident list D_004C2AB4 (~220 calls, ~18 us each). An exact O(1) index needs every list mutator wrapped (~10 functions in 7 src files, some busy-wait on the list); or prove the PSP needs less of the GS bookkeeping.",
-   "done_when": "Tex select <= 1 ms in the scripted 3v3 fight; screenshots and fight outcome unchanged.",
-   "note": "No mutators need wrapping for an exact O(1) lookup: every node in D_004C2AB4 lives in the static pool D_006267A0[0..0x37F] (src/s2m.c:26-63), and when a node is unlinked by func_003EB9C0 (src/r3_d.c:46-79) or reset by func_003EB900 its key, prev and next fields are zeroed. Wrapping only --wrap=func_003EBA40(u32 key) with a direct-indexed table (384 tex slots at D_006207A0 + 256 pal slots at D_0061C7A0, stride 0x40) storing the last returned N *n can self-verify in O(1): if (n && n->key == key && (n == D_004C2AB4 || (n->prev && n->prev->next == n))) return n; before falling back to __real_func_003EBA40(key). Also in __wrap_func_003EA660 (psp_fe_sync.c), if all (ti, pi) entries in o + 0xF0 (o->w2C count) were already checked this frame and their D_004C2AB4 nodes remain resident, func_003EA660__game is a no-op (return 0)."
+   "title": "Hardware speed: GS upload bookkeeping in tex select (func_003EA660)",
+   "description": "After P90, fight tex select is still 1.0-1.4 ms: lists with non-resident textures run the game's GS upload path (func_003EBE70/EBF30 allocation, EBA80/EBC20 insert, func_003DBD80 packet build). On PSP textures go through psp_fe_sync/VRAM, so find which of this bookkeeping the PSP renderer actually needs and replace the rest with a PSP-side equivalent.",
+   "done_when": "Tex select <= 1 ms in the scripted 3v3 fight; game-state trace and rendering unchanged (A/B on hardware)."
   },
   {
    "id": "P84",
@@ -267,7 +267,8 @@ window.BACKLOG = {
     "P91",
     "P92",
     "P93",
-    "P94"
+    "P94",
+    "P95"
    ],
    "read": [
     "port/docs/ORACLE_FUZZ.md"

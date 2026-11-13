@@ -874,6 +874,28 @@ window.BACKLOG_ARCHIVE = [
   "note": "Fixed-point mixer: linear interpolation, gains folded into voice/BGM mixes, own int BGM resampler, voices mixed in tight runs per decoded block, integer clamp to s16. PSP-2003 fight6: mean fill 2.96 -> 1.53 ms, worst 19.1 -> 5.9 ms (PSP.md); listened on hardware, no regressions."
  },
  {
+  "id": "P90",
+  "order": 32,
+  "phase": "P4",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P86"
+  ],
+  "read": [
+   "src/b10s_0_f.c",
+   "src/s9b_a.c",
+   "src/s2m.c",
+   "src/r3_d.c",
+   "port/psp/host/psp_packet.c",
+   "port/psp/host/psp_fe_sync.c"
+  ],
+  "title": "Hardware speed: GS-resident list lookup (func_003EBA40)",
+  "description": "P84 note: tex select is ~4.5 ms in fights, 3.9 of it func_003EBA40 walking the resident list D_004C2AB4 (~220 calls, ~18 us each). An exact O(1) index needs every list mutator wrapped (~10 functions in 7 src files, some busy-wait on the list); or prove the PSP needs less of the GS bookkeeping.",
+  "done_when": "Tex select <= 1 ms in the scripted 3v3 fight; screenshots and fight outcome unchanged.",
+  "note": "psp_reslist.c wraps func_003EBA40 with a direct texture/palette-slot index, verified O(1) against the node (unlinked nodes are zeroed, keys unique); psp_fe_sync.c skips func_003EA660 when every entry is resident (a no-op then). fight6 over PSPLink: fight tex select 3.8-4.9 -> 1.0-1.4 ms, game-state trace matches the cache-off A/B (MVC2_NO_RESLIST_CACHE); the rest is real GS uploads (P95)."
+ },
+ {
   "id": "P85",
   "order": 33,
   "phase": "P4",
