@@ -192,6 +192,30 @@ never drops below 8 MB.
 `-DMVC2_PSP_HEAPMAP=ON` logs free gaps and live bytes by caller with
 `DRAWLOG=1`.
 
+### PSP-1000 budget (P73)
+
+2026-11-22, PPSSPP 1.20.4, `arcade_psp.txt` full run (28,380 frames),
+PSP-2000 model with `DRAWLOG=1`, plus a `HEAPMAP` build for the callers. Peaks
+over the run; the PSP-1000 (24 MB user partition, about 23.3 MB once the
+1 MB kernel reserve is taken out) was booted in PPSSPP only, and failed at
+the EE heap allocation. Not measured on hardware.
+
+| Consumer | Now (MB) | Low target (MB) | How (ticket) |
+|---|---:|---:|---|
+| Program image: `.text` 3.5, `.data` 0.6, `.bss` 4.7 | 8.9 | 5.5 | `.bss` holds 1.5 MB of unused oracle buffers (`state_dump.c`), a 1 MB GE display list and the 1.5 MB EE BSS (P77) |
+| Thread stacks (main, audio 64 KB, watchdog, callback) | 0.3 | 0.3 | |
+| EE heap (game arena 22 MB, 6 MB handle pool inside it) | 23.0 | 16.5 | arena written 16.2 MB, highest offset 21.3; pool written 4.4 (P75) |
+| Music: whole ADX track in one `disc_load` block | 4.7 | 0.1 | stream it from the disc (P78) |
+| Renderer: textures 4.0, char pages 1.6, meshes 0.85, CLUTs 0.15 | 5.7 | 2.5 | (P76) |
+| Sound banks (`hd_bank_load`) | 1.4 | 1.4 | |
+| Other malloc | 0.8 | 0.5 | |
+| **Total** | **44.8** | **26.8** | PSP-1000 has about 23.3 |
+
+Even at these targets the PSP-1000 is short by about 3.5 MB. The EE arena
+target is the pages it has ever written, not its peak live use, which is not
+measured yet (P75 has to measure it). It fits only if the arena's live peak
+is about 13 MB or lower, or if game data is loaded on demand (P80).
+
 ## PSPLink (hardware over USB)
 
 Build the PSP side from source (`git clone https://github.com/pspdev/psplinkusb`

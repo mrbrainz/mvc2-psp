@@ -989,5 +989,22 @@ window.BACKLOG_ARCHIVE = [
   "description": "All 4x4 matrix multiplies (fl_mat_mul), bounding-box corner transforms (bbox_corners), per-vertex clip preparation (clip_prepare), ADC transforms, and 3-light normal dot products (colours_lit) in r_gu_mesh.c currently run in scalar MIPS FPU C (~7-8 ms/frame in fights and character select). Enable THREAD_ATTR_VFPU on the main thread and add VFPU routines (vmmul.q, vtfm4.q, vdot.t) for matrix multiply and vertex/lighting loops while preserving visual fidelity.",
   "done_when": "Matrices + ADC + clip_prepare + colours_lit time in PROFILE=2 drops by >= 50% on PSP-2003; fight and character-select screenshots match.",
   "note": "Partial: VFPU kernels for ADC/clip outcodes, bbox build and corners, and colours_lit (deduped per range) in psp_vfpu.S. fight6 PROFILE=2 A/B (MVC2_NO_VFPU): fl_clay_draw 17.6 -> 17.0 ms, clip_prepare 1.72 -> 1.25, matrices+ADC 4.9 -> 4.4; game-state trace unchanged. The 50% target is not reachable this way: the cost is per-draw overhead (~115 draws, ~15 us each), not vertex math, and fights have no lit draws."
+ },
+ {
+  "id": "P73",
+  "order": 42,
+  "phase": "P6",
+  "size": "S",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/docs/PSP.md",
+   "port/psp/host/psp_ee_heap.c",
+   "port/psp/host/psp_ee_hwm.c"
+  ],
+  "title": "PSP-1000 memory budget",
+  "description": "Measure every consumer against the PSP-1000's user memory (~24 MB): ELF sections (largest static symbols), EE heap high-water, renderer (textures, atlases, mesh buffers, CLUTs), audio, PSPSDK/newlib and kernel allocations. Run a full arcade run in PPSSPP with the PSP-1000 model. Set a per-consumer target budget for the low profile.",
+  "done_when": "PSP.md has the per-consumer table, the PSP-1000 total and a target budget per consumer that fits with headroom, without loading game data from the memory stick (or the shortfall if it cannot).",
+  "note": "PSP.md 'PSP-1000 budget (P73)': a full arcade run in PPSSPP peaks at 44.8 MB (EE heap 23, image 8.9, renderer 5.7, a whole music track 4.7). The low targets add up to 26.8 MB against about 23.3 MB on the PSP-1000, so it is still short by about 3.5 MB unless the arena's live peak (not measured yet, P75) is about 13 MB or lower, or P80 is done. Booting as a PSP-1000 in PPSSPP fails at the EE heap allocation."
  }
 ];

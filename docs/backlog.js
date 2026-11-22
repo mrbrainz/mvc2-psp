@@ -79,6 +79,7 @@ window.BACKLOG = {
   "P69",
   "P70",
   "P71",
+  "P73",
   "P81",
   "P82",
   "P85",
@@ -276,22 +277,6 @@ window.BACKLOG = {
    "done_when": "Selected seeds match frame for frame."
   },
   {
-   "id": "P73",
-   "order": 42,
-   "phase": "P6",
-   "size": "S",
-   "status": "Backlog",
-   "depends": [],
-   "read": [
-    "port/docs/PSP.md",
-    "port/psp/host/psp_ee_heap.c",
-    "port/psp/host/psp_ee_hwm.c"
-   ],
-   "title": "PSP-1000 memory budget",
-   "description": "Measure every consumer against the PSP-1000's user memory (~24 MB): ELF sections (largest static symbols), EE heap high-water, renderer (textures, atlases, mesh buffers, CLUTs), audio, PSPSDK/newlib and kernel allocations. Run a full arcade run in PPSSPP with the PSP-1000 model. Set a per-consumer target budget for the low profile.",
-   "done_when": "PSP.md has the per-consumer table, the PSP-1000 total and a target budget per consumer that fits with headroom, without loading game data from the memory stick (or the shortfall if it cannot)."
-  },
-  {
    "id": "P74",
    "order": 43,
    "phase": "P6",
@@ -451,6 +436,21 @@ window.BACKLOG = {
    "title": "Release packaging",
    "description": "EBOOT icon/title, user guide for supplying own disc data.",
    "done_when": "Installable EBOOT + PSP section in USER_GUIDE.md."
+  },
+  {
+   "id": "P97",
+   "order": 52,
+   "phase": "P4",
+   "size": "S",
+   "status": "Ready",
+   "depends": [],
+   "read": [
+    "port/psp/host/psp_fe_sync.c",
+    "port/psp/host/psp_reslist.c"
+   ],
+   "title": "VS screen: corrupt and wrong hex portraits between fights",
+   "description": "Seen in PPSSPP (2026-11-22, arcade_psp.txt run, PSP-2000 model): on the pre-fight VS screen one hex portrait shows noise, some portraits repeat, and some draw as unclipped rectangles. Fights look clean. Suspects: P85 partial texture-sample sync and P90 resident lookup keeping a stale texture or palette when the screen reloads portraits into the same handles. Bisect against the commit before P85 (f9492a53f) first.",
+   "done_when": "The VS screen matches the desktop build in PPSSPP over a full arcade run (screenshots), cause noted."
   }
  ]
 };
