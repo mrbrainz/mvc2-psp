@@ -489,6 +489,34 @@ ADC box test and mesh indices (P83, 2026-11-23, PSP-2003, `fight6`, `PROFILE=1 N
 - **Measuring:** with temporary counters in, runs varied by about +-0.2 ms, not
   0.05. Use A/B pairs in the same build and repeat each one.
 
+Mesh submit cost and swizzled textures (P109, 2026-11-23, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1`, two runs each):
+- **A submit's own CPU work is small:** writing the projection words twice
+  per submit adds 0.04 ms a frame, and binding each texture twice adds
+  0.07 ms. Skipping the depth-zoom sampling saves 0.2 ms; the texscale
+  divides save nothing. Skipping texture binds or projection words looks
+  like -1 ms, but it changes what the GE draws. So most of P107's ~18 us
+  per submit is the GE's main-RAM traffic slowing the CPU, not submit code.
+- **Where the GE reads RAM:** about 33 texture binds a fight frame miss the
+  VRAM cache (~870 KB of texture size, mostly IDX8, ~280 KB 8888); 14 hit.
+  New `PROFILE` counters: `mesh tex RAM binds`, `mesh tex RAM KB bound`.
+- **The change:** textures (when the padded height is a multiple of 8) and
+  the character atlas pages are stored swizzled: 16-byte x 8-row blocks,
+  which the GE fetches in far fewer bus transactions. `tex_copy` and the
+  tile decoder write the swizzled layout, and the binds set the swizzle bit.
+  Sampling is the same. `MVC2_NO_SWIZZLE=1` stores them row-linear.
+- **Result against HEAD:** render pass 18.59 -> 17.86-17.88 ms,
+  `fl_clay_draw` 6.93 -> 6.88-6.90 ms. In normal mode, fight display fps
+  went from 14.98, 14.98, 27.16, 11.99, 10.47 to 14.98, 14.98, 22-27.6,
+  14.98, 11.4-12.0. Block 3 varies that much between runs. PPSSPP shots
+  f1-f6 are byte-identical to HEAD.
+- **Mesh pool size:** with swizzling, 192 KB is the same as 256 KB within
+  noise, and 320 KB is worse (18.13 ms). It stays at 256 KB.
+- **Layout traps:** adding an `int` to `TexRec` (48 -> 52 bytes) cost about
+  0.5 ms, and probe code in the submit path shifted results by 0.3-0.4 ms.
+  Measure A/B pairs within one build, and re-measure HEAD on the same day.
+- **Left:** the rest of the RAM traffic (P111) and the per-draw work before
+  submit (P110).
+
 Hot routines first in .text (P101, 2026-11-23, PSP-2003, `fight6`, `PROFILE=1`):
 - **How it works:** every o32 TU is built with `-ffunction-sections`, and
   `port/psp/hot_order.ld` (`ld --section-ordering-file`) puts the 171

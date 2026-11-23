@@ -1204,6 +1204,25 @@ window.BACKLOG_ARCHIVE = [
   "note": "Patched fe_mesh.c copy (port/psp/patches) + psp_mesh_state.c: the renderer reads the game's matrices in place, lights only for lit draws; PPSSPP fight wrapper 1.24 -> 0.68 ms, state dump A/B 0 diverging words, MVC2_MESH_CHECK 1.56 M draws unchanged. PSP-2003 fight6: profiled wrapper 3.53 -> 2.15 ms (about 3.0 -> 1.6 ms once the profiler's own ~0.5 ms is removed); 0 format rebuilds, and the rest is spread over small per-draw calls (PSP.md). Then one psp_mesh_predraw() call replaces the whole pre-draw stretch (fe_sync_state, texture re-sync, hand-off, logs): character select 0.5-1.6 ms a drawn step faster, fights within noise; state dump and shots unchanged. The 1 ms target was not reached: what is left is call and cache-miss cost spread over the draw."
  },
  {
+  "id": "P109",
+  "order": 40,
+  "phase": "P4",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P83"
+  ],
+  "read": [
+   "port/render/r_gu.c",
+   "port/render/r_gu_mesh.c",
+   "port/docs/PSP.md"
+  ],
+  "title": "Hardware speed: mesh submit CPU cost (r_gu_mesh_draw)",
+  "description": "About 150 submits a fight frame at ~18 us CPU each (texture part ~6 us, GE words ~6 us, blend memo + depth zoom ~4.4 us, flush ~1.5 us; P107 by removal), ~2.9 ms of fl_clay_draw. Scalar FPU code is slow on the Allegrex (P83: C bbox corners 8.9 us vs 0.86 us in VFPU registers), so move the depth-zoom sampling and texscale maths to VFPU registers, and cut the per-submit record reads. Output must stay identical.",
+  "done_when": "Submit cost per fight frame cut by >= 1.5 ms (fl_clay_draw, PROFILE=1 NO_FRAME_SKIP=1, fight6 on PSP-2003), PPSSPP shots f1-f6 unchanged.",
+  "note": "Premise revised: doubling the projection words or the texture binds adds only 0.04/0.07 ms, so a submit's own CPU work is small; the P107 'submit cost' is mostly the GE's main-RAM traffic slowing the CPU (33 texture binds a fight frame come from RAM). Textures and character atlas pages are now stored swizzled (MVC2_NO_SWIZZLE=1: off): render pass 18.59 -> 17.87 ms, fl_clay_draw 6.93 -> 6.89 (PSP-2003, fight6, two runs each), PPSSPP shots f1-f6 identical. RAM traffic left in P111."
+ },
+ {
   "id": "P73",
   "order": 42,
   "phase": "P6",

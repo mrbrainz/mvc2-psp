@@ -41,6 +41,7 @@
 #define SCR_W 480
 #define SCR_H 272
 #define BUF_W 512
+extern int r_gu_char_swz;   /* r_gu_char.c (P109) */
 #define MAX_TEX 384             /* the game's texture records (D_006207A0[384]), P77 */
 #define MAX_PAL 256             /* its palette records (D_0061C7A0[256]), P77 */
 #define MAX_VERTS 4096          /* per batch */
@@ -51,7 +52,7 @@ enum { RM_FLAT = 0, RM_RGBA = 1, RM_INDEX = 2, RM_RAW4 = 3 };
 typedef struct GuVtx { float u, v; uint32_t c; float x, y, z; } GuVtx;   /* TEXTURE_32BITF|COLOR_8888|VERTEX_32BITF */
 #define GU_VTYPE (GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_2D)
 
-typedef struct TexRec { uint8_t *pix; int w, h, fmt, used, pw, ph, warned; unsigned gen; uint32_t voff, vused; } TexRec;   /* voff: VRAM copy (P87), 0 none; vused: vr_epoch of its last use (P88) */
+typedef struct TexRec { uint8_t *pix; int w, h, fmt, used, pw, ph; uint8_t warned, swz; unsigned gen; uint32_t voff, vused; } TexRec;   /* voff: VRAM copy (P87), 0 none; vused: vr_epoch of its last use (P88); swz: pixels stored swizzled (P109) */
 typedef struct PalRec { uint32_t *clut; int ncolors, used; unsigned gen; } PalRec;
 
 static unsigned int __attribute__((aligned(16))) list[LIST_BYTES / 4];
@@ -313,16 +314,16 @@ static int texture_filter_linear(void) { return (R.state_ad0 & 0x10000) ? 0 : 1;
  * buffers on first use, so the GE does not read them over the main bus.
  * When it is full, textures stay in RAM until the next frame boundary
  * (GE idle), where the cache starts again. tex_copy drops a stale copy. */
-static int vr_stat[3];   /* PROFILE: hits, copies, bytes copied */
+static int vr_stat[5];   /* PROFILE: hits, copies, bytes copied, RAM binds, RAM KB */
 
 static const void *tex_addr(TexRec *t)
 {
     unsigned bytes = (unsigned)t->pw * (unsigned)t->ph * (is_index(t->fmt) ? 1u : 4u);
     if (vr_off < 0) { const char *e = getenv("MVC2_NO_VRAM_TEX"); vr_off = e != NULL; }
-    if (vr_off || vr_pause || !vr_base || !t->pix) return t->pix;
+    if (vr_off || vr_pause || !vr_base || !t->pix) { vr_stat[3]++; vr_stat[4] += (int)bytes; return t->pix; }
     if (t->voff) { vr_stat[0]++; t->vused = vr_epoch; return (const void *)(uintptr_t)(0x04000000u + t->voff); }
     bytes = (bytes + 63u) & ~63u;
-    if (vr_next + bytes > vr_top) { vr_full = 1; return t->pix; }
+    if (vr_next + bytes > vr_top) { vr_full = 1; vr_stat[3]++; vr_stat[4] += (int)bytes; return t->pix; }
     memcpy((void *)(uintptr_t)(0x44000000u + vr_next), t->pix, bytes);   /* uncached VRAM */
     t->voff = vr_next;
     t->vused = vr_epoch;
@@ -339,7 +340,11 @@ static void vr_frame(void)
         psp_prof_add(23, "  mesh tex VRAM copies (count)", 1000ull * (unsigned)vr_stat[1]);
         psp_prof_add(24, "  mesh tex VRAM KB copied (count)", 1000ull * (unsigned)(vr_stat[2] >> 10));
     }
-    vr_stat[0] = vr_stat[1] = vr_stat[2] = 0;
+    if (psp_prof_on()) {
+        psp_prof_add(52, "  mesh tex RAM binds (count)", 1000ull * (unsigned)vr_stat[3]);
+        psp_prof_add(53, "  mesh tex RAM KB bound (count)", 1000ull * (unsigned)(vr_stat[4] >> 10));
+    }
+    vr_stat[0] = vr_stat[1] = vr_stat[2] = vr_stat[3] = vr_stat[4] = 0;
     if (vr_pause) vr_pause--;
     /* P88: a full cache is kept while this frame used at least half of what
      * it holds (fights: the textures that fit stay, the rest come from RAM).
@@ -378,9 +383,9 @@ static void tex_bind(const TexRec *t, int pal)
         if (clut != black_clut) R.pal[pal].gen = R.list_gen;
         sceGuClutMode(GU_PSM_8888, 0, 0xFF, 0);
         sceGuClutLoad(256 / 8, clut);
-        sceGuTexMode(GU_PSM_T8, 0, 0, 0);
+        sceGuTexMode(GU_PSM_T8, 0, 0, t->swz);
     } else {
-        sceGuTexMode(GU_PSM_8888, 0, 0, 0);
+        sceGuTexMode(GU_PSM_8888, 0, 0, t->swz);
     }
     gu_teximage(&ti);
     sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
@@ -420,15 +425,15 @@ void r_flush(void)
             ti = ri;
             sceGuClutMode(GU_PSM_8888, 0, 0x0F, 0);
             sceGuClutLoad(16 / 8, R.raw_clut);
-            sceGuTexMode(GU_PSM_T4, 0, 0, 0);
+            sceGuTexMode(GU_PSM_T4, 0, 0, r_gu_char_swz > 0);   /* P109 */
         } else if (R.cur_mode == RM_INDEX) {
             const uint32_t *clut = (R.cur_pal >= 0 && R.pal[R.cur_pal].used) ? R.pal[R.cur_pal].clut : black_clut;
             if (clut != black_clut) R.pal[R.cur_pal].gen = R.list_gen;
             sceGuClutMode(GU_PSM_8888, 0, 0xFF, 0);
             sceGuClutLoad(256 / 8, clut);
-            sceGuTexMode(GU_PSM_T8, 0, 0, 0);
+            sceGuTexMode(GU_PSM_T8, 0, 0, t->swz);
         } else {
-            sceGuTexMode(GU_PSM_8888, 0, 0, 0);
+            sceGuTexMode(GU_PSM_8888, 0, 0, t->swz);
         }
         gu_teximage(&ti);
         sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
@@ -894,11 +899,39 @@ int fl_pal_define(uint32_t handle, int ncolors, const uint8_t *rgba)
 static int pow2(int n, int min) { int p = min; while (p < n) p <<= 1; return p; }
 static int is_index(int fmt) { return fmt == FL_TEX_IDX4 || fmt == FL_TEX_IDX8; }
 
+/* P109: the GE fetches a swizzled texture in 16-byte x 8-row blocks, far
+ * fewer bus transactions than row-linear texels (most fight textures come
+ * from main RAM: the VRAM cache holds about a third).  Sampling is the same.
+ * Byte (xb, y) of a row-stride-S texture sits at block (xb / 16, y / 8),
+ * blocks row-major, 128 bytes each, 16 bytes a row inside. */
+static int swz_off = -1;   /* MVC2_NO_SWIZZLE=1: row-linear textures (A/B) */
+static void swz_row(uint8_t *dst, unsigned stride, int y, unsigned xb, const uint8_t *src, size_t n)
+{
+    uint8_t *base = dst + (size_t)(y >> 3) * stride * 8 + (size_t)(y & 7) * 16;
+    while (n) {
+        unsigned in = xb & 15u, c = 16u - in;
+        if (c > n) c = (unsigned)n;
+        memcpy(base + (size_t)(xb >> 4) * 128 + in, src, c);
+        xb += c; src += c; n -= c;
+    }
+}
+
 /* copy w x h pixels into the padded texture at (x, y) */
 static void tex_copy(TexRec *t, int x, int y, int w, int h, const void *pixels)
 {
     int bpp = is_index(t->fmt) ? 1 : 4;
     const uint8_t *s = (const uint8_t *)pixels;
+    if (t->swz && pixels && t->pix) {
+        uint8_t *vr = t->voff ? (uint8_t *)(uintptr_t)(0x44000000u + t->voff) : NULL;   /* uncached, as below */
+        unsigned stride = (unsigned)t->pw * (unsigned)bpp;
+        for (int r = 0; r < h && y + r < t->ph; r++) {
+            size_t n = (size_t)(x + w <= t->pw ? w : t->pw - x) * bpp;
+            swz_row(t->pix, stride, y + r, (unsigned)(x * bpp), s + (size_t)r * w * bpp, n);
+            if (vr) swz_row(vr, stride, y + r, (unsigned)(x * bpp), s + (size_t)r * w * bpp, n);
+        }
+        sceKernelDcacheWritebackRange(t->pix, (unsigned)(t->pw * t->ph * bpp));
+        return;
+    }
     /* P88: the VRAM copy (P87) is updated in place.  Callers have waited for
      * the GE if this frame's list uses the texture (in_use_sync), as for the
      * RAM copy.  Dropping it instead leaked its slot until the next reset. */
@@ -920,6 +953,8 @@ static int tex_alloc(TexRec *t, int w, int h, int fmt)
     /* buffer width: 16-byte multiple (T8: 16 px, 8888: 4 px) */
     t->pw = pow2(w, is_index(fmt) ? 16 : 4);
     t->ph = pow2(h, 1);
+    if (swz_off < 0) swz_off = getenv("MVC2_NO_SWIZZLE") != NULL;
+    t->swz = !swz_off && (t->ph & 7) == 0;   /* pw * bpp is a 16-byte multiple (above) */
     t->pix = (uint8_t *)memalign(16, (size_t)t->pw * t->ph * bpp);
     if (!t->pix) return -1;
     mem_tex += t->pw * t->ph * bpp; mem_ntex++;

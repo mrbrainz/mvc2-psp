@@ -26,6 +26,7 @@ float r_gu_snap_y(float y);
 float r_gu_depth(float z);
 
 int r_gu_char_cnt[3];
+int r_gu_char_swz = -1;   /* P109: atlas pages swizzled (MVC2_NO_SWIZZLE=1: linear); r_gu.c binds with it */
 int r_gu_char_bytes;   /* atlas pages held */   /* DRAWLOG: draws, parts, tile decodes */
 
 typedef struct CharTile {
@@ -170,10 +171,23 @@ static int ensure_tile(FlCharBank *b, int ti)
     s = w < h ? w : h;
     nsub = (w > h ? w : h) / s;
     /* PSMT4 source and GE T4 both keep the left pixel in the low nibble */
+    if (r_gu_char_swz < 0) r_gu_char_swz = getenv("MVC2_NO_SWIZZLE") == NULL;
     for (int k = 0; k < nsub; k++) {
         int ox = w >= h ? k * s : 0, oy = w >= h ? 0 : k * s;
         for (int y = 0; y < s; y++) {
-            memcpy(pg + ((size_t)(t->y + oy + y) * PAGE + t->x + ox) / 2, raw + p, (size_t)s / 2);
+            if (r_gu_char_swz) {   /* P109: swizzled page, as r_gu.c's textures (16-byte x 8-row blocks) */
+                unsigned yy = (unsigned)(t->y + oy + y), xb = (unsigned)(t->x + ox) / 2, n = (unsigned)s / 2;
+                const uint8_t *src = raw + p;
+                uint8_t *base = pg + (size_t)(yy >> 3) * (PAGE / 2) * 8 + (size_t)(yy & 7) * 16;
+                while (n) {
+                    unsigned in = xb & 15u, c = 16u - in;
+                    if (c > n) c = n;
+                    memcpy(base + (size_t)(xb >> 4) * 128 + in, src, c);
+                    xb += c; src += c; n -= c;
+                }
+            } else {
+                memcpy(pg + ((size_t)(t->y + oy + y) * PAGE + t->x + ox) / 2, raw + p, (size_t)s / 2);
+            }
             p += (size_t)s / 2;
         }
     }
