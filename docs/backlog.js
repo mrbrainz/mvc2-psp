@@ -88,6 +88,7 @@ window.BACKLOG = {
   "P85",
   "P86",
   "P87",
+  "P88",
   "P89",
   "P90",
   "P91",
@@ -117,25 +118,6 @@ window.BACKLOG = {
    "note": "Patched fe_mesh.c copy (port/psp/patches) + psp_mesh_state.c: the renderer reads the game's matrices in place, lights only for lit draws; PPSSPP fight wrapper 1.24 -> 0.68 ms, state dump A/B 0 diverging words, MVC2_MESH_CHECK 1.56 M draws unchanged. PSP-2003 fight6: profiled wrapper 3.53 -> 2.15 ms (about 3.0 -> 1.6 ms once the profiler's own ~0.5 ms is removed); 0 format rebuilds, and the rest is spread over small per-draw calls (PSP.md)."
   },
   {
-   "id": "P88",
-   "order": 35,
-   "phase": "P4",
-   "size": "L",
-   "status": "In progress",
-   "depends": [
-    "P86"
-   ],
-   "read": [
-    "port/render/r_gu_mesh.c",
-    "port/render/r_gu.c",
-    "port/docs/PSP.md"
-   ],
-   "title": "Hardware speed: per-draw cost of mesh submits",
-   "description": "P86 profile: fl_clay_draw 13-15 ms in character select and fights for ~100 draws (~150 us each), mostly fixed per-draw cost (GU submit, matrices, clip prep, list restarts), not per-vertex work. Options: record each static mesh's GE commands once and replay them with sceGuCallList, merge ranges sharing a texture, fewer list restarts. Output must stay bit-identical.",
-   "done_when": "fl_clay_draw <= 6 ms in the scripted 3v3 fight over PSPLink; screenshots match visually (bit-identical relaxed by user choice: VFPU rounding, range order).",
-   "note": "Specific hotspots from PROFILE=2 (mvc2_psp.log) and code inspection: (1) Uncached RAM CPU read-back stalls: since P85 moved list_buf to 0x40000000, sceGuGetMemory returns uncached pointers, yet r_gu.c:1186 reads vv[idx[...]].x back from verts for depth-zoom z (use cached me->cpu or me->bb instead) and r_gu_mesh.c:569 (near_clip) reads from uncached vsrc when lit; also skip sceKernelDcacheWritebackRange (r_gu_mesh.c:585,700) when (uintptr_t)ptr & 0x40000000. (2) Pre-multiply scene-invariant matrices VP_full = view * proj * vpm * ge and VC = view * clipm once when 0x16/0x17/0x18/clipm change instead of 5-6 fl_mat_mul calls per draw (r_gu_mesh.c:708-751), and share bbox_corners between bbox_inside (line 756) and clip_bbox_inside (line 798). (3) 6-plane AABB frustum culling (all_out &= corner_code) in clip_bbox_inside/bbox_inside: in char select, 168/168 draws use clipping descriptors (desc 19/44..46) and 167 fail clip_bbox_inside, running clip_prepare on all 6324 verts (3.56 ms) when only 1 draw needs near_clip because off-screen meshes fail the guard-band check instead of being culled. (4) submit: tex bind takes 2.7 ms despite 95% VRAM hits because multi-material meshes alternate textures across me->range[], thrashing the 1-entry mesh_tex_key memo and sceGuTexFlush(); sort/merge MRange by (tex, diffuse, c0) at build_mesh time and move sceGuDisable(GU_CLIP_PLANES) (r_gu.c:1181) to list_open. Progress: psp_vfpu.S (psp-gcc) does fl_mat_mul and the ADC/clip_prepare vertex transforms on the VFPU, self-tested at startup (MVC2_NO_VFPU for A/B): fight fl_clay_draw ~15 -> ~13 ms, matrices + ADC 5.1 -> 3.5 ms (PROFILE=2), game-state trace unchanged. Whole-mesh culling and skipping uncached writebacks gave nothing in fights (~0.25 culls/frame). Next: sort ranges by texture (tex bind ~2 ms), VFPU outcodes, lighting. 2026-11-23 PSP-2003 fight6 (PROFILE=1): fl_clay_draw 10.5-12.1 ms for ~115 draws and ~152 submits a frame. PROFILE=2, less ~1.7 ms of timer reads: per-submit r_gu_mesh_draw ~3.6 ms (tex bind 1.9, blend/depth + projection 1.3), matrices + ADC ~3.1, colours ~1.8, clip prepare + near clip ~1.7. The VRAM cache thrashes: ~28 binds a frame miss (from RAM) vs ~20 hits, and it refills about every 7 frames, ~1 ms a frame of copies. VRAM copies now update in place on texture updates (no slot leak): fl_clay_draw 0.2-0.6 ms lower per block, screenshot identical. Per-drawn-frame figures need NO_FRAME_SKIP=1 since P100. VRAM cache now kept while a frame uses at least half of it (was reset whenever full, ~690 KB recopied per shown frame); MVC2_VRAM_RESET=1 restores that. PSP-2003 fight6: fight display 9.2-12 -> 13-15 fps, character select 6.7-7.5 -> 8.2-8.6; fl_clay_draw per drawn step 10.6-12.2 -> 10.0-11.6 ms; screenshot identical. The viewport * canvas -> GE matrix is now computed only when the viewport or canvas changes (same arithmetic, so bit-identical): fl_clay_draw per drawn step 10.0-11.6 -> 8.9-10.2 ms (NO_FRAME_SKIP=1), and the normal-mode f6 screenshot is identical. Regrouping world * (view * proj * screen) per camera was slower (the camera changes between draws) and is not used. Per draw (PROFILE=2) the matrices are ~9.6 us and cm + bbox_inside ~9 us; outcodes 0.28 and the triangle filter 0.15 ms a frame."
-  },
-  {
    "id": "P94",
    "order": 37,
    "phase": "P4",
@@ -162,7 +144,7 @@ window.BACKLOG = {
    "status": "In progress",
    "depends": [
     "P82",
-    "P88",
+    "P107",
     "P93"
    ],
    "read": [
@@ -311,6 +293,24 @@ window.BACKLOG = {
    "title": "Hardware speed: audio mixing on the Media Engine",
    "description": "Ideas from gibletto/mvc2-naomi-dc ports/port/psp (AGPL-3.0: ideas only, no code copied). Once P104 owns the ME, run the frame's sound mix there after the list build, if the profile shows mixing costs the main CPU measurable time per frame. Output must stay sample-identical.",
    "done_when": "Mix time per frame measured on hardware; if moved, WAV output identical to the main-CPU mix and frame time measured before and after."
+  },
+  {
+   "id": "P107",
+   "order": 61,
+   "phase": "P4",
+   "size": "L",
+   "status": "Ready",
+   "depends": [
+    "P88"
+   ],
+   "read": [
+    "port/docs/PSP.md",
+    "port/render/r_gu.c",
+    "port/render/r_gu_mesh.c"
+   ],
+   "title": "Hardware speed: fewer GE submits per mesh draw",
+   "description": "After P88, fl_clay_draw is ~9-9.6 ms per drawn fight step on the PSP-2003, mostly ~25 us of fixed cost per submit (~152 a frame): texture bind, blend/depth, per-range depth zoom and projection matrix, list checks. Options: merge a mesh's ranges that share texture and state into one draw; anchor the depth zoom once per mesh; record static meshes' GE commands once and replay them with sceGuCallList. Ranges of one mesh may layer differently, so check visually.",
+   "done_when": "fl_clay_draw <= 6 ms per drawn step in the scripted 3v3 fight over PSPLink (NO_FRAME_SKIP=1); screenshots match visually."
   },
   {
    "id": "P41",

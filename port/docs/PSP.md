@@ -360,6 +360,11 @@ Mesh screen matrix (P88, 2026-11-23, PSP-2003, `fight6`):
 - **Tried and dropped:** caching world * (view * proj * screen) per camera was
   slower, because the camera matrices change between draws.
 
+Mesh vertex writeback (P88, 2026-11-23, PSP-2003): `fl_clay_draw` wrote
+each mesh's whole vertex buffer back from the D-cache on every draw. It now
+does so only after the CPU has written the buffer, and never for
+display-list (uncached) memory. Per drawn step: 8.9-10.2 -> 9.0-9.6 ms.
+
 Frame skip (P100, 2026-11-23, PSP-2003, `fight6`):
 - **The problem:** when it falls behind, the platform runs up to 8 logic
   steps per display frame and shows only the last. The PSP renderer drew all

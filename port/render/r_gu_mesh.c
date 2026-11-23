@@ -65,6 +65,7 @@ typedef struct MMesh {
     int dirty;               /* cpu positions/uvs changed */
     uint32_t ckey[3];        /* what gv's colours were computed for */
     int cvalid;
+    int gvwb;                /* P88: gv written since its last D-cache writeback */
     long used;               /* host frame gv was last handed to the GE (+1) */
     int bbok;                /* bb holds the cpu positions' bounding box */
     float bb[6];             /* min xyz, max xyz */
@@ -232,7 +233,8 @@ static int desc_select(uint32_t w, uint32_t key)
     return -1;
 }
 
-static void wb(const void *p, size_t n) { if (p && n) sceKernelDcacheWritebackRange(p, (unsigned)n); }
+/* uncached pointers (the display list, 0x4xxxxxxx since P85) need none */
+static void wb(const void *p, size_t n) { if (p && n && !((uintptr_t)p & 0x40000000u)) sceKernelDcacheWritebackRange(p, (unsigned)n); }
 
 static void build_mesh(MMesh *me, const Pol *p, size_t mo)
 {
@@ -265,6 +267,7 @@ static void build_mesh(MMesh *me, const Pol *p, size_t mo)
     me->cpu = (MVtx *)calloc((size_t)nv, sizeof *me->cpu);
     me->gv = (GVtx *)memalign(16, (size_t)nv * sizeof *me->gv);
     if (!me->cpu || !me->gv) { me->desc = -1; return; }
+    me->gvwb = 1;
     for (int i = 0; i < nv; i++) {
         MVtx *v = &me->cpu[i];
         for (int k = 0; k < 3; k++) v->pos[k] = rdf(p, sp + 12 + 12 * i + 4 * k);
@@ -794,7 +797,7 @@ static int clay_draw(int h)
     r_gu_begin((unsigned)me->nverts * sizeof(GVtx) + (unsigned)me->nidx * 2 + 64 +
                ((me->desc == 19 || (me->desc >= 44 && me->desc <= 46)) ? (unsigned)me->nidx * (6 * sizeof(GVtx) + 12) + 32 : 0));
     if (lit) {
-        if (me->dirty) { positions(me, me->gv); me->dirty = 0; me->cvalid = 0; }
+        if (me->dirty) { positions(me, me->gv); me->dirty = 0; me->cvalid = 0; me->gvwb = 1; }
         g = (GVtx *)sceGuGetMemory((unsigned)me->nverts * sizeof *g);   /* per draw */
         memcpy(g, me->gv, (size_t)me->nverts * sizeof *g);
         colours_lit(me, g, modv, cscale);
@@ -812,14 +815,15 @@ static int clay_draw(int h)
             colours_unlit(me, g, matcol, modv, cscale);
             wb(g, (size_t)me->nverts * sizeof *g);
         } else {
-            if (me->dirty) { positions(me, me->gv); me->dirty = 0; me->cvalid = 0; }
+            if (me->dirty) { positions(me, me->gv); me->dirty = 0; me->cvalid = 0; me->gvwb = 1; }
             if (!me->cvalid || memcmp(key, me->ckey, sizeof key)) {
                 colours_unlit(me, me->gv, matcol, modv, cscale);
                 memcpy(me->ckey, key, sizeof key);
                 me->cvalid = 1;
+                me->gvwb = 1;
             }
             g = me->gv;
-            wb(g, (size_t)me->nverts * sizeof *g);
+            if (me->gvwb) { wb(g, (size_t)me->nverts * sizeof *g); me->gvwb = 0; }   /* P88: only when written */
             me->used = mvc2_host_frame + 1;
         }
     }

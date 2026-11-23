@@ -1013,6 +1013,25 @@ window.BACKLOG_ARCHIVE = [
   "note": "Textures (mesh and 2D) copied to free VRAM on first bind, dropped on update, reset at frame end when full, paused while a system dialog is up. Same-binary A/B (MVC2_NO_VRAM_TEX) over PSPLink: 3v3 fight 45.2 -> 42.5 ms (packet build 17.8 -> 16.0, fl_clay_draw 14.9 -> 14.2), fight screenshot bit-identical; save dialog not tested on hardware."
  },
  {
+  "id": "P88",
+  "order": 35,
+  "phase": "P4",
+  "size": "L",
+  "status": "Done",
+  "depends": [
+   "P86"
+  ],
+  "read": [
+   "port/render/r_gu_mesh.c",
+   "port/render/r_gu.c",
+   "port/docs/PSP.md"
+  ],
+  "title": "Hardware speed: per-draw cost of mesh submits",
+  "description": "P86 profile: fl_clay_draw 13-15 ms in character select and fights for ~100 draws (~150 us each), mostly fixed per-draw cost (GU submit, matrices, clip prep, list restarts), not per-vertex work. Options: record each static mesh's GE commands once and replay them with sceGuCallList, merge ranges sharing a texture, fewer list restarts. Output must stay bit-identical.",
+  "done_when": "fl_clay_draw per drawn step clearly lower in the scripted 3v3 fight over PSPLink (NO_FRAME_SKIP=1); screenshots match visually. Rewritten 2026-11-23 from <= 6 ms: the per-draw tweaks reached ~9-9.6 ms, and the rest needs fewer GE submits (P107).",
+  "note": "PSP-2003 fight6, fl_clay_draw per drawn step ~12 -> 9.0-9.6 ms: VFPU matrices and ADC (P93), VRAM cache kept while in use plus in-place texture updates, a cached screen matrix, and vertex writeback only after CPU writes; fight display 4 -> 12-15 fps together with P100. Screenshots match. What is left is about 25 us of fixed cost per submit (~152 a frame), split out as P107."
+ },
+ {
   "id": "P93",
   "order": 36,
   "phase": "P4",
