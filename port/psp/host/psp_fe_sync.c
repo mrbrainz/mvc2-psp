@@ -131,6 +131,7 @@ void __wrap_fe_sync_handle(unsigned h)
 }
 
 void func_003EA660__game(int n, void *list);
+void psp_texsel(int n, unsigned *list);
 void __wrap_func_003EA660(int n, void *list)
 {
     const unsigned *l = (const unsigned *)list;
@@ -139,7 +140,7 @@ void __wrap_func_003EA660(int n, void *list)
     extern void psp_prof_add(int, const char *, unsigned long long);
     extern int psp_reslist_all_resident(int, const unsigned *);
     unsigned long long t = psp_prof_on() ? psp_prof_now() : 0;
-    if (!psp_reslist_all_resident(n, l)) func_003EA660__game(n, list);   /* P90 */
+    if (!psp_reslist_all_resident(n, l)) psp_texsel(n, (unsigned *)list);   /* P90, P95 */
     if (t) psp_prof_add(43, "      func_003EA660__game tex select", psp_prof_now() - t);
     for (int i = 0; i < n; i++)
         __wrap_fe_sync_handle(l[i]);

@@ -914,6 +914,28 @@ window.BACKLOG_ARCHIVE = [
   "note": "Sync: exact recheck is bound by ~220 ns a sampled byte (uncached no faster), so per user choice a quarter of each texture's samples is checked a frame (descriptors, palettes, unlocks every frame); fe_sync_handle 5.8 -> ~0.2 ms + check, frame 42.5 -> 40.9 ms, fight screenshot bit-identical, MVC2_EXACT_TEX_SYNC=1 for the old path. Tex select (func_003EA660__game, 4.3 ms) is game code, left to P84. Also fixed: the GU_DIRECT list was written cached, so the GE could read stale commands (garbled frame when the memory layout moved); now written uncached."
  },
  {
+  "id": "P95",
+  "order": 33,
+  "phase": "P4",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P90"
+  ],
+  "read": [
+   "src/b10s_0_f.c",
+   "src/s9b_a.c",
+   "src/s2m.c",
+   "src/r3_d.c",
+   "port/psp/host/psp_packet.c",
+   "port/psp/host/psp_fe_sync.c"
+  ],
+  "title": "Hardware speed: GS upload bookkeeping in tex select (func_003EA660)",
+  "description": "After P90, fight tex select is still 1.0-1.4 ms: lists with non-resident textures run the game's GS upload path (func_003EBE70/EBF30 allocation, EBA80/EBC20 insert, func_003DBD80 packet build). On PSP textures go through psp_fe_sync/VRAM, so find which of this bookkeeping the PSP renderer actually needs and replace the rest with a PSP-side equivalent.",
+  "done_when": "Tex select <= 1 ms in the scripted 3v3 fight; game-state trace and rendering unchanged (A/B on hardware).",
+  "note": "psp_texsel (psp_reslist.c) keeps the game's residency bookkeeping and drops the GS upload packets and DMA queue. PSP-2003 fight6: tex select 0.90 -> 0.83 ms on average, 1.54 -> 1.28 at most (about 0.44 ms of that is the profiler), and the screenshots are identical. A PPSSPP state dump differs only in the GS packet arena; most of the earlier 1.0-1.4 ms was timer overhead."
+ },
+ {
   "id": "P86",
   "order": 34,
   "phase": "P4",

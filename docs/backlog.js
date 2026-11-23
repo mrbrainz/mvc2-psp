@@ -90,30 +90,10 @@ window.BACKLOG = {
   "P90",
   "P92",
   "P93",
+  "P95",
   "P97"
  ],
  "activities": [
-  {
-   "id": "P95",
-   "order": 33,
-   "phase": "P4",
-   "size": "M",
-   "status": "Ready",
-   "depends": [
-    "P90"
-   ],
-   "read": [
-    "src/b10s_0_f.c",
-    "src/s9b_a.c",
-    "src/s2m.c",
-    "src/r3_d.c",
-    "port/psp/host/psp_packet.c",
-    "port/psp/host/psp_fe_sync.c"
-   ],
-   "title": "Hardware speed: GS upload bookkeeping in tex select (func_003EA660)",
-   "description": "After P90, fight tex select is still 1.0-1.4 ms: lists with non-resident textures run the game's GS upload path (func_003EBE70/EBF30 allocation, EBA80/EBC20 insert, func_003DBD80 packet build). On PSP textures go through psp_fe_sync/VRAM, so find which of this bookkeeping the PSP renderer actually needs and replace the rest with a PSP-side equivalent.",
-   "done_when": "Tex select <= 1 ms in the scripted 3v3 fight; game-state trace and rendering unchanged (A/B on hardware)."
-  },
   {
    "id": "P84",
    "order": 33,

@@ -54,3 +54,53 @@ int psp_reslist_all_resident(int n, const unsigned *list)
     }
     return 1;
 }
+
+/* P95: func_003EA660 (src/s9b_a.c) for lists with a non-resident entry.
+ * The residency bookkeeping (lookup, GS block allocation func_003EBE70 /
+ * func_003EBF30 with its retry, insert func_003EBA80 / func_003EBC20) is the
+ * game's, call for call: the game reads that list back.  The GS upload
+ * packets (func_003DD160, func_003DBD80, the D_0062BBA0 DMA queue,
+ * func_003DC120) are left out: the PSP renderer takes textures from the
+ * records through psp_fe_sync.c / fe_render.c, never from the GS, as P84
+ * left out the mesh packets.  MVC2_TEXSEL_FULL=1: the game's own body. */
+typedef struct {
+    char pad0[0x10];
+    short h10;
+} TexRec;
+typedef struct LN { char pad[4]; struct LN *next; } LN;
+extern int func_003EBE70(int);
+extern int func_003EBA80(int, void *);
+extern int func_003EBF30(void *, unsigned *, int);
+extern int func_003EBC20(int, void *);
+extern void func_003ED0D0(void *);
+extern char D_004BA9D0[];
+void func_003EA660__game(int n, void *list);
+
+void psp_texsel(int n, unsigned *list)
+{
+    static int full = -1;
+    if (full < 0) full = getenv("MVC2_TEXSEL_FULL") != NULL;
+    if (full) { func_003EA660__game(n, list); return; }
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < 2; j++) {
+            unsigned v = list[i], idx = j ? v >> 16 : v & 0xFFFF;
+            TexRec *e;
+            int r;
+            if (!idx) continue;
+            e = (TexRec *)((j ? D_0061C7A0 : D_006207A0) + (idx - 1) * 0x40);
+            if (__wrap_func_003EBA40((int)e)) continue;
+            r = func_003EBE70(e->h10);
+            if (r != -1) {
+                if (!func_003EBA80(r, e)) func_003ED0D0(D_004BA9D0);
+                continue;
+            }
+            while ((r = func_003EBF30(e, list, n)) == -1)
+                ;
+            if (r == 1) {
+                LN *o = (LN *)D_004C2AB4;
+                while (*(LN * volatile *)&o->next) o = o->next;
+                if (!func_003EBA80((int)o, e)) func_003ED0D0(D_004BA9D0);
+            } else if (!func_003EBC20(r, e))
+                func_003ED0D0(D_004BA9D0);
+        }
+}

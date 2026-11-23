@@ -336,6 +336,21 @@ Mesh hand-off (P96, 2026-11-23):
 Tex select (P90, fight6): 3.8-4.9 -> 1.0-1.4 ms in fights (O(1) resident
 lookup, psp_reslist.c); the rest is GS upload bookkeeping (P95).
 
+Tex select upload path (P95, 2026-11-23, `psp_reslist.c` `psp_texsel`):
+- **What changed:** for lists with a texture that isn't resident, the PSP runs
+  the game's residency bookkeeping call for call (lookup, GS block allocation
+  with its retry, insert). It leaves out the GS upload packets and the
+  D_0062BBA0 DMA queue, which the PSP renderer never reads.
+  `MVC2_TEXSEL_FULL=1` runs the game's own body.
+- **PSP-2003 (`fight6`, `PROFILE=1`, A/B):** tex select went 0.90 -> 0.83 ms
+  on average, and 1.54 -> 1.28 ms at most. About 0.44 ms of each figure is the
+  profiler: about 220 calls a frame with 2 timer reads each. That makes the
+  real cost about 0.46 -> 0.39 ms, and about 0.84 ms in the heaviest block.
+  The `fight6` screenshots are byte-identical.
+- **Game state (PPSSPP, 6,000 headless frames):** the per-frame records match.
+  The snapshot differs only inside the GS packet arena (EE 0x0163A3C0 to
+  0x0173A3C0, two 512 KB halves), plus the known word past the PSP heap.
+
 Audio (P92, fight6 script, `[audio]` fill line, ms per 1024-frame fill):
 mean 2.96 -> 1.53 over the run, heaviest section 6.1 -> 2.1, worst 19.1 ->
 5.9. The mixer is fixed point with linear interpolation (mix_psp.c,
