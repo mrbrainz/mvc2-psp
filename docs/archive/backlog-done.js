@@ -1107,6 +1107,25 @@ window.BACKLOG_ARCHIVE = [
   "note": "r_gu_mesh_draw writes its GE words directly, skipping those the GE already holds, with a stall update every 8th draw. MVC2_GE_CHECK matched sceGu on 344k draws and the fight6 shots are byte-identical. PSP-2003: fl_clay_draw down 0.1-0.8 ms per drawn step; sceGu itself was only about 4 us of a submit (PSP.md)."
  },
  {
+  "id": "P107",
+  "order": 38,
+  "phase": "P4",
+  "size": "L",
+  "status": "Done",
+  "depends": [
+   "P88"
+  ],
+  "read": [
+   "port/docs/PSP.md",
+   "port/render/r_gu.c",
+   "port/render/r_gu_mesh.c"
+  ],
+  "title": "Hardware speed: fewer GE submits per mesh draw",
+  "description": "After P88, fl_clay_draw is ~9-9.6 ms per drawn fight step on the PSP-2003, mostly ~25 us of fixed cost per submit (~152 a frame): texture bind, blend/depth, per-range depth zoom and projection matrix, list checks. Options: merge a mesh's ranges that share texture and state into one draw; anchor the depth zoom once per mesh; record static meshes' GE commands once and replay them with sceGuCallList. Ranges of one mesh may layer differently, so check visually.",
+  "done_when": "fl_clay_draw <= 6 ms per drawn step in the scripted 3v3 fight over PSPLink (NO_FRAME_SKIP=1); screenshots match visually.",
+  "note": "Closed with its approach used up: same-texture contiguous ranges merged into one submit (about 40 fewer a fight frame, shots identical); fl_clay_draw 9.18 -> 8.82 ms but render pass and frame time unchanged. Measured by removal: submit CPU work is about 18 us each, and the GE drawing slows the render pass by about 4.9 ms (PSP.md), so the 6 ms target needs P108, not fewer submits."
+ },
+ {
   "id": "P91",
   "order": 39,
   "phase": "P4",

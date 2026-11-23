@@ -46,6 +46,7 @@ window.BACKLOG = {
   "P100",
   "P101",
   "P102",
+  "P107",
   "P11",
   "P12",
   "P13",
@@ -227,22 +228,22 @@ window.BACKLOG = {
    "done_when": "Mix time per frame measured on hardware; if moved, WAV output identical to the main-CPU mix and frame time measured before and after."
   },
   {
-   "id": "P107",
-   "order": 38,
+   "id": "P108",
+   "order": 39,
    "phase": "P4",
    "size": "L",
    "status": "Ready",
    "depends": [
-    "P88"
+    "P107"
    ],
    "read": [
     "port/docs/PSP.md",
     "port/render/r_gu.c",
     "port/render/r_gu_mesh.c"
    ],
-   "title": "Hardware speed: fewer GE submits per mesh draw",
-   "description": "After P88, fl_clay_draw is ~9-9.6 ms per drawn fight step on the PSP-2003, mostly ~25 us of fixed cost per submit (~152 a frame): texture bind, blend/depth, per-range depth zoom and projection matrix, list checks. Options: merge a mesh's ranges that share texture and state into one draw; anchor the depth zoom once per mesh; record static meshes' GE commands once and replay them with sceGuCallList. Ranges of one mesh may layer differently, so check visually.",
-   "done_when": "fl_clay_draw <= 6 ms per drawn step in the scripted 3v3 fight over PSPLink (NO_FRAME_SKIP=1); screenshots match visually."
+   "title": "Hardware speed: less GE main-RAM traffic while meshes draw",
+   "description": "P107 by removal: with every mesh command written but zero-vertex draws, the fight render pass is 18.1 ms instead of 23.0, so the GE reading mesh data from main RAM slows the CPU about 4.9 ms a drawn step (bus contention); submit CPU work is not what paces the frame. First find which reads cost (vertices, indices, CLUT/texture misses, display list) with probes that keep the CPU work equal; then cut the biggest: e.g. a 16-byte vertex (16-bit UV and positions with the scale in the matrix) or static meshes vertices resident in VRAM (shared with the P88 texture cache).",
+   "done_when": "Fight render pass per drawn step (NO_FRAME_SKIP=1, PROFILE=1, hardware) at least 2 ms lower; screenshots match visually in PPSSPP."
   },
   {
    "id": "P41",

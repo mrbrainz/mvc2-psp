@@ -930,9 +930,12 @@ static int clay_draw(int h)
         psp_prof_add(28, "        clay clipping-program verts (count)", 1000ull * (unsigned)me->nverts);
         if (clipping) psp_prof_add(29, "        clay draws needing near_clip (count)", 1000);
     } }
+    static int merge = -1;   /* MVC2_MESH_NOMERGE=1: one submit per range (A/B) */
+    if (merge < 0) merge = getenv("MVC2_MESH_NOMERGE") == NULL;
     for (int r = 0; r < me->nrange; r++) {
         const MRange *rg = &me->range[r];
-        if (!adc_count[r]) continue;
+        int n = adc_count[r];
+        if (!n) continue;
         if (clipping) {
             GVtx *cv;
             uint16_t *ci;
@@ -944,7 +947,12 @@ static int clay_draw(int h)
                 continue;
             }
         }
-        r_gu_mesh_draw(clip, me->textured ? rg->tex : 0, g, idx + rg->first, adc_count[r], su, sv, ou, ov);
+        /* P107: the ranges after it with the same texture whose indices follow
+         * on go in the same submit (their colours are in the vertices) */
+        while (merge && r + 1 < me->nrange && adc_count[r + 1] && rg->first + n == me->range[r + 1].first &&
+               (!me->textured || me->range[r + 1].tex == rg->tex))
+            n += adc_count[++r];
+        r_gu_mesh_draw(clip, me->textured ? rg->tex : 0, g, idx + rg->first, n, su, sv, ou, ov);
         if (dump) {
             float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f, z0 = 1e9f, z1 = -1e9f, w0 = 1e9f, w1 = -1e9f;
             for (int k = 0; k < me->nverts; k++) {

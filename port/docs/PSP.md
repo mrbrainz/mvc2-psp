@@ -396,6 +396,44 @@ GE command writer (P102, 2026-11-23, PSP-2003, `fight6`, `PROFILE=2 NO_FRAME_SKI
 - **Tried and dropped:** writing the words through cached lines and
   `cache 0x1B` (user mode works) was slower than uncached stores.
 
+Mesh submit cost by removal (P107, 2026-11-23, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1`):
+- **Why by removal:** the `PROFILE=2` timers add about 4 ms to `fl_clay_draw`
+  (13.35 against 9.2-9.6 ms), so its split is unreliable. Each stage was
+  measured by returning early from `r_gu_mesh_draw` instead. Fight blocks,
+  about 150 submits a frame.
+- **`fl_clay_draw` totals:** 9.61 ms as built. 4.78 ms with no submits at
+  all. 5.00 ms returning after the flush and canvas. 5.90 ms after the
+  texture part. 6.56 ms after the blend memo and depth zoom. 7.46 ms with
+  every word emitted but zero-vertex draws.
+- **Per submit:** flush 1.5 us, texture 6 us, blend/depth zoom 4.4 us,
+  emitting the words 6 us.
+- **The rest is the GE drawing:** drawing the meshes costs the CPU 2.15 ms
+  inside `fl_clay_draw` and 4.9 ms over the render pass (23.00 against
+  18.13 ms). That is bus contention, not submit overhead.
+- **Probes:** untextured meshes were no cheaper (the probe rebinds every
+  draw, so it is inconclusive). `MVC2_NO_VRAM_TEX=1` adds 1 ms. Copying each
+  draw's vertices into a VRAM ring costs more than it saves (13.1 ms).
+
+Mesh submit cuts (P107, 2026-11-23, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1`, two runs each):
+- **Counts, per fight frame (about 144 submits):** about 97 reuse the
+  previous submit's texture, and 47 bind a texture. About 35-40 are a
+  mesh's next range with the same texture and contiguous indices. Only
+  about 7 read indices or vertices from uncached list memory.
+- **Kept:** in `clay_draw`, ranges that follow on with the same texture are
+  merged into one submit. Their colours are already in the vertices.
+  `MVC2_MESH_NOMERGE=1` turns it off. Shots f1-f6 are byte-identical to
+  HEAD. `fl_clay_draw` went 9.18 -> 8.82 ms, but the render pass (22.42 ->
+  22.37) and the frame time are unchanged: the time moves to the rest of the
+  pass.
+- **Dropped:** a texture fast path (skip the record reads when the texture
+  is the previous submit's) and skipping a CLUT reload when the same CLUT is
+  loaded. Together with the merge they were slower than the merge alone
+  (`fl_clay_draw` 9.08-9.15 ms).
+- **Shots and env:** shots taken with `MVC2_STATE_DUMP` set differ from
+  shots without it. Compare shots only between runs with the same env.
+- **What paces the frame:** the GE's main-RAM traffic while meshes draw (see
+  above), not submit CPU work (P108).
+
 Hot routines first in .text (P101, 2026-11-23, PSP-2003, `fight6`, `PROFILE=1`):
 - **How it works:** every o32 TU is built with `-ffunction-sections`, and
   `port/psp/hot_order.ld` (`ld --section-ordering-file`) puts the 171
