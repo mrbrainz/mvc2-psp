@@ -61,10 +61,15 @@ static const unsigned char *tex_src(unsigned ti, unsigned *size)
     return (const unsigned char *)(uintptr_t)(unsigned)func_003DD030(*(const int *)(e + 0x28));
 }
 
-/* everything but the texture's strided samples */
+/* everything but the texture's strided samples, and (P97) the renderer's
+ * define counts: another path (unlock, resync) may have redefined the texture
+ * or palette with other contents since this handle's memo was taken */
+extern unsigned short r_gu_tex_gen[], r_gu_pal_gen[];
 static unsigned check_fixed(unsigned h)
 {
     unsigned ti = h & 0xFFFF, pi = h >> 16, x = 2166136261u ^ h, size;
+    if (ti && ti < 0x181) x = (x ^ r_gu_tex_gen[ti]) * 16777619u;
+    if (pi && pi < 0x101) x = (x ^ r_gu_pal_gen[pi]) * 16777619u;
     if (ti && ti < 0x181) {
         const unsigned char *src;
         x = fnv(x, SYNC_BSS(0x006207A0) + (ti - 1) * 64, 64);
@@ -121,7 +126,7 @@ void __wrap_fe_sync_handle(unsigned h)
         __real_fe_sync_handle(h);
         if (t) psp_prof_add(42, "      fe_sync_handle (real)", psp_prof_now() - t);
     }
-    ck[c].h = h; ck[c].fixed = fixed; ck[c].ok = 1;
+    ck[c].h = h; ck[c].fixed = check_fixed(h); ck[c].ok = 1;   /* after the sync: its own defines count */
     for (int q = 0; q < PARTS; q++) ck[c].part[q] = check_part(h, q);
 }
 

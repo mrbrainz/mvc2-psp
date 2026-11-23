@@ -88,7 +88,8 @@ window.BACKLOG = {
   "P89",
   "P90",
   "P92",
-  "P93"
+  "P93",
+  "P97"
  ],
  "activities": [
   {
@@ -436,21 +437,6 @@ window.BACKLOG = {
    "title": "Release packaging",
    "description": "EBOOT icon/title, user guide for supplying own disc data.",
    "done_when": "Installable EBOOT + PSP section in USER_GUIDE.md."
-  },
-  {
-   "id": "P97",
-   "order": 52,
-   "phase": "P4",
-   "size": "S",
-   "status": "Ready",
-   "depends": [],
-   "read": [
-    "port/psp/host/psp_fe_sync.c",
-    "port/psp/host/psp_reslist.c"
-   ],
-   "title": "VS screen: corrupt and wrong hex portraits between fights",
-   "description": "Seen in PPSSPP (2026-11-22, arcade_psp.txt run, PSP-2000 model): on the pre-fight VS screen one hex portrait shows noise, some portraits repeat, and some draw as unclipped rectangles. Fights look clean. Suspects: P85 partial texture-sample sync and P90 resident lookup keeping a stale texture or palette when the screen reloads portraits into the same handles. Bisect against the commit before P85 (f9492a53f) first.",
-   "done_when": "The VS screen matches the desktop build in PPSSPP over a full arcade run (screenshots), cause noted."
   }
  ]
 };

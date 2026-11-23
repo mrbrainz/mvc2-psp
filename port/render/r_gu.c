@@ -829,10 +829,15 @@ void fl_pal_update(uint32_t handle, int first, int n, const uint8_t *rgba)
     clut_write(R.pal[i].clut, first, n, rgba);
 }
 
+/* P97: bumped on every define, so psp_fe_sync.c sees a redefinition made by
+ * a path that bypasses its memo (texture unlock, speculative resync) */
+unsigned short r_gu_tex_gen[MAX_TEX + 1], r_gu_pal_gen[MAX_PAL + 1];
+
 int fl_pal_define(uint32_t handle, int ncolors, const uint8_t *rgba)
 {
     int i = (int)(handle >> 16) - 1;
     if (i < 0 || i >= MAX_PAL) return -1;
+    r_gu_pal_gen[i + 1]++;
     if (!R.pal[i].used) {
         if (!(R.pal[i].clut = clut_new())) return -1;
         R.pal[i].used = 1;
@@ -914,6 +919,7 @@ int fl_tex_define(uint32_t handle, int w, int h, int fmt, const void *pixels)
         fprintf(stderr, "[gu] texture handle %08x (%dx%d): out of range, not defined\n", (unsigned)handle, w, h);
         return -1;
     }
+    r_gu_tex_gen[i + 1]++;
     t = &R.tex[i];
     r_flush();
     if (t->used) in_use_sync(t->gen);

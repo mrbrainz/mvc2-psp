@@ -1006,5 +1006,21 @@ window.BACKLOG_ARCHIVE = [
   "description": "Measure every consumer against the PSP-1000's user memory (~24 MB): ELF sections (largest static symbols), EE heap high-water, renderer (textures, atlases, mesh buffers, CLUTs), audio, PSPSDK/newlib and kernel allocations. Run a full arcade run in PPSSPP with the PSP-1000 model. Set a per-consumer target budget for the low profile.",
   "done_when": "PSP.md has the per-consumer table, the PSP-1000 total and a target budget per consumer that fits with headroom, without loading game data from the memory stick (or the shortfall if it cannot).",
   "note": "PSP.md 'PSP-1000 budget (P73)': a full arcade run in PPSSPP peaks at 44.8 MB (EE heap 23, image 8.9, renderer 5.7, a whole music track 4.7). The low targets add up to 26.8 MB against about 23.3 MB on the PSP-1000, so it is still short by about 3.5 MB unless the arena's live peak (not measured yet, P75) is about 13 MB or lower, or P80 is done. Booting as a PSP-1000 in PPSSPP fails at the EE heap allocation."
+ },
+ {
+  "id": "P97",
+  "order": 52,
+  "phase": "P4",
+  "size": "S",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/psp/host/psp_fe_sync.c",
+   "port/psp/host/psp_reslist.c"
+  ],
+  "title": "VS screen: corrupt and wrong hex portraits between fights",
+  "description": "Seen in PPSSPP (2026-11-22, arcade_psp.txt run, PSP-2000 model): on the pre-fight VS screen one hex portrait shows noise, some portraits repeat, and some draw as unclipped rectangles. Fights look clean. Suspects: P85 partial texture-sample sync and P90 resident lookup keeping a stale texture or palette when the screen reloads portraits into the same handles. Bisect against the commit before P85 (f9492a53f) first.",
+  "done_when": "The VS screen matches the desktop build in PPSSPP over a full arcade run (screenshots), cause noted.",
+  "note": "Cause: P85's memo in psp_fe_sync.c did not see a texture or palette redefined by a path that bypasses it, such as the game's texture unlock, so the second VS screen kept a stale texture. r_gu.c now counts defines per texture and palette, and the memo's check includes those counts. Checked in PPSSPP: MVC2_EXACT_TEX_SYNC=1 showed the screen correctly before the fix, and all 8 VS screens of a full arcade run are clean after it. Speed on hardware not measured; the added cost is two array reads per handle per frame."
  }
 ];
