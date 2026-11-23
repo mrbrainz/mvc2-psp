@@ -43,13 +43,14 @@ add_custom_command(
   COMMENT "psp_glue.py: BSS/data/stub glue for the PSP link")
 # ---- host core (as upstream's mvc2_host_core, with the PSP libc headers) ---
 file(GLOB HOST_CORE_SRCS CONFIGURE_DEPENDS "${MVC2_ROOT}/port/host/*.c")
-# state_dump.c is built from a patched copy (port/psp/patches, P77)
+# state_dump.c (P77) and fe_mesh.c (P96) are built from patched copies (port/psp/patches)
 set(PATCHED "${CMAKE_BINARY_DIR}/patched")
 list(FILTER HOST_CORE_SRCS EXCLUDE REGEX "/port/host/state_dump\\.c$")
 add_custom_command(OUTPUT "${PATCHED}/port/host/state_dump.c" "${PATCHED}/port/tools/oracle/dump_format.h"
+         "${PATCHED}/port/host/fe/fe_mesh.c"
   COMMAND ${CMAKE_COMMAND} -DROOT=${MVC2_ROOT} -DOUT=${PATCHED} -P "${PSP_DIR}/patches/apply_upstream_patches.cmake"
   DEPENDS "${PSP_DIR}/patches/apply_upstream_patches.cmake" "${MVC2_ROOT}/port/host/state_dump.c"
-          "${MVC2_ROOT}/port/tools/oracle/dump_format.h"
+          "${MVC2_ROOT}/port/tools/oracle/dump_format.h" "${MVC2_ROOT}/port/host/fe/fe_mesh.c"
   COMMENT "PSP patches to upstream copies (port/psp/patches)")
 list(APPEND HOST_CORE_SRCS "${PATCHED}/port/host/state_dump.c")
 set(PLATFORM_CORE_SRCS "${MVC2_ROOT}/port/platform/fs.c" "${MVC2_ROOT}/port/platform/pad.c"
@@ -111,11 +112,13 @@ set(PSP_AUDIO_SRCS "${MVC2_ROOT}/port/audio/audio_psp.c" "${MVC2_ROOT}/port/audi
 # which is compiled unchanged; decode.c (TIM2) is GL-free.
 set(PSP_RENDER_SRCS "${MVC2_ROOT}/port/render/r_gu.c" "${MVC2_ROOT}/port/render/decode.c"
   "${MVC2_ROOT}/port/render/r_gu_char.c" "${MVC2_ROOT}/port/render/r_gu_mesh.c" "${MVC2_ROOT}/port/host/fe/fe_render.c" "${MVC2_ROOT}/port/host/fe/fe_char.c"
-  "${MVC2_ROOT}/port/host/fe/fe_mesh.c")
-set_source_files_properties("${MVC2_ROOT}/port/host/fe/fe_render.c" "${MVC2_ROOT}/port/host/fe/fe_char.c" "${MVC2_ROOT}/port/host/fe/fe_mesh.c" PROPERTIES OBJECT_DEPENDS "${GLUE}/mvc2_host_protos.h")
+  "${PATCHED}/port/host/fe/fe_mesh.c")
+set_source_files_properties("${MVC2_ROOT}/port/host/fe/fe_render.c" "${MVC2_ROOT}/port/host/fe/fe_char.c" "${PATCHED}/port/host/fe/fe_mesh.c" PROPERTIES OBJECT_DEPENDS "${GLUE}/mvc2_host_protos.h")
+# the patched fe_mesh.c's relative includes ("../host.h") resolve from upstream's fe/
+set_property(SOURCE "${PATCHED}/port/host/fe/fe_mesh.c" APPEND PROPERTY INCLUDE_DIRECTORIES "${MVC2_ROOT}/port/host/fe")
 add_executable(mvc2_psp ${STUB_SRCS} ${GLUE_SRCS} ${PSP_EABI_OBJS} ${PSP_RENDER_SRCS} ${PSP_AUDIO_SRCS}
   "${PSP_DIR}/host/psp_main.c" "${PSP_DIR}/host/libc_o32.c" "${PSP_DIR}/host/psp_fpu.c"
-  "${PSP_DIR}/host/psp_prof.c" "${PSP_DIR}/host/psp_fe_sync.c" "${PSP_DIR}/host/psp_packet.c" "${PSP_DIR}/host/psp_disc.c" "${PSP_DIR}/host/psp_script.c" "${PSP_DIR}/host/psp_ee_hwm.c" "${PSP_DIR}/host/psp_ee_heap.c" "${PSP_DIR}/host/psp_saveui.c" "${PSP_DIR}/host/psp_1p.c" "${PSP_DIR}/host/psp_credits.c" "${PSP_DIR}/host/psp_reslist.c" "${MVC2_ROOT}/port/platform/platform_psp.c"
+  "${PSP_DIR}/host/psp_prof.c" "${PSP_DIR}/host/psp_fe_sync.c" "${PSP_DIR}/host/psp_packet.c" "${PSP_DIR}/host/psp_disc.c" "${PSP_DIR}/host/psp_script.c" "${PSP_DIR}/host/psp_ee_hwm.c" "${PSP_DIR}/host/psp_ee_heap.c" "${PSP_DIR}/host/psp_saveui.c" "${PSP_DIR}/host/psp_1p.c" "${PSP_DIR}/host/psp_credits.c" "${PSP_DIR}/host/psp_reslist.c" "${PSP_DIR}/host/psp_mesh_state.c" "${MVC2_ROOT}/port/platform/platform_psp.c"
   $<TARGET_OBJECTS:psp_host_core>)
 target_include_directories(mvc2_psp PRIVATE "${MVC2_ROOT}/port/stubs" "${PSP_DIR}/host"
   "${MVC2_ROOT}/port/host" "${MVC2_ROOT}/port/platform" "${GLUE}")

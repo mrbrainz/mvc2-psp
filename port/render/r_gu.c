@@ -1091,7 +1091,36 @@ int fl_fill_screen(int mode, uint32_t c)
 void r_stats(int *d, int *v) { if (d) *d = 0; if (v) *v = 0; }
 
 /* ---------------- mesh path support (r_gu_mesh.c) ---------------- */
-const float *r_matrix(int id) { return (id >= 0 && id < 0x60) ? R.matrices[id] : R.matrices[0x19]; }
+/* P96 (port/psp/host/psp_mesh_state.c): once bound, the mesh draw reads the
+ * game's view, projection, world and UV matrices and lights where the game
+ * keeps them, instead of fe_mesh.c copying them in on every draw */
+static const float *mesh_mtx[4];        /* 0x16, 0x17, 0x19, 0x1A */
+static uintptr_t mesh_light[3];
+void r_gu_mesh_bind_clip(const float *m);
+void r_gu_mesh_bind(const float *view, const float *proj, const float *world, const float *uv,
+                    const float *clip, const void *l0, const void *l1, const void *l2)
+{
+    mesh_mtx[0] = view; mesh_mtx[1] = proj; mesh_mtx[2] = world; mesh_mtx[3] = uv;
+    mesh_light[0] = (uintptr_t)l0; mesh_light[1] = (uintptr_t)l1; mesh_light[2] = (uintptr_t)l2;
+    r_gu_mesh_bind_clip(clip);
+}
+/* lit draws: copy (and normalize) the lights as the per-draw hand-off did */
+void r_gu_mesh_lights(void)
+{
+    if (mesh_light[0])
+        for (int k = 0; k < 3; k++) fl_set_render_state(0x59 + k, mesh_light[k]);
+}
+const float *r_matrix(int id)
+{
+    if (mesh_mtx[0])
+        switch (id) {
+        case 0x16: return mesh_mtx[0];
+        case 0x17: return mesh_mtx[1];
+        case 0x19: return mesh_mtx[2];
+        case 0x1A: return mesh_mtx[3];
+        }
+    return (id >= 0 && id < 0x60) ? R.matrices[id] : r_matrix(0x19);
+}
 uint32_t r_state_ad0(void) { return R.state_ad0; }
 uint32_t r_state_ad4(void) { return R.state_ad4; }
 uint32_t r_global_mod(void) { return R.global_mod; }

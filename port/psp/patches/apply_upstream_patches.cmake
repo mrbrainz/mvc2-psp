@@ -1,6 +1,7 @@
 # PSP-only patches to upstream sources, applied to copies at build time so
 # the upstream files stay untouched (P77).  Run with cmake -P:
-#   -DROOT=<checkout> -DOUT=<dir>: writes <OUT>/port/host/state_dump.c and
+#   -DROOT=<checkout> -DOUT=<dir>: writes <OUT>/port/host/state_dump.c,
+#   <OUT>/port/host/fe/fe_mesh.c and
 #   <OUT>/port/tools/oracle/dump_format.h (same layout, so state_dump.c's
 #   relative include "../tools/oracle/dump_format.h" finds the patched copy).
 # A patch whose text upstream no longer has stops the build: update it here.
@@ -43,3 +44,17 @@ static uint8_t (*oracle_ram_buf_get(void))[ORACLE_HASH_HI - ORACLE_HASH_LO]
 
 # state_dump.c: unchanged, compiled from the copy so it includes the patched header
 psp_patch(port/host/state_dump.c port/host/state_dump.c)
+
+# fe_mesh.c (P96): the per-draw render-state hand-off in func_003F0500 goes
+# through psp_mesh_state.c, which lets the renderer read the game's copies.
+psp_patch(port/host/fe/fe_mesh.c port/host/fe/fe_mesh.c
+"        fl_set_render_state(0x16, (uintptr_t)EE_BSS_PTR(0x0061C720));
+        fl_set_render_state(0x17, (uintptr_t)EE_BSS_PTR(0x0061C6E0));
+        fl_set_render_state(0x19, (uintptr_t)EE_BSS_PTR(0x0061BEE0));
+        fl_set_render_state(0x1A, (uintptr_t)EE_BSS_PTR(0x0061BF20));
+        fl_set_clip_matrix((const float *)EE_BSS_PTR(0x0061BDE0));
+        fl_set_render_state(0x59, (uintptr_t)EE_BSS_PTR(0x0061B2F0));
+        fl_set_render_state(0x5A, (uintptr_t)EE_BSS_PTR(0x0061B354));
+        fl_set_render_state(0x5B, (uintptr_t)EE_BSS_PTR(0x0061B3B8));"
+"        /* PSP patch (port/psp/patches, P96): port/psp/host/psp_mesh_state.c */
+        { extern void psp_mesh_handoff(void); psp_mesh_handoff(); }")

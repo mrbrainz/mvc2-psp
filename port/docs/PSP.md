@@ -300,6 +300,39 @@ Mesh wrapper (P89): 2.6-3.1 ms real in fights (profiler syscalls ~1 us each
 inflated P86's figure); change guards in r_gu.c save ~0.5 ms; the rest is
 fe_mesh.c's per-draw hand-off (P96).
 
+Mesh hand-off (P96, 2026-11-23):
+- **What changed:** the PSP builds a patched copy of `fe_mesh.c`
+  (`port/psp/patches`). Its 8 per-draw state calls become
+  `psp_mesh_handoff()`, and the renderer reads the game's view, projection,
+  world, UV and clip matrices in place. It copies lights only for lit draws.
+- **Scripted run (PPSSPP):** the fight wrapper went from 1.24 to 0.68 ms a
+  frame. That was measured with `PROFILE=1` and A/B against the upstream
+  hand-off (`MVC2_MESH_HANDOFF=1`).
+- **Check mode:** with `MVC2_MESH_CHECK=1`, 1.56 M draws all read exactly the
+  bytes the hand-off would have copied.
+- **Game state:** an `MVC2_STATE_DUMP` A/B over 6,000 headless frames found
+  0 diverging words up to the end of the EE heap.
+- **PSP-2003 (`fight6`, `PROFILE=1`, A/B as above, two runs each):** the
+  wrapper's profile figure went 3.52 -> 2.26 ms, then 3.53 -> 2.15 ms on the
+  repeat. Heaviest blocks: 5.3 -> 3.3-3.5 ms.
+- **Profiler cost:** each timer read is a syscall of 0.99 us, now printed at
+  start-up as `[prof] timer read`. About 5 reads fall inside each draw's
+  wrapper window, and fights average 108 draws a frame (169 at most, counted
+  with `PROFILE=2`). That is about 0.5 ms of the figure.
+- **Real cost:** about 3.0 -> 1.6 ms a frame, or about 15 us a draw. That is
+  above the ticket's 1 ms target.
+- **Where the rest goes (temporary timers, hardware):** format rebuilds 0 in
+  the whole fight; vertex pulls for about 3 clays a frame; about one texture a
+  draw, which `fe_sync_handle`'s same-frame check returns early; and the
+  `fe_sync_state` origin and mode-word copy. No single part is large, so the
+  rest is spread over small per-draw calls, probably cache-miss bound.
+- **PSP-1000:** crashes during boot after the 23 MB EE heap (about 700 KB
+  free), before any frame (P74-P79).
+- **Kept:** the per-draw texture re-sync and `fe_sync_state` (see above).
+  `ra_state_hash` differs between two launches of the same PSP build, because
+  it includes host pointers, so it can't serve as a PSP trace. Use
+  `MVC2_STATE_DUMP` instead.
+
 Tex select (P90, fight6): 3.8-4.9 -> 1.0-1.4 ms in fights (O(1) resident
 lookup, psp_reslist.c); the rest is GS upload bookkeeping (P95).
 

@@ -146,6 +146,12 @@ void fl_set_clip_matrix(const float m[16])
     have_clipm = m != NULL;
 }
 
+/* P96: the game's clip matrix, read at draw time (r_gu_mesh_bind) */
+static const float *clip_src;
+void r_gu_mesh_bind_clip(const float *m) { clip_src = m; }
+void (*r_gu_mesh_check)(void);   /* MVC2_MESH_CHECK (psp_mesh_state.c) */
+void r_gu_mesh_lights(void);
+
 /* ---------------- POL parsing (r_mesh.c) ---------------- */
 typedef struct Pol { const uint8_t *d; size_t n; } Pol;
 
@@ -465,6 +471,7 @@ static void colours_lit(MMesh *me, GVtx *g, const float modv[4], float cscale)
 {
     float ldir[3][3], lamb_base[3];
     const float *w = r_matrix(0x19);
+    r_gu_mesh_lights();   /* P96 */
     uint32_t e = r_material_color();
     for (int k = 0; k < 3; k++) {
         const uint8_t *l = r_light(k);
@@ -539,7 +546,9 @@ static int clay_draw(int h);
 int fl_clay_draw(int h)
 {
     unsigned t0 = sceKernelGetSystemTimeLow();
-    int r = clay_draw(h);
+    int r;
+    if (r_gu_mesh_check) r_gu_mesh_check();
+    r = clay_draw(h);
     r_gu_mesh_cnt[2] += (int)(sceKernelGetSystemTimeLow() - t0);
     return r;
 }
@@ -852,10 +861,10 @@ static int clay_draw(int h)
         static uint8_t *out;
         static int out_cap;
         if (off < 0) off = getenv("MVC2_NO_ADC") != NULL;
-        if (!off && have_clipm && !(me->desc == 19 || (me->desc >= 44 && me->desc <= 48))) {
+        if (!off && (have_clipm || clip_src) && !(me->desc == 19 || (me->desc >= 44 && me->desc <= 48))) {
             float cm[16];
             int any = 0;
-            fl_mat_mul(cm, wv, clipm);
+            fl_mat_mul(cm, wv, clip_src ? clip_src : clipm);
             if (bbox_inside(me, cm)) {
                 if (prof) psp_prof_add(36, "        clay ADC bbox skips per frame (count)", 1000);
                 for (int r = 0; r < me->nrange; r++) adc_count[r] = me->range[r].count;

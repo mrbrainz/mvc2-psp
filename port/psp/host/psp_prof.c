@@ -105,8 +105,15 @@ void __wrap_mvc2_frame(void)
 {
     unsigned long long t, staged = 0;
     int i;
-    if (on < 0)
-        { const char *e = getenv("PROFILE"); on = e ? (atoi(e) >= 2 ? 2 : 1) : 0; }
+    if (on < 0) {
+        const char *e = getenv("PROFILE");
+        on = e ? (atoi(e) >= 2 ? 2 : 1) : 0;
+        if (on) {   /* each timer read is a syscall: nested timers inflate their parents by this much */
+            unsigned long long t0 = now(), t1;
+            for (i = 0; i < 1000; i++) t1 = now();
+            fprintf(stderr, "[prof] timer read %.2f us\n", (double)(t1 - t0) / 1000.0);
+        }
+    }
     if (!on) { __real_mvc2_frame(); return; }
     t = now();
     for (i = 1; i < 10; i++) staged += acc[i];
