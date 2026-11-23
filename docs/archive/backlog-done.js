@@ -1032,6 +1032,26 @@ window.BACKLOG_ARCHIVE = [
   "note": "PSP-2003 fight6, fl_clay_draw per drawn step ~12 -> 9.0-9.6 ms: VFPU matrices and ADC (P93), VRAM cache kept while in use plus in-place texture updates, a cached screen matrix, and vertex writeback only after CPU writes; fight display 4 -> 12-15 fps together with P100. Screenshots match. What is left is about 25 us of fixed cost per submit (~152 a frame), split out as P107."
  },
  {
+  "id": "P94",
+  "order": 35,
+  "phase": "P4",
+  "size": "S",
+  "status": "Won't fix",
+  "depends": [
+   "P86"
+  ],
+  "read": [
+   "port/cmake/psp-clang.cmake",
+   "port/psp/CMakeLists.txt",
+   "port/render/r_gu.c",
+   "port/render/r_gu_mesh.c"
+  ],
+  "title": "Hardware speed: Allegrex ISA flags (-march=mips32r2) and 16 KB scratchpad SRAM",
+  "description": "psp-clang.cmake currently builds all C code with -O2 -mips2, preventing Clang from emitting Allegrex/MIPS32r2 instructions (ext/ins bitfield extract/insert for colour/UV unpacking, seb/seh, movz/movn, madd/msub, clz), and the PSP's 16 KB 0-wait-state scratchpad SRAM at 0x00010000-0x00013FFF is unused. Test -march=mips32r2 (and -O3 on hot render/audio files) and place hot lookup/scratch buffers (unorm_lut[1024], per-draw clip/ADC scratch) in scratchpad SRAM, measuring the delta over PSPLink.",
+  "done_when": "Measured frame-time improvement on PSP-2003 recorded in PSP.md; logic hashes and screenshots unchanged.",
+  "note": "clang has no Allegrex target: at any MIPS32 level it emits SPECIAL2 mul/clz/madd and COP1X madd.s/lwxc1, which Allegrex does not decode (probe checked with psp-objdump -m mips:allegrex), and no flag keeps ext/ins without them. The 1 KB unorm_lut already sits in the 16 KB D-cache, so scratchpad would gain little."
+ },
+ {
   "id": "P93",
   "order": 36,
   "phase": "P4",
@@ -1050,6 +1070,25 @@ window.BACKLOG_ARCHIVE = [
   "description": "All 4x4 matrix multiplies (fl_mat_mul), bounding-box corner transforms (bbox_corners), per-vertex clip preparation (clip_prepare), ADC transforms, and 3-light normal dot products (colours_lit) in r_gu_mesh.c currently run in scalar MIPS FPU C (~7-8 ms/frame in fights and character select). Enable THREAD_ATTR_VFPU on the main thread and add VFPU routines (vmmul.q, vtfm4.q, vdot.t) for matrix multiply and vertex/lighting loops while preserving visual fidelity.",
   "done_when": "Matrices + ADC + clip_prepare + colours_lit time in PROFILE=2 drops by >= 50% on PSP-2003; fight and character-select screenshots match.",
   "note": "Partial: VFPU kernels for ADC/clip outcodes, bbox build and corners, and colours_lit (deduped per range) in psp_vfpu.S. fight6 PROFILE=2 A/B (MVC2_NO_VFPU): fl_clay_draw 17.6 -> 17.0 ms, clip_prepare 1.72 -> 1.25, matrices+ADC 4.9 -> 4.4; game-state trace unchanged. The 50% target is not reachable this way: the cost is per-draw overhead (~115 draws, ~15 us each), not vertex math, and fights have no lit draws."
+ },
+ {
+  "id": "P102",
+  "order": 37,
+  "phase": "P4",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P88"
+  ],
+  "read": [
+   "port/docs/PSP.md",
+   "port/render/r_gu.c",
+   "port/render/r_gu_mesh.c"
+  ],
+  "title": "Hardware speed: GE commands written directly, not through sceGu",
+  "description": "Ideas from gibletto/mvc2-naomi-dc ports/port/psp (AGPL-3.0: ideas only, no code copied). r_gu*.c issue each state change and draw through sceGu (~25 us per mesh submit measured in P83). Write GE command words straight into the display list with a PSP-side writer that keeps its own last-set state and skips redundant words. The writer must hold all its state itself (no sceGu globals) so P104 can run it on another CPU.",
+  "done_when": "Mesh submit cost per draw and frame time in a 3v3 fight measured on hardware before and after; screenshots bit-identical in PPSSPP.",
+  "note": "r_gu_mesh_draw writes its GE words directly, skipping those the GE already holds, with a stall update every 8th draw. MVC2_GE_CHECK matched sceGu on 344k draws and the fight6 shots are byte-identical. PSP-2003: fl_clay_draw down 0.1-0.8 ms per drawn step; sceGu itself was only about 4 us of a submit (PSP.md)."
  },
  {
   "id": "P91",

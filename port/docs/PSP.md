@@ -365,6 +365,22 @@ each mesh's whole vertex buffer back from the D-cache on every draw. It now
 does so only after the CPU has written the buffer, and never for
 display-list (uncached) memory. Per drawn step: 8.9-10.2 -> 9.0-9.6 ms.
 
+GE command writer (P102, 2026-11-23, PSP-2003, `fight6`, `PROFILE=2 NO_FRAME_SKIP=1`):
+- **What changed:** `r_gu_mesh_draw` writes its texscale, projection,
+  clip-plane and draw words straight into sceGu's list. It skips words the GE
+  already holds and makes the stall-address syscall every 8th mesh draw, not
+  on every draw. `MVC2_GE_SCEGU=1` restores the sceGu calls. `MVC2_GE_CHECK=1`
+  compares the words with sceGu's: 344k draws in PPSSPP, 0 differ. The
+  fight6 shots f1-f6 are byte-identical.
+- **Bench, GE idle:** `sceGuSetMatrix` 0.54 us, texscale shim 0.19 us,
+  `sceGuDisable` 0.13 us, `sceGeListUpdateStallAddr` 0.54 us, an uncached
+  list store about 19 ns. sceGu was about 4 us of a submit, not most of it.
+- **Result, fight blocks:** `fl_clay_draw` per drawn step went down by
+  0.1-0.8 ms (for example 12.50 -> 11.70 and 13.39 -> 12.56). GU submit went
+  down by 0.3-0.8 ms (7.99 -> 7.37 at 168 draws).
+- **Tried and dropped:** writing the words through cached lines and
+  `cache 0x1B` (user mode works) was slower than uncached stores.
+
 Frame skip (P100, 2026-11-23, PSP-2003, `fight6`):
 - **The problem:** when it falls behind, the platform runs up to 8 logic
   steps per display frame and shows only the last. The PSP renderer drew all

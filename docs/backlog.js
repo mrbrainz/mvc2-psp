@@ -44,6 +44,7 @@ window.BACKLOG = {
   "P09",
   "P10",
   "P100",
+  "P102",
   "P11",
   "P12",
   "P13",
@@ -100,7 +101,7 @@ window.BACKLOG = {
  "activities": [
   {
    "id": "P96",
-   "order": 35,
+   "order": 40,
    "phase": "P4",
    "size": "M",
    "status": "In progress",
@@ -118,27 +119,8 @@ window.BACKLOG = {
    "note": "Patched fe_mesh.c copy (port/psp/patches) + psp_mesh_state.c: the renderer reads the game's matrices in place, lights only for lit draws; PPSSPP fight wrapper 1.24 -> 0.68 ms, state dump A/B 0 diverging words, MVC2_MESH_CHECK 1.56 M draws unchanged. PSP-2003 fight6: profiled wrapper 3.53 -> 2.15 ms (about 3.0 -> 1.6 ms once the profiler's own ~0.5 ms is removed); 0 format rebuilds, and the rest is spread over small per-draw calls (PSP.md)."
   },
   {
-   "id": "P94",
-   "order": 37,
-   "phase": "P4",
-   "size": "S",
-   "status": "Ready",
-   "depends": [
-    "P86"
-   ],
-   "read": [
-    "port/cmake/psp-clang.cmake",
-    "port/psp/CMakeLists.txt",
-    "port/render/r_gu.c",
-    "port/render/r_gu_mesh.c"
-   ],
-   "title": "Hardware speed: Allegrex ISA flags (-march=mips32r2) and 16 KB scratchpad SRAM",
-   "description": "psp-clang.cmake currently builds all C code with -O2 -mips2, preventing Clang from emitting Allegrex/MIPS32r2 instructions (ext/ins bitfield extract/insert for colour/UV unpacking, seb/seh, movz/movn, madd/msub, clz), and the PSP's 16 KB 0-wait-state scratchpad SRAM at 0x00010000-0x00013FFF is unused. Test -march=mips32r2 (and -O3 on hot render/audio files) and place hot lookup/scratch buffers (unorm_lut[1024], per-draw clip/ADC scratch) in scratchpad SRAM, measuring the delta over PSPLink.",
-   "done_when": "Measured frame-time improvement on PSP-2003 recorded in PSP.md; logic hashes and screenshots unchanged."
-  },
-  {
    "id": "P83",
-   "order": 38,
+   "order": 39,
    "phase": "P4",
    "size": "M",
    "status": "In progress",
@@ -158,7 +140,7 @@ window.BACKLOG = {
   },
   {
    "id": "P98",
-   "order": 53,
+   "order": 42,
    "phase": "P4",
    "size": "M",
    "status": "Ready",
@@ -176,7 +158,7 @@ window.BACKLOG = {
   },
   {
    "id": "P99",
-   "order": 54,
+   "order": 43,
    "phase": "P4",
    "size": "M",
    "status": "Ready",
@@ -194,7 +176,7 @@ window.BACKLOG = {
   },
   {
    "id": "P101",
-   "order": 55,
+   "order": 36,
    "phase": "P4",
    "size": "S",
    "status": "Ready",
@@ -208,29 +190,11 @@ window.BACKLOG = {
    "done_when": "Generated ordering used by the release build; frame time in a 3v3 fight and in character select measured on hardware before and after (PROFILE=1); game-state trace unchanged."
   },
   {
-   "id": "P102",
-   "order": 56,
-   "phase": "P4",
-   "size": "M",
-   "status": "Backlog",
-   "depends": [
-    "P88"
-   ],
-   "read": [
-    "port/docs/PSP.md",
-    "port/render/r_gu.c",
-    "port/render/r_gu_mesh.c"
-   ],
-   "title": "Hardware speed: GE commands written directly, not through sceGu",
-   "description": "Ideas from gibletto/mvc2-naomi-dc ports/port/psp (AGPL-3.0: ideas only, no code copied). r_gu*.c issue each state change and draw through sceGu (~25 us per mesh submit measured in P83). Write GE command words straight into the display list with a PSP-side writer that keeps its own last-set state and skips redundant words. The writer must hold all its state itself (no sceGu globals) so P104 can run it on another CPU.",
-   "done_when": "Mesh submit cost per draw and frame time in a 3v3 fight measured on hardware before and after; screenshots bit-identical in PPSSPP."
-  },
-  {
    "id": "P103",
-   "order": 57,
+   "order": 44,
    "phase": "P4",
    "size": "L",
-   "status": "Backlog",
+   "status": "Ready",
    "depends": [
     "P102"
    ],
@@ -245,7 +209,7 @@ window.BACKLOG = {
   },
   {
    "id": "P104",
-   "order": 58,
+   "order": 45,
    "phase": "P4",
    "size": "L",
    "status": "Backlog",
@@ -262,10 +226,10 @@ window.BACKLOG = {
   },
   {
    "id": "P105",
-   "order": 59,
+   "order": 41,
    "phase": "P4",
    "size": "M",
-   "status": "Backlog",
+   "status": "Ready",
    "depends": [
     "P88"
    ],
@@ -279,7 +243,7 @@ window.BACKLOG = {
   },
   {
    "id": "P106",
-   "order": 60,
+   "order": 46,
    "phase": "P4",
    "size": "M",
    "status": "Backlog",
@@ -296,7 +260,7 @@ window.BACKLOG = {
   },
   {
    "id": "P107",
-   "order": 61,
+   "order": 38,
    "phase": "P4",
    "size": "L",
    "status": "Ready",
@@ -314,7 +278,7 @@ window.BACKLOG = {
   },
   {
    "id": "P41",
-   "order": 40,
+   "order": 47,
    "phase": "P4",
    "size": "L",
    "status": "Backlog",
@@ -346,10 +310,10 @@ window.BACKLOG = {
   },
   {
    "id": "P42",
-   "order": 41,
+   "order": 48,
    "phase": "P4",
    "size": "S",
-   "status": "Backlog",
+   "status": "Ready",
    "depends": [
     "P06"
    ],
@@ -362,10 +326,10 @@ window.BACKLOG = {
   },
   {
    "id": "P74",
-   "order": 43,
+   "order": 49,
    "phase": "P6",
    "size": "S",
-   "status": "Backlog",
+   "status": "Ready",
    "depends": [
     "P73"
    ],
@@ -380,7 +344,7 @@ window.BACKLOG = {
   },
   {
    "id": "P75",
-   "order": 44,
+   "order": 50,
    "phase": "P6",
    "size": "M",
    "status": "Backlog",
@@ -398,7 +362,7 @@ window.BACKLOG = {
   },
   {
    "id": "P76",
-   "order": 45,
+   "order": 51,
    "phase": "P6",
    "size": "M",
    "status": "Backlog",
@@ -417,7 +381,7 @@ window.BACKLOG = {
   },
   {
    "id": "P78",
-   "order": 47,
+   "order": 52,
    "phase": "P6",
    "size": "S",
    "status": "Backlog",
@@ -435,7 +399,7 @@ window.BACKLOG = {
   },
   {
    "id": "P79",
-   "order": 48,
+   "order": 53,
    "phase": "P6",
    "size": "M",
    "status": "Backlog",
@@ -455,7 +419,7 @@ window.BACKLOG = {
   },
   {
    "id": "P80",
-   "order": 49,
+   "order": 54,
    "phase": "P6",
    "size": "L",
    "status": "Backlog",
@@ -472,10 +436,10 @@ window.BACKLOG = {
   },
   {
    "id": "P72",
-   "order": 50,
+   "order": 55,
    "phase": "P5",
    "size": "XS",
-   "status": "Backlog",
+   "status": "Ready",
    "depends": [
     "P71"
    ],
@@ -488,7 +452,7 @@ window.BACKLOG = {
   },
   {
    "id": "P51",
-   "order": 51,
+   "order": 56,
    "phase": "P5",
    "size": "S",
    "status": "Backlog",

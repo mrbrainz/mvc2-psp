@@ -24,6 +24,7 @@
 #include <math.h>
 #include <pspgu.h>
 #include <pspdisplay.h>
+#include <pspge.h>
 #include <pspkernel.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1202,6 +1203,98 @@ void r_gu_canvas_to_ge(float m[16])
     m[12] = bx; m[13] = by;   /* row-major v' = v * M, applied to (x/w, y/w): as w-weighted terms */
 }
 
+/* P102: mesh submit GE words written straight into sceGu's list (same
+ * words sceGu writes, PROJ 0x3E/0x3F, TEXSCALE 0x48-0x4B, CLIPENABLE 0x1C,
+ * VTYPE 0x12, BASE 0x10, IADDR 0x02, VADDR 0x01, PRIM 0x04), skipping the
+ * ones the GE already holds, and the stall-address syscall sceGuDrawArray
+ * makes on every draw (now every 8th mesh draw).  The writer keeps its own
+ * state (ge_w); only the list pointer is shared with sceGu.  MVC2_GE_SCEGU=1: the sceGu calls;
+ * MVC2_GE_CHECK=1: compare the words with sceGu's (ge_mesh_check). */
+typedef struct { unsigned int *start, *current; int parent_context; } GuListInt;   /* libpspgu's GuDisplayList */
+extern GuListInt *gu_list;
+extern int ge_list_executed[];
+static struct {
+    unsigned gen;              /* list_gen the shadow below belongs to */
+    uint32_t clip_off, ts_ok, proj_ok;
+    uint32_t ts[4], proj[16];
+    unsigned since_stall;
+} ge_w = { ~0u };
+static int ge_mode = -1;       /* 0 sceGu, 1 writer; MVC2_GE_CHECK adds 4 */
+#define GE_F(cmd, f) ((uint32_t)(cmd) << 24 | ge_fbits(f) >> 8)
+static inline uint32_t ge_fbits(float f) { uint32_t u; memcpy(&u, &f, 4); return u; }
+static void ge_sync_shadow(void)
+{
+    if (ge_w.gen != R.list_gen) { ge_w.gen = R.list_gen; ge_w.clip_off = ge_w.ts_ok = ge_w.proj_ok = 0; ge_w.since_stall = 0; }
+}
+/* words for texscale/offset, projection and the draw into o; returns the count */
+static int ge_mesh_words(uint32_t *o, const GuTexScaleArgs *ts, const float *proj, const void *idx, const void *verts, int count)
+{
+    uint32_t *b = o;
+    if (ts) {
+        uint32_t w[4] = { GE_F(0x48, ts->su), GE_F(0x49, ts->sv), GE_F(0x4A, ts->ou), GE_F(0x4B, ts->ov) };
+        if (!ge_w.ts_ok || memcmp(w, ge_w.ts, sizeof w)) {
+            memcpy(o, w, sizeof w); o += 4;
+            memcpy(ge_w.ts, w, sizeof w); ge_w.ts_ok = 1;
+        }
+    }
+    if (!ge_w.clip_off) { *o++ = 0x1C000000u; ge_w.clip_off = 1; }
+    {
+        uint32_t w[16];
+        for (int k = 0; k < 16; k++) w[k] = GE_F(0x3F, proj[k]);
+        if (!ge_w.proj_ok || memcmp(w, ge_w.proj, sizeof w)) {
+            *o++ = 0x3E000000u;
+            memcpy(o, w, sizeof w); o += 16;
+            memcpy(ge_w.proj, w, sizeof w); ge_w.proj_ok = 1;
+        }
+    }
+    *o++ = 0x12000000u | ((GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_INDEX_16BIT | GU_TRANSFORM_3D) & 0xFFFFFF);
+    *o++ = 0x10000000u | (((uint32_t)(uintptr_t)idx >> 8) & 0xF0000u);
+    *o++ = 0x02000000u | ((uint32_t)(uintptr_t)idx & 0xFFFFFFu);
+    *o++ = 0x10000000u | (((uint32_t)(uintptr_t)verts >> 8) & 0xF0000u);
+    *o++ = 0x01000000u | ((uint32_t)(uintptr_t)verts & 0xFFFFFFu);
+    *o++ = 0x04000000u | ((((uint32_t)GU_TRIANGLES << 16) | (uint32_t)count) & 0xFFFFFFu);
+    return (int)(o - b);
+}
+/* MVC2_GE_CHECK: the words sceGu writes for the same state (into a scratch
+ * list), against the writer's with its shadow cleared */
+static void ge_mesh_check(const GuTexScaleArgs *ts, const float *proj, const void *idx, const void *verts, int count)
+{
+    static unsigned bad, n;
+    uint32_t a[48], b[48], *save = gu_list->current, keep[sizeof ge_w / 4];
+    int na, nb;
+    gu_list->current = a;
+    if (ts) gu_texscale(ts);
+    sceGuDisable(GU_CLIP_PLANES);
+    sceGuSetMatrix(GU_PROJECTION, (const ScePspFMatrix4 *)proj);
+    na = (int)(gu_list->current - a);
+    gu_list->current = save;
+    memcpy(keep, &ge_w, sizeof keep);
+    ge_w.clip_off = ge_w.ts_ok = ge_w.proj_ok = 0;
+    nb = ge_mesh_words(b, ts, proj, idx, verts, count) - 6;   /* the draw words are sceGuDrawArray's by construction */
+    memcpy(&ge_w, keep, sizeof keep);
+    n++;
+    if (na != nb || memcmp(a, b, (size_t)na * 4)) {
+        if (bad++ < 8) fprintf(stderr, "[ge] check: draw %u: %d sceGu words, %d writer words differ\n", n, na, nb);
+    }
+    if ((n & 0x3FFF) == 0) fprintf(stderr, "[ge] check: %u draws, %u differ\n", n, bad);
+}
+static void ge_mesh_emit(const GuTexScaleArgs *ts, const float *proj, const void *idx, const void *verts, int count)
+{
+    uint32_t buf[48];
+    int n;
+    ge_sync_shadow();
+    n = ge_mesh_words(buf, ts, proj, idx, verts, count);
+    {   /* uncached, as sceGu: through cached lines and a write-back was slower on hardware */
+        volatile uint32_t *d = gu_list->current;
+        for (int k = 0; k < n; k++) d[k] = buf[k];
+    }
+    gu_list->current += n;
+    if (++ge_w.since_stall >= 8) {   /* let the GE run what is written */
+        sceGeListUpdateStallAddr(ge_list_executed[0], gu_list->current);
+        ge_w.since_stall = 0;
+    }
+}
+
 /* One indexed 3D draw: GuVtx-layout vertices (u, v, 8888 colour, x, y, z),
  * transformed by clip (row-major, v' = v * M, GE clip space), textured from
  * an fl texture handle (0 = untextured) with UVs scaled (su, sv) and offset
@@ -1213,10 +1306,13 @@ int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const 
     static ScePspFMatrix4 ident = { {1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1} };
     static unsigned ident_gen = ~0u;   /* list_gen whose GE state already has VIEW/MODEL = identity */
     ScePspFMatrix4 proj;
+    GuTexScaleArgs tsp;
     const int prof = psp_prof_fine();
     unsigned long long t0 = prof ? psp_prof_now() : 0, t1;
     int i = (int)(tex & 0xFFFF) - 1, p = (int)(tex >> 16) - 1;
     if (!R.inited || count <= 0) return 0;
+    if (ge_mode < 0) ge_mode = (getenv("MVC2_GE_SCEGU") ? 0 : 1) | (getenv("MVC2_GE_CHECK") ? 4 : 0);
+    tsp.su = -1e30f;
     r_flush();
     canvas_bind();
     if (prof) { t1 = psp_prof_now(); psp_prof_add(37, "          submit: flush + canvas", t1 - t0); t0 = t1; }
@@ -1235,7 +1331,7 @@ int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const 
             memcpy(mesh_tex_key, key, sizeof key);
             mesh_tex_ok = 1;
         }
-        gu_texscale(&ts);
+        if (ge_mode & 3) tsp = ts; else gu_texscale(&ts);
     } else {
         sceGuDisable(GU_TEXTURE_2D);
         mesh_tex_ok = 0;
@@ -1276,15 +1372,19 @@ int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const 
     /* GE clip planes cull clip-space z < 0, where the game's depth range
      * (larger = nearer, as the GS) puts every mesh; the VU1 reject above
      * (r_gu_mesh.c) stands in for the GS's own guard-band handling */
-    sceGuDisable(GU_CLIP_PLANES);
-    sceGuSetMatrix(GU_PROJECTION, &proj);
     if (ident_gen != R.list_gen) {   /* nothing else sets VIEW/MODEL (2D draws do not transform) */
         sceGuSetMatrix(GU_VIEW, &ident);
         sceGuSetMatrix(GU_MODEL, &ident);
         ident_gen = R.list_gen;
     }
-    if (prof) { t1 = psp_prof_now(); psp_prof_add(39, "          submit: blend/depth + matrices", t1 - t0); t0 = t1; }
-    {
+    if (ge_mode & 3) {
+        if (prof) { t1 = psp_prof_now(); psp_prof_add(39, "          submit: blend/depth + matrices", t1 - t0); t0 = t1; }
+        if (ge_mode & 4) ge_mesh_check(tsp.su != -1e30f ? &tsp : NULL, (const float *)&proj, idx, verts, count);
+        ge_mesh_emit(tsp.su != -1e30f ? &tsp : NULL, (const float *)&proj, idx, verts, count);
+    } else {
+        sceGuDisable(GU_CLIP_PLANES);
+        sceGuSetMatrix(GU_PROJECTION, &proj);
+        if (prof) { t1 = psp_prof_now(); psp_prof_add(39, "          submit: blend/depth + matrices", t1 - t0); t0 = t1; }
         GuDrawArgs d = { GU_TRIANGLES, GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_INDEX_16BIT | GU_TRANSFORM_3D,
                          count, idx, verts };
         gu_draw(&d);
