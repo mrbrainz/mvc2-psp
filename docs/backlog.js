@@ -133,7 +133,7 @@ window.BACKLOG = {
    "title": "Hardware speed: per-draw cost of mesh submits",
    "description": "P86 profile: fl_clay_draw 13-15 ms in character select and fights for ~100 draws (~150 us each), mostly fixed per-draw cost (GU submit, matrices, clip prep, list restarts), not per-vertex work. Options: record each static mesh's GE commands once and replay them with sceGuCallList, merge ranges sharing a texture, fewer list restarts. Output must stay bit-identical.",
    "done_when": "fl_clay_draw <= 6 ms in the scripted 3v3 fight over PSPLink; screenshots match visually (bit-identical relaxed by user choice: VFPU rounding, range order).",
-   "note": "Specific hotspots from PROFILE=2 (mvc2_psp.log) and code inspection: (1) Uncached RAM CPU read-back stalls: since P85 moved list_buf to 0x40000000, sceGuGetMemory returns uncached pointers, yet r_gu.c:1186 reads vv[idx[...]].x back from verts for depth-zoom z (use cached me->cpu or me->bb instead) and r_gu_mesh.c:569 (near_clip) reads from uncached vsrc when lit; also skip sceKernelDcacheWritebackRange (r_gu_mesh.c:585,700) when (uintptr_t)ptr & 0x40000000. (2) Pre-multiply scene-invariant matrices VP_full = view * proj * vpm * ge and VC = view * clipm once when 0x16/0x17/0x18/clipm change instead of 5-6 fl_mat_mul calls per draw (r_gu_mesh.c:708-751), and share bbox_corners between bbox_inside (line 756) and clip_bbox_inside (line 798). (3) 6-plane AABB frustum culling (all_out &= corner_code) in clip_bbox_inside/bbox_inside: in char select, 168/168 draws use clipping descriptors (desc 19/44..46) and 167 fail clip_bbox_inside, running clip_prepare on all 6324 verts (3.56 ms) when only 1 draw needs near_clip because off-screen meshes fail the guard-band check instead of being culled. (4) submit: tex bind takes 2.7 ms despite 95% VRAM hits because multi-material meshes alternate textures across me->range[], thrashing the 1-entry mesh_tex_key memo and sceGuTexFlush(); sort/merge MRange by (tex, diffuse, c0) at build_mesh time and move sceGuDisable(GU_CLIP_PLANES) (r_gu.c:1181) to list_open. Progress: psp_vfpu.S (psp-gcc) does fl_mat_mul and the ADC/clip_prepare vertex transforms on the VFPU, self-tested at startup (MVC2_NO_VFPU for A/B): fight fl_clay_draw ~15 -> ~13 ms, matrices + ADC 5.1 -> 3.5 ms (PROFILE=2), game-state trace unchanged. Whole-mesh culling and skipping uncached writebacks gave nothing in fights (~0.25 culls/frame). Next: sort ranges by texture (tex bind ~2 ms), VFPU outcodes, lighting. 2026-11-23 PSP-2003 fight6 (PROFILE=1): fl_clay_draw 10.5-12.1 ms for ~115 draws and ~152 submits a frame. PROFILE=2, less ~1.7 ms of timer reads: per-submit r_gu_mesh_draw ~3.6 ms (tex bind 1.9, blend/depth + projection 1.3), matrices + ADC ~3.1, colours ~1.8, clip prepare + near clip ~1.7. The VRAM cache thrashes: ~28 binds a frame miss (from RAM) vs ~20 hits, and it refills about every 7 frames, ~1 ms a frame of copies. VRAM copies now update in place on texture updates (no slot leak): fl_clay_draw 0.2-0.6 ms lower per block, screenshot identical. Per-drawn-frame figures need NO_FRAME_SKIP=1 since P100."
+   "note": "Specific hotspots from PROFILE=2 (mvc2_psp.log) and code inspection: (1) Uncached RAM CPU read-back stalls: since P85 moved list_buf to 0x40000000, sceGuGetMemory returns uncached pointers, yet r_gu.c:1186 reads vv[idx[...]].x back from verts for depth-zoom z (use cached me->cpu or me->bb instead) and r_gu_mesh.c:569 (near_clip) reads from uncached vsrc when lit; also skip sceKernelDcacheWritebackRange (r_gu_mesh.c:585,700) when (uintptr_t)ptr & 0x40000000. (2) Pre-multiply scene-invariant matrices VP_full = view * proj * vpm * ge and VC = view * clipm once when 0x16/0x17/0x18/clipm change instead of 5-6 fl_mat_mul calls per draw (r_gu_mesh.c:708-751), and share bbox_corners between bbox_inside (line 756) and clip_bbox_inside (line 798). (3) 6-plane AABB frustum culling (all_out &= corner_code) in clip_bbox_inside/bbox_inside: in char select, 168/168 draws use clipping descriptors (desc 19/44..46) and 167 fail clip_bbox_inside, running clip_prepare on all 6324 verts (3.56 ms) when only 1 draw needs near_clip because off-screen meshes fail the guard-band check instead of being culled. (4) submit: tex bind takes 2.7 ms despite 95% VRAM hits because multi-material meshes alternate textures across me->range[], thrashing the 1-entry mesh_tex_key memo and sceGuTexFlush(); sort/merge MRange by (tex, diffuse, c0) at build_mesh time and move sceGuDisable(GU_CLIP_PLANES) (r_gu.c:1181) to list_open. Progress: psp_vfpu.S (psp-gcc) does fl_mat_mul and the ADC/clip_prepare vertex transforms on the VFPU, self-tested at startup (MVC2_NO_VFPU for A/B): fight fl_clay_draw ~15 -> ~13 ms, matrices + ADC 5.1 -> 3.5 ms (PROFILE=2), game-state trace unchanged. Whole-mesh culling and skipping uncached writebacks gave nothing in fights (~0.25 culls/frame). Next: sort ranges by texture (tex bind ~2 ms), VFPU outcodes, lighting. 2026-11-23 PSP-2003 fight6 (PROFILE=1): fl_clay_draw 10.5-12.1 ms for ~115 draws and ~152 submits a frame. PROFILE=2, less ~1.7 ms of timer reads: per-submit r_gu_mesh_draw ~3.6 ms (tex bind 1.9, blend/depth + projection 1.3), matrices + ADC ~3.1, colours ~1.8, clip prepare + near clip ~1.7. The VRAM cache thrashes: ~28 binds a frame miss (from RAM) vs ~20 hits, and it refills about every 7 frames, ~1 ms a frame of copies. VRAM copies now update in place on texture updates (no slot leak): fl_clay_draw 0.2-0.6 ms lower per block, screenshot identical. Per-drawn-frame figures need NO_FRAME_SKIP=1 since P100. VRAM cache now kept while a frame uses at least half of it (was reset whenever full, ~690 KB recopied per shown frame); MVC2_VRAM_RESET=1 restores that. PSP-2003 fight6: fight display 9.2-12 -> 13-15 fps, character select 6.7-7.5 -> 8.2-8.6; fl_clay_draw per drawn step 10.6-12.2 -> 10.0-11.6 ms; screenshot identical. The viewport * canvas -> GE matrix is now computed only when the viewport or canvas changes (same arithmetic, so bit-identical): fl_clay_draw per drawn step 10.0-11.6 -> 8.9-10.2 ms (NO_FRAME_SKIP=1), and the normal-mode f6 screenshot is identical. Regrouping world * (view * proj * screen) per camera was slower (the camera changes between draws) and is not used. Per draw (PROFILE=2) the matrices are ~9.6 us and cm + bbox_inside ~9 us; outcodes 0.28 and the triangle filter 0.15 ms a frame."
   },
   {
    "id": "P94",
@@ -209,6 +209,108 @@ window.BACKLOG = {
    "title": "Hardware speed: character select object list 6 walk (func_00151A20)",
    "description": "P91 split: in character select, func_00151A20(6) (func_00151A90 on each object of D_004D3690[6]) takes 5.5 ms a frame on the PSP-2003 without mesh draws. Find what func_00151A90 spends it on (matrix or animation work, host overrides) and make it cheaper PSP-side.",
    "done_when": "func_00151A20(6) <= 2 ms in fight6's character select (PROFILE=1, hardware); game-state trace unchanged."
+  },
+  {
+   "id": "P101",
+   "order": 55,
+   "phase": "P4",
+   "size": "S",
+   "status": "Ready",
+   "depends": [],
+   "read": [
+    "port/docs/PSP.md",
+    "port/psp/CMakeLists.txt"
+   ],
+   "title": "Hardware speed: hot routines grouped at the start of .text",
+   "description": "Ideas from gibletto/mvc2-naomi-dc ports/port/psp (AGPL-3.0: ideas only, no code copied). The Allegrex has a 16 KB I-cache; hot game and renderer routines scattered through a multi-MB .text evict each other. Build with -ffunction-sections, take the hottest routines from a PROFILE=1 fight and character select run, and emit a linker script fragment that places them together first in .text (a small PSP-side tool generates it from the profile).",
+   "done_when": "Generated ordering used by the release build; frame time in a 3v3 fight and in character select measured on hardware before and after (PROFILE=1); game-state trace unchanged."
+  },
+  {
+   "id": "P102",
+   "order": 56,
+   "phase": "P4",
+   "size": "M",
+   "status": "Backlog",
+   "depends": [
+    "P88"
+   ],
+   "read": [
+    "port/docs/PSP.md",
+    "port/render/r_gu.c",
+    "port/render/r_gu_mesh.c"
+   ],
+   "title": "Hardware speed: GE commands written directly, not through sceGu",
+   "description": "Ideas from gibletto/mvc2-naomi-dc ports/port/psp (AGPL-3.0: ideas only, no code copied). r_gu*.c issue each state change and draw through sceGu (~25 us per mesh submit measured in P83). Write GE command words straight into the display list with a PSP-side writer that keeps its own last-set state and skips redundant words. The writer must hold all its state itself (no sceGu globals) so P104 can run it on another CPU.",
+   "done_when": "Mesh submit cost per draw and frame time in a 3v3 fight measured on hardware before and after; screenshots bit-identical in PPSSPP."
+  },
+  {
+   "id": "P103",
+   "order": 57,
+   "phase": "P4",
+   "size": "L",
+   "status": "Backlog",
+   "depends": [
+    "P102"
+   ],
+   "read": [
+    "port/docs/PSP.md",
+    "port/render/r_gu.c",
+    "port/render/r_gu_mesh.c"
+   ],
+   "title": "Hardware speed: record the frame's draws, build the GE list afterwards",
+   "description": "Ideas from gibletto/mvc2-naomi-dc ports/port/psp (AGPL-3.0: ideas only, no code copied). Today the GE list is written while the game's draw code runs. Split it: during the frame record compact draw items (state, texture, mesh, matrix, vertices as references or copies of what the game may rewrite next frame), then turn the record into the GE list in one pass after the frame. On the main CPU alone this is the step that makes P104 possible; it also groups list writes for the cache.",
+   "done_when": "Recorded path is the default; frame time measured on hardware no worse than before; screenshots bit-identical in PPSSPP; a check mode builds the list one frame late to prove the game does not touch what the record refers to."
+  },
+  {
+   "id": "P104",
+   "order": 58,
+   "phase": "P4",
+   "size": "L",
+   "status": "Backlog",
+   "depends": [
+    "P103"
+   ],
+   "read": [
+    "port/docs/PSP.md",
+    "port/psp/host/psp_entry.c"
+   ],
+   "title": "Hardware speed: build the GE list on the Media Engine",
+   "description": "Ideas from gibletto/mvc2-naomi-dc ports/port/psp (AGPL-3.0: ideas only, no code copied). Take the Media Engine from the firmware (kernel access via ARK-4's kubridge; the firmware's ME code halted as for sleep, ours started at its reset vector, given back before sleep and taken again on wake) and run P103's list build there while the main CPU runs the game's next frame; the GE draws it a frame later. The ME's caches are not coherent with the main CPU's: shared data written back/invalidated by hand, the handshake word in its own cache line through the uncached mirror. Double-buffer the list, vertices and anything the record refers to.",
+   "done_when": "List build off the main CPU in fights; frame time and display fps in a 3v3 fight on the PSP-2003 measured before and after; sleep/resume works; screenshots identical apart from the one-frame delay."
+  },
+  {
+   "id": "P105",
+   "order": 59,
+   "phase": "P4",
+   "size": "M",
+   "status": "Backlog",
+   "depends": [
+    "P88"
+   ],
+   "read": [
+    "port/docs/PSP.md",
+    "port/render/r_gu.c"
+   ],
+   "title": "Hardware speed: half-size texture copies when the GE's reads slow the frame",
+   "description": "Ideas from gibletto/mvc2-naomi-dc ports/port/psp (AGPL-3.0: ideas only, no code copied). The GE reads textures from main RAM over the bus the CPU uses. For 3D-scene textures drawn shrunk, keep a half-size copy (made once, a level per frame) and draw from it when recent frames are over budget; switch back with hysteresis. HUD, sprites and menus are never reduced. Measure first whether GE texture reads cost the CPU here (PROFILE=1 with mip forced on vs off) before building the automatic switch.",
+   "done_when": "Measured effect on a 3v3 fight's frame time on hardware recorded in PSP.md; if worthwhile, automatic switch in place with HUD/menus unchanged in screenshots; if not, Won't fix with the numbers."
+  },
+  {
+   "id": "P106",
+   "order": 60,
+   "phase": "P4",
+   "size": "M",
+   "status": "Backlog",
+   "depends": [
+    "P104"
+   ],
+   "read": [
+    "port/docs/PSP.md",
+    "port/platform/platform_psp.c"
+   ],
+   "title": "Hardware speed: audio mixing on the Media Engine",
+   "description": "Ideas from gibletto/mvc2-naomi-dc ports/port/psp (AGPL-3.0: ideas only, no code copied). Once P104 owns the ME, run the frame's sound mix there after the list build, if the profile shows mixing costs the main CPU measurable time per frame. Output must stay sample-identical.",
+   "done_when": "Mix time per frame measured on hardware; if moved, WAV output identical to the main-CPU mix and frame time measured before and after."
   },
   {
    "id": "P41",

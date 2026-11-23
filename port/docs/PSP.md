@@ -336,6 +336,30 @@ Mesh hand-off (P96, 2026-11-23):
 Tex select (P90, fight6): 3.8-4.9 -> 1.0-1.4 ms in fights (O(1) resident
 lookup, psp_reslist.c); the rest is GS upload bookkeeping (P95).
 
+VRAM texture cache policy (P88, 2026-11-23, PSP-2003, `fight6`):
+- **Before:** the P87 cache was reset at the end of any frame in which it was
+  full. Fights use more textures than the ~690 KB past the frame and depth
+  buffers, so every shown frame recopied ~690 KB (~7-8 ms) and still served
+  about half the binds from RAM.
+- **Now:** it is kept while that frame used at least half of what it holds.
+  It resets when most of it went unused (a new scene) or for the system
+  dialog. When a texture changes, its VRAM copy is updated in place.
+- **Result:** fight display 9.2-12 -> 13-15 fps; character select 6.7-7.5 ->
+  8.2-8.6. `fl_clay_draw` per drawn step (`NO_FRAME_SKIP=1`) 10.6-12.2 ->
+  10.0-11.6 ms. The screenshot is identical.
+- `MVC2_VRAM_RESET=1` restores the old policy.
+
+Mesh screen matrix (P88, 2026-11-23, PSP-2003, `fight6`):
+- **The change:** `fl_clay_draw` built the viewport matrix (several float
+  divides), the canvas -> GE matrix and their product on every draw. Now it
+  builds them only when the viewport or canvas changes. The arithmetic is the
+  same, so the result is bit-identical.
+- **Result:** `fl_clay_draw` per drawn step (`NO_FRAME_SKIP=1`, `PROFILE=1`)
+  went 10.0-11.6 -> 8.9-10.2 ms. The normal-mode f6 screenshot is identical
+  to the run before.
+- **Tried and dropped:** caching world * (view * proj * screen) per camera was
+  slower, because the camera matrices change between draws.
+
 Frame skip (P100, 2026-11-23, PSP-2003, `fight6`):
 - **The problem:** when it falls behind, the platform runs up to 8 logic
   steps per display frame and shows only the last. The PSP renderer drew all

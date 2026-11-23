@@ -50,13 +50,14 @@ enum { RM_FLAT = 0, RM_RGBA = 1, RM_INDEX = 2, RM_RAW4 = 3 };
 typedef struct GuVtx { float u, v; uint32_t c; float x, y, z; } GuVtx;   /* TEXTURE_32BITF|COLOR_8888|VERTEX_32BITF */
 #define GU_VTYPE (GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_2D)
 
-typedef struct TexRec { uint8_t *pix; int w, h, fmt, used, pw, ph, warned; unsigned gen; uint32_t voff; } TexRec;   /* voff: VRAM copy (P87), 0 none */
+typedef struct TexRec { uint8_t *pix; int w, h, fmt, used, pw, ph, warned; unsigned gen; uint32_t voff, vused; } TexRec;   /* voff: VRAM copy (P87), 0 none; vused: vr_epoch of its last use (P88) */
 typedef struct PalRec { uint32_t *clut; int ncolors, used; unsigned gen; } PalRec;
 
 static unsigned int __attribute__((aligned(16))) list[LIST_BYTES / 4];
 static uint32_t vr_base, vr_next, vr_top;   /* P87 mesh texture VRAM cache (offsets) */
 static void vr_frame(void);
-static int vr_full, vr_off = -1, vr_pause;   /* pause: frames left without the cache (system dialog up) */
+static int vr_full, vr_off = -1, vr_pause, vr_drop;   /* pause: frames left without the cache (system dialog up); drop: reset at the next frame end */
+static unsigned vr_epoch = 1;   /* presented frames (P88) */
 static int is_index(int fmt);
 static uint32_t __attribute__((aligned(16))) black_clut[256];
 
@@ -247,7 +248,7 @@ void r_gu_present(void)
         extern int psp_saveui_frame(void);
         if (psp_saveui_frame()) {
             R.drawn_since_swap = 1;
-            vr_full = 1; vr_pause = 2;   /* the dialog may use VRAM: drop the texture cache (P87) */
+            vr_drop = 1; vr_pause = 2;   /* the dialog may use VRAM: drop the texture cache (P87) */
         }
     }
     if (R.drawn_since_swap) {
@@ -309,11 +310,12 @@ static const void *tex_addr(TexRec *t)
     unsigned bytes = (unsigned)t->pw * (unsigned)t->ph * (is_index(t->fmt) ? 1u : 4u);
     if (vr_off < 0) { const char *e = getenv("MVC2_NO_VRAM_TEX"); vr_off = e != NULL; }
     if (vr_off || vr_pause || !vr_base || !t->pix) return t->pix;
-    if (t->voff) { vr_stat[0]++; return (const void *)(uintptr_t)(0x04000000u + t->voff); }
+    if (t->voff) { vr_stat[0]++; t->vused = vr_epoch; return (const void *)(uintptr_t)(0x04000000u + t->voff); }
     bytes = (bytes + 63u) & ~63u;
     if (vr_next + bytes > vr_top) { vr_full = 1; return t->pix; }
     memcpy((void *)(uintptr_t)(0x44000000u + vr_next), t->pix, bytes);   /* uncached VRAM */
     t->voff = vr_next;
+    t->vused = vr_epoch;
     vr_next += bytes;
     vr_stat[1]++; vr_stat[2] += (int)bytes;
     return (const void *)(uintptr_t)(0x04000000u + t->voff);
@@ -329,10 +331,27 @@ static void vr_frame(void)
     }
     vr_stat[0] = vr_stat[1] = vr_stat[2] = 0;
     if (vr_pause) vr_pause--;
-    if (!vr_full) return;
+    /* P88: a full cache is kept while this frame used at least half of what
+     * it holds (fights: the textures that fit stay, the rest come from RAM).
+     * Resetting it whenever it was full recopied ~690 KB per shown frame on
+     * the PSP-2003 (~7-8 ms) and still missed half the binds.  It resets when
+     * most of it went unused (a new scene) or on request (system dialog). */
+    static int reset_full = -1;   /* MVC2_VRAM_RESET=1: reset whenever full, as P87 (A/B) */
+    if (reset_full < 0) reset_full = getenv("MVC2_VRAM_RESET") != NULL;
+    if (vr_full && !vr_drop && !reset_full) {
+        unsigned used = 0;
+        for (int i = 0; i < MAX_TEX; i++) {
+            const TexRec *t = &R.tex[i];
+            if (t->voff && t->vused == vr_epoch)
+                used += ((unsigned)t->pw * (unsigned)t->ph * (is_index(t->fmt) ? 1u : 4u) + 63u) & ~63u;
+        }
+        if (used * 2 >= vr_next - vr_base) vr_full = 0;
+    }
+    vr_epoch++;
+    if (!vr_full && !vr_drop) return;
     for (int i = 0; i < MAX_TEX; i++) R.tex[i].voff = 0;
     vr_next = vr_base;
-    vr_full = 0;
+    vr_full = vr_drop = 0;
 }
 
 static void tex_bind(const TexRec *t, int pal)
@@ -1169,6 +1188,9 @@ void r_gu_begin(unsigned bytes)
 /* canvas NDC (640x480, as r_mesh.c's u_vp output) -> GE clip space for the
  * 480x272 viewport, so the GE's own 3D path (perspective-correct UVs) draws
  * meshes where the 2D core puts the same canvas pixels */
+/* the canvas mapping r_gu_canvas_to_ge uses (P88: r_gu_mesh.c memo key) */
+void r_gu_canvas_key(float k[4]) { k[0] = R.sx; k[1] = R.sy; k[2] = R.ox; k[3] = R.oy; }
+
 void r_gu_canvas_to_ge(float m[16])
 {
     const float sx = R.sx * 320.f, sy = R.sy * 240.f;

@@ -36,6 +36,7 @@ const uint8_t *r_light(int i);
 void r_viewport(int vi[4], float vf[2]);
 uint8_t r_gs_to_unorm(unsigned g);
 void r_gu_canvas_to_ge(float m[16]);
+void r_gu_canvas_key(float k[4]);
 int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const uint16_t *idx, int count,
                    float su, float sv, float ou, float ov);
 
@@ -829,21 +830,28 @@ static int clay_draw(int h)
     fl_mat_mul(wv, r_matrix(0x19), r_matrix(0x16));
     fl_mat_mul(mvp, wv, r_matrix(0x17));
     r_viewport(vi, vf);
-    hw = (float)(vi[2] / 2);
-    hh = (float)((vi[3] / 2) / 2) * 2.f;
-    memset(vpm, 0, sizeof vpm);
-    vpm[0] = hw / 1.3333330154418945f / (FL_SCREEN_W / 2.f);
-    vpm[12] = ((float)vi[0] + hw) / (FL_SCREEN_W / 2.f) - 1.f;
-    vpm[5] = hh / (FL_SCREEN_H / 2.f);
-    vpm[13] = 1.f - ((float)vi[1] + hh) / (FL_SCREEN_H / 2.f);
-    vpm[10] = -(vf[1] - vf[0]);
-    vpm[15] = 1.f;
-    vpm[3] = vpm[7] = vpm[11] = 0.f;
-    /* x' = x * ax + w * bx: the w row carries bx (row 3 is w's contribution) */
-    {
-        float t[16];
-        r_gu_canvas_to_ge(ge);
-        fl_mat_mul(t, vpm, ge);
+    {   /* P88: viewport * canvas -> GE depends only on these; recomputed on change */
+        static float key[10], t[16];
+        static int ok;
+        float k[10];
+        memcpy(k, vi, 16); memcpy(k + 4, vf, 8); r_gu_canvas_key(k + 6);
+        if (!ok || memcmp(k, key, sizeof k)) {
+            hw = (float)(vi[2] / 2);
+            hh = (float)((vi[3] / 2) / 2) * 2.f;
+            memset(vpm, 0, sizeof vpm);
+            vpm[0] = hw / 1.3333330154418945f / (FL_SCREEN_W / 2.f);
+            vpm[12] = ((float)vi[0] + hw) / (FL_SCREEN_W / 2.f) - 1.f;
+            vpm[5] = hh / (FL_SCREEN_H / 2.f);
+            vpm[13] = 1.f - ((float)vi[1] + hh) / (FL_SCREEN_H / 2.f);
+            vpm[10] = -(vf[1] - vf[0]);
+            vpm[15] = 1.f;
+            vpm[3] = vpm[7] = vpm[11] = 0.f;
+            /* x' = x * ax + w * bx: the w row carries bx (row 3 is w's contribution) */
+            r_gu_canvas_to_ge(ge);
+            fl_mat_mul(t, vpm, ge);
+            memcpy(key, k, sizeof k);
+            ok = 1;
+        }
         fl_mat_mul(clip, mvp, t);
     }
 
