@@ -10,6 +10,7 @@
  *   PROFILE=1       stage timings (psp_prof.c)
  *   DRAWLOG=1       draw counters per 60 frames
  *   HASH=1          real time: the logic hash every 60 frames, as FRAMES
+ *   NO_FRAME_SKIP=1 real time: draw every logic step, not only the shown one (A/B)
  *   VERBOSE=1       host_verbose (libmc requests, file loads)
  *   anything else   setenv, e.g. MVC2_STATE_DUMP / MVC2_STATE_SNAP for
  *                   port/tools/oracle/compare_ports.py, MVC2_PS2FP_OFF=1
@@ -28,6 +29,7 @@
 unsigned psp_fpu_init(void);   /* psp_fpu.c */
 int r_init(void);              /* port/render/r_gu.c */
 void r_gu_present(void);
+void r_set_discard(int on);   /* r_gu.c (P88) */
 void fe_render_init(void);     /* port/host/fe/fe_render.c */
 int psp_audio_init(void);      /* psp_audio.c */
 int psp_disc_open(void);       /* psp_disc.c */
@@ -201,7 +203,14 @@ static void rt_update(void *u)
         host_pad_set(0, &p0);
         host_pad_set(1, &p1);
     }
-    mvc2_frame();
+    {   /* frame skip (P88): of several steps in one display frame only the
+         * last is drawn (r_gu.c r_set_discard); NO_FRAME_SKIP=1 draws all */
+        static int skip = -1;
+        if (skip < 0) { skip = getenv("NO_FRAME_SKIP") == NULL; plat_set_frame_skip(skip); }
+        r_set_discard(skip && !plat_step_is_last());
+        mvc2_frame();
+        r_set_discard(0);
+    }
     if (hashlog && mvc2_host_frame % 60 == 0)
         fprintf(stderr, "frame %ld hash %016llx\n", (long)mvc2_host_frame, ra_state_hash());
     if (drawlog && mvc2_host_frame % 60 == 0) {
@@ -235,8 +244,8 @@ static void rt_update(void *u)
     }
     if (mvc2_host_frame % 300 == 0) {   /* every 5 s */
         plat_stats(&st);
-        fprintf(stderr, "[plat] frame %ld: logic %.2f fps, update %.2f ms, slowed %d\n",
-                (long)mvc2_host_frame, st.logic_fps, st.update_ms, st.slowed);
+        fprintf(stderr, "[plat] frame %ld: logic %.2f fps, update %.2f ms, slowed %d, display %.2f fps, steps drawn unshown %d/s\n",
+                (long)mvc2_host_frame, st.logic_fps, st.update_ms, st.slowed, st.render_fps, st.dropped_render);
         psp_audio_hw_report();
         psp_disc_report();
     }

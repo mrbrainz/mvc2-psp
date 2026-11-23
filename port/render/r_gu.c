@@ -356,10 +356,19 @@ static void tex_bind(const TexRec *t, int pal)
     sceGuTexFlush();
 }
 
+/* P88: frame skip, as r_gl.c.  When the platform runs several logic steps
+ * in one display frame, psp_main.c discards all but the last: the logic
+ * runs, nothing reaches the GE.  Drawing them all left fights at ~4 frames
+ * a second on the PSP-2003 (every step drawn, one in eight shown). */
+static int r_discard;
+void r_flush(void);
+void r_set_discard(int on) { r_flush(); r_discard = on != 0; }
+int r_discarding(void) { return r_discard; }
+
 void r_flush(void)
 {
     GuVtx *v;
-    if (!R.nverts || !R.inited) { R.nverts = 0; return; }
+    if (!R.nverts || !R.inited || r_discard) { R.nverts = 0; return; }
     mesh_tex_ok = mesh_bd_ok = 0;   /* the 2D batch sets its own texture, blend and depth state */
     canvas_bind();
     if (sceGuCheckList() > LIST_BYTES - (int)sizeof R.verts - 4096) {   /* nearly full */
@@ -739,7 +748,7 @@ void fl_set_scissor(int x, int y, int w, int h)
 
 void fl_set_clear_color(uint32_t argb)
 {
-    if (R.flip_clear && argb != R.clear_color && !R.drawn) R.clear_pending = 1;
+    if (R.flip_clear && argb != R.clear_color && !R.drawn && !r_discard) R.clear_pending = 1;
     R.clear_color = argb;
 }
 void fl_set_origin(int x, int y) { R.origin_x = x; R.origin_y = y; }
@@ -857,11 +866,16 @@ static void tex_copy(TexRec *t, int x, int y, int w, int h, const void *pixels)
 {
     int bpp = is_index(t->fmt) ? 1 : 4;
     const uint8_t *s = (const uint8_t *)pixels;
+    /* P88: the VRAM copy (P87) is updated in place.  Callers have waited for
+     * the GE if this frame's list uses the texture (in_use_sync), as for the
+     * RAM copy.  Dropping it instead leaked its slot until the next reset. */
+    uint8_t *vr = t->voff ? (uint8_t *)(uintptr_t)(0x44000000u + t->voff) : NULL;   /* uncached */
     if (!pixels || !t->pix) return;
-    t->voff = 0;   /* the VRAM copy (P87) is stale */
-    for (int r = 0; r < h && y + r < t->ph; r++)
-        memcpy(t->pix + ((size_t)(y + r) * t->pw + x) * bpp, s + (size_t)r * w * bpp,
-               (size_t)(x + w <= t->pw ? w : t->pw - x) * bpp);
+    for (int r = 0; r < h && y + r < t->ph; r++) {
+        size_t o = ((size_t)(y + r) * t->pw + x) * bpp, n = (size_t)(x + w <= t->pw ? w : t->pw - x) * bpp;
+        memcpy(t->pix + o, s + (size_t)r * w * bpp, n);
+        if (vr) memcpy(vr + o, s + (size_t)r * w * bpp, n);
+    }
     sceKernelDcacheWritebackRange(t->pix, (unsigned)(t->pw * t->ph * bpp));
 }
 
@@ -1074,7 +1088,7 @@ int fl_fill_screen(int mode, uint32_t c)
 {
     if (mode != 0 && mode != 1) return 0;
     r_flush();
-    if (!R.inited) return 0;
+    if (!R.inited || r_discard) return 0;
     canvas_bind();
     mesh_bd_ok = 0;
     sceGuDepthMask(GU_FALSE);

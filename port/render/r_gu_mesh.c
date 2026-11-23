@@ -543,8 +543,10 @@ static void colours_lit(MMesh *me, GVtx *g, const float modv[4], float cscale)
 }
 
 static int clay_draw(int h);
+int r_discarding(void);
 int fl_clay_draw(int h)
 {
+    if (r_discarding()) return 1;   /* frame skip (P88): the logic ran, nothing is drawn */
     unsigned t0 = sceKernelGetSystemTimeLow();
     int r;
     if (r_gu_mesh_check) r_gu_mesh_check();

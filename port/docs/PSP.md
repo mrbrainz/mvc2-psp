@@ -336,6 +336,21 @@ Mesh hand-off (P96, 2026-11-23):
 Tex select (P90, fight6): 3.8-4.9 -> 1.0-1.4 ms in fights (O(1) resident
 lookup, psp_reslist.c); the rest is GS upload bookkeeping (P95).
 
+Frame skip (P100, 2026-11-23, PSP-2003, `fight6`):
+- **The problem:** when it falls behind, the platform runs up to 8 logic
+  steps per display frame and shows only the last. The PSP renderer drew all
+  of them, so fights ran their logic at half speed (33-37 steps/s) and showed
+  4-5 frames a second.
+- **The fix:** `r_gu.c` `r_set_discard` drops the GE work of steps that
+  won't be shown, as upstream `r_gl.c` does. The logic still runs.
+- **Result:** fight logic 59.94 steps/s, display 10-12 fps. Character select:
+  logic 53-60, display 6.7-7.5 (was 3.5-3.9).
+- **Profiles:** a `PROFILE` run now averages drawn and undrawn steps, so
+  per-step render figures fall. `NO_FRAME_SKIP=1` draws every step, for
+  figures comparable with the tables above.
+- The `[plat]` line now also prints the display rate and the steps drawn but
+  not shown.
+
 Packet build (P84, 2026-11-23, PSP-2003, `fight6`, `PROFILE=1`):
 - **The cost:** in a fight frame the texture memo check (`psp_fe_sync.c`,
   P85) runs about 29 times, the first time each handle appears that frame.

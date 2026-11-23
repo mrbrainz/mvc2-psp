@@ -1101,5 +1101,24 @@ window.BACKLOG_ARCHIVE = [
   "description": "Seen in PPSSPP (2026-11-22, arcade_psp.txt run, PSP-2000 model): on the pre-fight VS screen one hex portrait shows noise, some portraits repeat, and some draw as unclipped rectangles. Fights look clean. Suspects: P85 partial texture-sample sync and P90 resident lookup keeping a stale texture or palette when the screen reloads portraits into the same handles. Bisect against the commit before P85 (f9492a53f) first.",
   "done_when": "The VS screen matches the desktop build in PPSSPP over a full arcade run (screenshots), cause noted.",
   "note": "Cause: P85's memo in psp_fe_sync.c did not see a texture or palette redefined by a path that bypasses it, such as the game's texture unlock, so the second VS screen kept a stale texture. r_gu.c now counts defines per texture and palette, and the memo's check includes those counts. Checked in PPSSPP: MVC2_EXACT_TEX_SYNC=1 showed the screen correctly before the fix, and all 8 VS screens of a full arcade run are clean after it. Speed on hardware not measured; the added cost is two array reads per handle per frame."
+ },
+ {
+  "id": "P100",
+  "order": 55,
+  "phase": "P4",
+  "size": "S",
+  "status": "Done",
+  "depends": [
+   "P86"
+  ],
+  "read": [
+   "port/platform/platform_psp.c",
+   "port/render/r_gu.c",
+   "port/psp/host/psp_main.c"
+  ],
+  "title": "Hardware speed: draw only the displayed step when frames drop",
+  "description": "The platform runs up to 8 logic steps per display frame when behind, but the PSP renderer drew every step (upstream r_gl.c discards all but the last). Discard the undisplayed steps in r_gu.c.",
+  "done_when": "Fights and character select run their logic at full speed on the PSP-2003 or show more frames a second; the shown picture is unchanged.",
+  "note": "r_gu.c r_set_discard plus psp_main.c: steps that won't be shown skip the GE; NO_FRAME_SKIP=1 restores the old behaviour. PSP-2003 fight6: fight logic 33-37 -> 59.94 steps/s, display 4.1-4.6 -> 9.8-12 fps; character select 28-31 -> 53-60 logic, display 3.5-3.9 -> 6.7-7.5. Screenshots render correctly; the game state is untouched (renderer only)."
  }
 ];
