@@ -44,6 +44,7 @@ window.BACKLOG = {
   "P09",
   "P10",
   "P100",
+  "P101",
   "P102",
   "P11",
   "P12",
@@ -173,21 +174,6 @@ window.BACKLOG = {
    "title": "Hardware speed: character select object list 6 walk (func_00151A20)",
    "description": "P91 split: in character select, func_00151A20(6) (func_00151A90 on each object of D_004D3690[6]) takes 5.5 ms a frame on the PSP-2003 without mesh draws. Find what func_00151A90 spends it on (matrix or animation work, host overrides) and make it cheaper PSP-side.",
    "done_when": "func_00151A20(6) <= 2 ms in fight6's character select (PROFILE=1, hardware); game-state trace unchanged."
-  },
-  {
-   "id": "P101",
-   "order": 36,
-   "phase": "P4",
-   "size": "S",
-   "status": "Ready",
-   "depends": [],
-   "read": [
-    "port/docs/PSP.md",
-    "port/psp/CMakeLists.txt"
-   ],
-   "title": "Hardware speed: hot routines grouped at the start of .text",
-   "description": "Ideas from gibletto/mvc2-naomi-dc ports/port/psp (AGPL-3.0: ideas only, no code copied). The Allegrex has a 16 KB I-cache; hot game and renderer routines scattered through a multi-MB .text evict each other. Build with -ffunction-sections, take the hottest routines from a PROFILE=1 fight and character select run, and emit a linker script fragment that places them together first in .text (a small PSP-side tool generates it from the profile).",
-   "done_when": "Generated ordering used by the release build; frame time in a 3v3 fight and in character select measured on hardware before and after (PROFILE=1); game-state trace unchanged."
   },
   {
    "id": "P103",

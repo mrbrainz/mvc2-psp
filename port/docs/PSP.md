@@ -381,6 +381,23 @@ GE command writer (P102, 2026-11-23, PSP-2003, `fight6`, `PROFILE=2 NO_FRAME_SKI
 - **Tried and dropped:** writing the words through cached lines and
   `cache 0x1B` (user mode works) was slower than uncached stores.
 
+Hot routines first in .text (P101, 2026-11-23, PSP-2003, `fight6`, `PROFILE=1`):
+- **How it works:** every o32 TU is built with `-ffunction-sections`, and
+  `port/psp/hot_order.ld` (`ld --section-ordering-file`) puts the 171
+  most-called functions (96 KB) first in `.text`.
+- **Regenerating it:** configure a second build with `-DMVC2_PSP_HOTPROF=ON`.
+  That adds `-finstrument-functions-after-inlining` and `host/psp_hot.c`,
+  which writes `hot.txt` at exit. Run `fight6` in PPSSPP (call counts don't
+  depend on timing), then:
+
+      python3 port/psp/tools/hot_order.py build/port-psp-hot/mvc2_psp hot.txt -o port/psp/hot_order.ld --budget 96
+
+- **Result (two runs each, A/B against the build before P101):**
+  render pass 11.0 -> 10.6 ms a step; game update 1.43 -> 1.38 ms.
+  Character select update 20.0-20.2 -> 19.0 ms and 18.6 -> 16.8 ms. Fights
+  are within noise.
+- **Budgets:** 32 KB gave about half the gain; 96 KB is kept.
+
 Frame skip (P100, 2026-11-23, PSP-2003, `fight6`):
 - **The problem:** when it falls behind, the platform runs up to 8 logic
   steps per display frame and shows only the last. The PSP renderer drew all

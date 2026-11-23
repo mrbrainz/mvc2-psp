@@ -19,6 +19,9 @@ import link_catalog  # noqa: E402
 psp = os.environ.get("PSPDEV", os.path.expanduser("~/Sites/pspdev"))
 link_catalog.HOST_LIBS += [f"{psp}/psp/lib/libc.a", f"{psp}/psp/lib/libm.a"]
 link_catalog.HOST_LIBS += glob.glob(f"{psp}/lib/gcc/psp/*/libgcc.a")
+# P101: the -DMVC2_PSP_HOTPROF=ON build's hooks (port/psp/host/psp_hot.c)
+_runtime = link_catalog.host_runtime_names
+link_catalog.host_runtime_names = lambda: _runtime() | {"__cyg_profile_func_enter", "__cyg_profile_func_exit"}
 
 sys.argv[0] = os.path.join(os.path.abspath(TOOLS), "gen_link_glue.py")
 runpy.run_path(sys.argv[0], run_name="__main__")

@@ -308,6 +308,7 @@ int mvc2_psp_run(int frames)
     }
     { extern void psp_ee_hwm(void); psp_ee_hwm(); }
     psp_mem_report("end");
+    { extern void psp_hot_dump(void) __attribute__((weak)); if (psp_hot_dump) psp_hot_dump(); }   /* P101 */
     psp_log("[host] done\n");
     return 0;
 }

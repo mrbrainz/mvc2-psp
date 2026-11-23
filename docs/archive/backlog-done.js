@@ -1072,6 +1072,22 @@ window.BACKLOG_ARCHIVE = [
   "note": "Partial: VFPU kernels for ADC/clip outcodes, bbox build and corners, and colours_lit (deduped per range) in psp_vfpu.S. fight6 PROFILE=2 A/B (MVC2_NO_VFPU): fl_clay_draw 17.6 -> 17.0 ms, clip_prepare 1.72 -> 1.25, matrices+ADC 4.9 -> 4.4; game-state trace unchanged. The 50% target is not reachable this way: the cost is per-draw overhead (~115 draws, ~15 us each), not vertex math, and fights have no lit draws."
  },
  {
+  "id": "P101",
+  "order": 36,
+  "phase": "P4",
+  "size": "S",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/docs/PSP.md",
+   "port/psp/CMakeLists.txt"
+  ],
+  "title": "Hardware speed: hot routines grouped at the start of .text",
+  "description": "Ideas from gibletto/mvc2-naomi-dc ports/port/psp (AGPL-3.0: ideas only, no code copied). The Allegrex has a 16 KB I-cache; hot game and renderer routines scattered through a multi-MB .text evict each other. Build with -ffunction-sections, take the hottest routines from a PROFILE=1 fight and character select run, and emit a linker script fragment that places them together first in .text (a small PSP-side tool generates it from the profile).",
+  "done_when": "Generated ordering used by the release build; frame time in a 3v3 fight and in character select measured on hardware before and after (PROFILE=1); game-state trace unchanged.",
+  "note": "-ffunction-sections plus port/psp/hot_order.ld (171 most-called functions, 96 KB, from a MVC2_PSP_HOTPROF call-count run of fight6) first in .text; the release build uses it. PSP-2003 fight6, two runs each: render pass 11.0 -> 10.6 ms, character select update 1-1.8 ms lower, fights within noise. State dump 3,057 frames 0 diverging words; shots identical."
+ },
+ {
   "id": "P102",
   "order": 37,
   "phase": "P4",
