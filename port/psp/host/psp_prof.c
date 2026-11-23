@@ -8,14 +8,19 @@
 #include <stdlib.h>
 
 static int on = -1, frames;
-static unsigned long long acc[64];   /* 0-9 frame stages; 10+ nested inside them (not subtracted) */
-static const char *names[64];
+static unsigned long long acc[128];   /* 0-9 frame stages; 10+ nested inside them (not subtracted) */
+static const char *names[128];
+static unsigned long long mesh_total;   /* func_003F0500 time, never reset (psp_prof_scene.c) */
 
+/* time on this thread: the wall clock minus the audio thread's fills, which
+ * preempt it (priority 0x12 vs 0x20) and would land in whatever timer is
+ * running (P91).  The fill counter is 32-bit us: runs under 71 minutes. */
+extern volatile unsigned psp_audio_busy_us;
 static unsigned long long now(void)
 {
     u64 t = 0;
     sceRtcGetCurrentTick(&t);
-    return t;
+    return t - psp_audio_busy_us;
 }
 
 #define STAGE(i, fn, label)                               \
@@ -47,7 +52,9 @@ STAGE(8, func_003ECD00, "func_003ECD00 vsync/flip")
         if (on <= 0) return __real_##fn args;             \
         t = now();                                        \
         r = __real_##fn args;                             \
-        acc[i] += now() - t;                              \
+        t = now() - t;                                    \
+        acc[i] += t;                                      \
+        if (i == 10) mesh_total += t;                     \
         names[i] = label;                                 \
         return r;                                         \
     }
@@ -123,7 +130,7 @@ void __wrap_mvc2_frame(void)
     names[0] = "frame other (top hooks, small steps)";
     if (++frames < 300)
         return;
-    for (i = 0; i < 64; i++) {
+    for (i = 0; i < 128; i++) {
         if (names[i] && acc[i] / 300 >= 100)   /* >= 0.1 ms */
             fprintf(stderr, "[prof] %6.2f ms  %s\n", acc[i] / 300 / 1000.0, names[i]);
         acc[i] = 0;
@@ -135,9 +142,10 @@ void __wrap_mvc2_frame(void)
 int psp_prof_on(void) { return on > 0; }
 int psp_prof_fine(void) { return on >= 2; }   /* PROFILE=2: per-draw splits (their timer calls cost time) */
 unsigned long long psp_prof_now(void) { return now(); }
+unsigned long long psp_prof_mesh_total(void) { return mesh_total; }
 void psp_prof_add(int slot, const char *label, unsigned long long us)
 {
-    if (on <= 0 || slot < 16 || slot >= 64) return;
+    if (on <= 0 || slot < 16 || slot >= 128) return;
     acc[slot] += us;
     names[slot] = label;
 }

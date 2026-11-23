@@ -88,6 +88,7 @@ window.BACKLOG = {
   "P87",
   "P89",
   "P90",
+  "P91",
   "P92",
   "P93",
   "P95",
@@ -192,24 +193,40 @@ window.BACKLOG = {
    "note": "Partial: exact inline floor/fmin, unorm LUT, bbox skip of ADC and near-clip prep, mesh texture/blend state memo; 15.8 -> 14.7 ms in a scripted 3v3 fight over PSPLink, screenshot bit-identical to HEAD. Hardware A/B: submit ~7 ms (~25 us per GU submit), ADC 2.4, clip prep 2.1, r_gu_begin list restarts ~1; per-draw splits with PROFILE=2. The __extendsfdf2 calls were only the MESH_DUMP fprintfs. Remaining per-draw and VFPU work split into P88 and P93."
   },
   {
-   "id": "P91",
-   "order": 39,
+   "id": "P98",
+   "order": 53,
    "phase": "P4",
    "size": "M",
    "status": "Ready",
    "depends": [
-    "P86",
-    "P92"
+    "P91"
    ],
    "read": [
     "port/docs/PSP.md",
-    "port/psp/host/psp_prof.c",
-    "port/psp/host/psp_audio_hw.c"
+    "src/m3k.c",
+    "port/psp/host/psp_prof_scene.c"
    ],
-   "title": "Hardware speed: non-mesh rendering in fights and character select",
-   "description": "P86 profile: render pass minus mesh draw is ~9 ms in fights and ~12 ms in character select (2D sprites, effects, characters, HUD). Split it with PROFILE timers on hardware and ticket the hot parts.",
-   "done_when": "Split recorded in PSP.md; tickets for parts over 2 ms.",
-   "note": "Watch out for audio thread preemption when splitting P91: psp_prof.c measures wall-clock time (sceRtcGetCurrentTick), and mvc2_audio runs on the same CPU at priority 0x12 (preempting the main thread at 0x20, psp_audio_hw.c:96) for ~2 fills per logic frame (607 fills / 300 frames in mvc2_psp.log, worst fill 4.9-9.3 ms). Run after P92 adds a prof_slot around device_fill (or subtracts audio fill ticks from interrupted timers in psp_prof.c) so audio CPU steal is separated from scene traversal (func_001538B0) and 2D batch flushes (func_00421270)."
+   "title": "Hardware speed: character select object list 6 draw (func_001520E0)",
+   "description": "P91 split: in character select, func_001520E0(6) (draw each object of D_004D3690[6] through func_00152180) takes 8.3 ms a frame on the PSP-2003 without its mesh draws. Split it further (func_00152180's sprite or 2D path) and make the hot part cheaper PSP-side.",
+   "done_when": "func_001520E0(6) non-mesh time <= 3 ms in fight6's character select (PROFILE=1, hardware); rendering and game-state trace unchanged."
+  },
+  {
+   "id": "P99",
+   "order": 54,
+   "phase": "P4",
+   "size": "M",
+   "status": "Ready",
+   "depends": [
+    "P91"
+   ],
+   "read": [
+    "port/docs/PSP.md",
+    "src/n9d.c",
+    "port/psp/host/psp_prof_scene.c"
+   ],
+   "title": "Hardware speed: character select object list 6 walk (func_00151A20)",
+   "description": "P91 split: in character select, func_00151A20(6) (func_00151A90 on each object of D_004D3690[6]) takes 5.5 ms a frame on the PSP-2003 without mesh draws. Find what func_00151A90 spends it on (matrix or animation work, host overrides) and make it cheaper PSP-side.",
+   "done_when": "func_00151A20(6) <= 2 ms in fight6's character select (PROFILE=1, hardware); game-state trace unchanged."
   },
   {
    "id": "P41",

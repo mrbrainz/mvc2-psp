@@ -13,6 +13,7 @@ static SceUID thid = -1, sema = -1;
 static volatile int running;
 static short buf[2][PSP_AUDIO_FRAMES * 2] __attribute__((aligned(64)));
 static volatile unsigned fills, underruns, worst_us, total_us;
+volatile unsigned psp_audio_busy_us;   /* never reset: psp_prof.c takes fill time out of its timers (P91) */
 
 static unsigned now_us(void) { return (unsigned)sceKernelGetSystemTimeLow(); }
 
@@ -34,6 +35,7 @@ static int audio_thread(SceSize args, void *argp)
         dt = now_us() - t0;
         if (dt > worst_us) worst_us = dt;
         total_us += dt;
+        psp_audio_busy_us += dt;
         fills++;
         if (due && (int)(now_us() - due) > 0) underruns++;
         sceAudioSRCOutputBlocking(PSP_AUDIO_VOLUME_MAX, buf[cur]);

@@ -1013,6 +1013,26 @@ window.BACKLOG_ARCHIVE = [
   "note": "Partial: VFPU kernels for ADC/clip outcodes, bbox build and corners, and colours_lit (deduped per range) in psp_vfpu.S. fight6 PROFILE=2 A/B (MVC2_NO_VFPU): fl_clay_draw 17.6 -> 17.0 ms, clip_prepare 1.72 -> 1.25, matrices+ADC 4.9 -> 4.4; game-state trace unchanged. The 50% target is not reachable this way: the cost is per-draw overhead (~115 draws, ~15 us each), not vertex math, and fights have no lit draws."
  },
  {
+  "id": "P91",
+  "order": 39,
+  "phase": "P4",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P86",
+   "P92"
+  ],
+  "read": [
+   "port/docs/PSP.md",
+   "port/psp/host/psp_prof.c",
+   "port/psp/host/psp_audio_hw.c"
+  ],
+  "title": "Hardware speed: non-mesh rendering in fights and character select",
+  "description": "P86 profile: render pass minus mesh draw is ~9 ms in fights and ~12 ms in character select (2D sprites, effects, characters, HUD). Split it with PROFILE timers on hardware and ticket the hot parts.",
+  "done_when": "Split recorded in PSP.md; tickets for parts over 2 ms.",
+  "note": "psp_prof_scene.c times each step of the two render tasks without the mesh draws nested in them; psp_prof.c timers now exclude audio fills. PSP-2003 fight6: fights have 8.4 ms of non-mesh rendering, spread over 9 steps (largest 1.9 ms). Character select has 14.3 ms, mostly object list 6 (8.3 + 5.5 ms), ticketed as P98 and P99."
+ },
+ {
   "id": "P73",
   "order": 42,
   "phase": "P6",

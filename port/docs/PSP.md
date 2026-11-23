@@ -336,6 +336,27 @@ Mesh hand-off (P96, 2026-11-23):
 Tex select (P90, fight6): 3.8-4.9 -> 1.0-1.4 ms in fights (O(1) resident
 lookup, psp_reslist.c); the rest is GS upload bookkeeping (P95).
 
+Non-mesh rendering split (P91, 2026-11-23, PSP-2003, `fight6`, `PROFILE=1`):
+- **How it's measured:** `psp_prof_scene.c` times each step of the two render
+  tasks, minus the mesh draws (`func_003F0500`) made inside it. All
+  `psp_prof.c` timers now leave out the audio thread's fills, which preempt
+  the main thread for about 1.3-2.5 ms a frame (`psp_audio_busy_us`).
+- **Fights (`func_001529A0`):** render pass 27.3 ms, mesh draw 18.9 ms, so
+  about 8.4 ms of non-mesh rendering, spread over nine steps.
+  - `func_00153250` 1.9 ms
+  - `func_00153710(0xE)` 1.9 ms
+  - `func_00153310` 1.2 ms
+  - `func_00152AD0` 1.0 ms
+  - `func_00153A40` 0.9 ms
+  - the others under 0.8 ms each
+
+  No part reaches 2 ms.
+- **Character select (`func_00152570`):** render pass 32 ms, mesh draw
+  17.7 ms, so about 14.3 ms of non-mesh rendering. Most of it is object list
+  6 (`D_004D3690[6]`):
+  - draw, `func_001520E0(6)`: 8.3 ms (P98)
+  - walk, `func_00151A20(6)` -> `func_00151A90`: 5.5 ms (P99)
+
 Tex select upload path (P95, 2026-11-23, `psp_reslist.c` `psp_texsel`):
 - **What changed:** for lists with a texture that isn't resident, the PSP runs
   the game's residency bookkeeping call for call (lookup, GS block allocation

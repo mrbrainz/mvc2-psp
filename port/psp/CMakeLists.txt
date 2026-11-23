@@ -118,7 +118,7 @@ set_source_files_properties("${MVC2_ROOT}/port/host/fe/fe_render.c" "${MVC2_ROOT
 set_property(SOURCE "${PATCHED}/port/host/fe/fe_mesh.c" APPEND PROPERTY INCLUDE_DIRECTORIES "${MVC2_ROOT}/port/host/fe")
 add_executable(mvc2_psp ${STUB_SRCS} ${GLUE_SRCS} ${PSP_EABI_OBJS} ${PSP_RENDER_SRCS} ${PSP_AUDIO_SRCS}
   "${PSP_DIR}/host/psp_main.c" "${PSP_DIR}/host/libc_o32.c" "${PSP_DIR}/host/psp_fpu.c"
-  "${PSP_DIR}/host/psp_prof.c" "${PSP_DIR}/host/psp_fe_sync.c" "${PSP_DIR}/host/psp_packet.c" "${PSP_DIR}/host/psp_disc.c" "${PSP_DIR}/host/psp_script.c" "${PSP_DIR}/host/psp_ee_hwm.c" "${PSP_DIR}/host/psp_ee_heap.c" "${PSP_DIR}/host/psp_saveui.c" "${PSP_DIR}/host/psp_1p.c" "${PSP_DIR}/host/psp_credits.c" "${PSP_DIR}/host/psp_reslist.c" "${PSP_DIR}/host/psp_mesh_state.c" "${MVC2_ROOT}/port/platform/platform_psp.c"
+  "${PSP_DIR}/host/psp_prof.c" "${PSP_DIR}/host/psp_fe_sync.c" "${PSP_DIR}/host/psp_packet.c" "${PSP_DIR}/host/psp_disc.c" "${PSP_DIR}/host/psp_script.c" "${PSP_DIR}/host/psp_ee_hwm.c" "${PSP_DIR}/host/psp_ee_heap.c" "${PSP_DIR}/host/psp_saveui.c" "${PSP_DIR}/host/psp_1p.c" "${PSP_DIR}/host/psp_credits.c" "${PSP_DIR}/host/psp_reslist.c" "${PSP_DIR}/host/psp_mesh_state.c" "${PSP_DIR}/host/psp_prof_scene.c" "${MVC2_ROOT}/port/platform/platform_psp.c"
   $<TARGET_OBJECTS:psp_host_core>)
 target_include_directories(mvc2_psp PRIVATE "${MVC2_ROOT}/port/stubs" "${PSP_DIR}/host"
   "${MVC2_ROOT}/port/host" "${MVC2_ROOT}/port/platform" "${GLUE}")
@@ -145,7 +145,9 @@ target_link_options(mvc2_psp PRIVATE -no-pie "@${GLUE}/link_extra.rsp" -Wl,--sor
   -Wl,--wrap=func_001044E0 -Wl,--wrap=host_ee_heap_base -Wl,--wrap=host_ee_heap_top
   -Wl,--wrap=func_0041DF70 -Wl,--wrap=func_0041EE80
   -Wl,--wrap=func_00130040 -Wl,--wrap=func_0038B2E0 -Wl,--wrap=func_00128CA0 -Wl,--wrap=func_00149690 -Wl,--wrap=func_00149020 -Wl,--wrap=func_0016B440
-  -Wl,--wrap=mkdir)
+  -Wl,--wrap=mkdir
+  # P91 scene-step timers (psp_prof_scene.c)
+  -Wl,--wrap=func_0016D130 -Wl,--wrap=func_00153710 -Wl,--wrap=func_00153590 -Wl,--wrap=func_001536C0 -Wl,--wrap=func_00152AD0 -Wl,--wrap=func_001534D0 -Wl,--wrap=func_00153390 -Wl,--wrap=func_00153350 -Wl,--wrap=func_00153250 -Wl,--wrap=func_00153310 -Wl,--wrap=func_003ED1C0 -Wl,--wrap=func_00153A40 -Wl,--wrap=func_0016DF90 -Wl,--wrap=func_00123090 -Wl,--wrap=func_00151A20 -Wl,--wrap=func_001520E0 -Wl,--wrap=func_00122FE0 -Wl,--wrap=func_00123060 -Wl,--wrap=func_0016E080)
 # Debug: log entry to the functions listed in debug/psp_crumbs.S (hardware
 # hang hunting): -DMVC2_PSP_CRUMBS=ON.
 option(MVC2_PSP_CRUMBS "log entry to the functions in debug/psp_crumbs.S" OFF)
