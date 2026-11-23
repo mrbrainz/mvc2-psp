@@ -936,6 +936,26 @@ window.BACKLOG_ARCHIVE = [
   "note": "psp_texsel (psp_reslist.c) keeps the game's residency bookkeeping and drops the GS upload packets and DMA queue. PSP-2003 fight6: tex select 0.90 -> 0.83 ms on average, 1.54 -> 1.28 at most (about 0.44 ms of that is the profiler), and the screenshots are identical. A PPSSPP state dump differs only in the GS packet arena; most of the earlier 1.0-1.4 ms was timer overhead."
  },
  {
+  "id": "P84",
+  "order": 33,
+  "phase": "P4",
+  "size": "L",
+  "status": "Done",
+  "depends": [
+   "P82",
+   "P90"
+  ],
+  "read": [
+   "port/psp/host/psp_fe_sync.c",
+   "port/render/r_gu_mesh.c",
+   "port/docs/PSP.md"
+  ],
+  "title": "Hardware speed: skip or cache the PS2 VU1 packet build",
+  "description": "Hardware profile (PSP-2003, PROFILE=1, 3v3 fight): frame 45-47 ms; game update 3; fl_clay_draw 17; func_003F0500__game packet build 13.5; fe_sync_handle 4.5 + func_003EA660 tex select 4.2; GE wait 0.2 (CPU-bound). The game builds VU1 packets (func_003F0500__game) that the renderer parses back. Cache packets of unchanged (static stage) meshes across frames, or have the PSP renderer read mesh data directly, PSP-side only (--wrap).",
+  "done_when": "Packet build <= 4 ms/frame in a 3v3 fight on hardware; game state unchanged (MVC2_STATE_DUMP A/B, or the change writes no game memory) and fight screenshots identical. Rewritten 2026-11-23: ra_state_hash differs between launches of one PSP build (host pointers), so logic hashes cannot be the check.",
+  "note": "psp_packet.c skips the VU1 packets (P84 part 1); psp_fe_sync.c's memo check now hashes descriptors and palettes a word at a time (check_fixed was ~73 us per handle, 2.1 ms a fight frame). PSP-2003 fight6 3v3 blocks: packet build 4.7-5.0 -> 3.7-3.8 ms, screenshot identical; psp_fe_sync.c only reads game memory."
+ },
+ {
   "id": "P86",
   "order": 34,
   "phase": "P4",

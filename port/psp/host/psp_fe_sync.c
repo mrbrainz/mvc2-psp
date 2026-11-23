@@ -33,10 +33,21 @@ extern int func_003DD030(int);
 #define PARTS 4
 static struct { unsigned h, fixed, part[PARTS]; int ok; } ck[CK_SLOTS];
 
-static unsigned fnv(unsigned x, const unsigned char *p, unsigned n)
+/* P84: every byte of p[0..n), a word at a time in two interleaved chains
+ * (the byte-serial FNV was ~73 us a handle on hardware, multiply-latency
+ * bound).  Only ever compared with itself, so any change detector does. */
+static unsigned hash_words(unsigned x, const unsigned char *p, unsigned n)
 {
-    for (unsigned i = 0; i < n; i++) x = (x ^ p[i]) * 16777619u;
-    return x;
+    unsigned y = x ^ 0x9E3779B9u, i = 0;
+    if (!((uintptr_t)p & 3)) {
+        const unsigned *w = (const unsigned *)p;
+        for (; i + 8 <= n; i += 8, w += 2) {
+            x = (x ^ w[0]) * 16777619u;
+            y = (y ^ w[1]) * 16777619u;
+        }
+    }
+    for (; i < n; i++) x = (x ^ p[i]) * 16777619u;
+    return (x ^ (y * 2654435761u)) * 16777619u;
 }
 
 /* sample_sig's samples (fe_render.c); part >= 0: only every PARTS-th of them */
@@ -72,20 +83,20 @@ static unsigned check_fixed(unsigned h)
     if (pi && pi < 0x101) x = (x ^ r_gu_pal_gen[pi]) * 16777619u;
     if (ti && ti < 0x181) {
         const unsigned char *src;
-        x = fnv(x, SYNC_BSS(0x006207A0) + (ti - 1) * 64, 64);
+        x = hash_words(x, SYNC_BSS(0x006207A0) + (ti - 1) * 64, 64);
         src = tex_src(ti, &size);
         x ^= (unsigned)(uintptr_t)src * 2654435761u;
         if (src && size) x = (x ^ src[size - 1]) * 16777619u;
     }
     if (pi && pi < 0x101) {
         const unsigned char *e = SYNC_BSS(0x0061C7A0) + (pi - 1) * 64;
-        x = fnv(x, e, 64);
+        x = hash_words(x, e, 64);
         if (*(const short *)(e + 0x2C) && *(const int *)(e + 0x28)) {
             const unsigned char *src = (const unsigned char *)(uintptr_t)(unsigned)func_003DD030(*(const int *)(e + 0x28));
             int n = *(const short *)(e + 0x18) * *(const short *)(e + 0x1A), cpsm = *(const int *)(e + 0x1C);
             if (n <= 0 || n > 256) n = 16;
             x ^= (unsigned)(uintptr_t)src * 2654435761u;
-            x = samples(x, src, (unsigned)(cpsm == 2 ? n * 2 : n * 4), -1);
+            if (src) x = hash_words(x, src, (unsigned)(cpsm == 2 ? n * 2 : n * 4));   /* n <= 256: every byte */
         }
     }
     return x;

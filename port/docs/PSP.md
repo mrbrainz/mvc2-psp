@@ -336,6 +336,18 @@ Mesh hand-off (P96, 2026-11-23):
 Tex select (P90, fight6): 3.8-4.9 -> 1.0-1.4 ms in fights (O(1) resident
 lookup, psp_reslist.c); the rest is GS upload bookkeeping (P95).
 
+Packet build (P84, 2026-11-23, PSP-2003, `fight6`, `PROFILE=1`):
+- **The cost:** in a fight frame the texture memo check (`psp_fe_sync.c`,
+  P85) runs about 29 times, the first time each handle appears that frame.
+  `check_fixed` cost about 73 us each, 2.1 ms a frame: it hashed the two
+  64-byte descriptors and up to 1 KB of palette one byte at a time, and each
+  step waited on the last multiply. The strided texture samples
+  (`check_part`) cost 1.3 ms, mostly cache misses.
+- **The fix:** `hash_words` covers the same bytes a word at a time, in two
+  chains.
+- **Result:** packet build in the 3v3 blocks went 4.7-5.0 -> 3.7-3.8 ms. The
+  screenshot is identical.
+
 Non-mesh rendering split (P91, 2026-11-23, PSP-2003, `fight6`, `PROFILE=1`):
 - **How it's measured:** `psp_prof_scene.c` times each step of the two render
   tasks, minus the mesh draws (`func_003F0500`) made inside it. All

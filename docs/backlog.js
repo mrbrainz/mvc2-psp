@@ -83,6 +83,7 @@ window.BACKLOG = {
   "P77",
   "P81",
   "P82",
+  "P84",
   "P85",
   "P86",
   "P87",
@@ -95,26 +96,6 @@ window.BACKLOG = {
   "P97"
  ],
  "activities": [
-  {
-   "id": "P84",
-   "order": 33,
-   "phase": "P4",
-   "size": "L",
-   "status": "In progress",
-   "depends": [
-    "P82",
-    "P90"
-   ],
-   "read": [
-    "port/psp/host/psp_fe_sync.c",
-    "port/render/r_gu_mesh.c",
-    "port/docs/PSP.md"
-   ],
-   "title": "Hardware speed: skip or cache the PS2 VU1 packet build",
-   "description": "Hardware profile (PSP-2003, PROFILE=1, 3v3 fight): frame 45-47 ms; game update 3; fl_clay_draw 17; func_003F0500__game packet build 13.5; fe_sync_handle 4.5 + func_003EA660 tex select 4.2; GE wait 0.2 (CPU-bound). The game builds VU1 packets (func_003F0500__game) that the renderer parses back. Cache packets of unchanged (static stage) meshes across frames, or have the PSP renderer read mesh data directly, PSP-side only (--wrap).",
-   "done_when": "Packet build <= 4 ms/frame in a 3v3 fight on hardware; logic hashes unchanged over a scripted run.",
-   "note": "Partial: psp_packet.c replaces the draw body, skipping the VU1 setup callbacks, vertex/UV packets, DMA tags and kicks; same-binary A/B (MVC2_PACKET_FULL) over PSPLink: frame 45.3 -> 39.8 ms, packet build 14.9 -> 9.4, 6 fight shots over ~1500 frames identical (ra_state_hash covers the skipped packet memory, so screenshots are the check). Left in func_003F0500__game (~9 ms): (1) func_003EA660__game tex select ~4.5 ms (ticketed as P90); (2) the other ~4.5 ms inside lite_body is __wrap_fe_sync_handle (~3.7 ms, called from __wrap_func_003EA660 in psp_fe_sync.c:139) plus o->wC != D_004C2AD4 format-toggle packet rebuilds (psp_packet.c:43 calling func_003EE8C0). In psp_fe_sync.c, seen[] is keyed on combined (pi<<16)|ti (re-checking shared textures/palettes) and check_fixed hashes 64 B descriptors + up to 1024 B palette byte-by-byte every frame; either wrap func_003EA130/func_003EBD00 (src/nq235_a.c, where all tex/pal loads, frees and unlocks pass) to set a dirty bitmap, or deduplicate ti (1..384) and pi (1..256) separately and hash uint32_t words. On o->wC != D_004C2AD4 when pol_ofs is unchanged, lite_body only needs func_003EE930(o) + func_003E0F60 unless cmap[h].ever is set."
-  },
   {
    "id": "P96",
    "order": 35,
