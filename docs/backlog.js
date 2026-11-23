@@ -88,6 +88,7 @@ window.BACKLOG = {
   "P77",
   "P81",
   "P82",
+  "P83",
   "P84",
   "P85",
   "P86",
@@ -104,24 +105,40 @@ window.BACKLOG = {
  ],
  "activities": [
   {
-   "id": "P83",
-   "order": 39,
+   "id": "P109",
+   "order": 40,
    "phase": "P4",
    "size": "M",
-   "status": "In progress",
+   "status": "Ready",
    "depends": [
-    "P82",
-    "P107",
-    "P93"
+    "P83"
    ],
    "read": [
+    "port/render/r_gu.c",
     "port/render/r_gu_mesh.c",
     "port/docs/PSP.md"
    ],
-   "title": "Hardware speed: GU mesh renderer (fl_clay_draw)",
-   "description": "Hardware profile (PSP-2003, PROFILE=1, 3v3 fight): frame 45-47 ms; game update 3; fl_clay_draw 17; func_003F0500__game packet build 13.5; fe_sync_handle 4.5 + func_003EA660 tex select 4.2; GE wait 0.2 (CPU-bound). fl_clay_draw does ~3.7k vertices/frame at ~1500 cycles each: remove soft-double maths (__extendsfdf2), inline fminf/floorf, move per-vertex transform/lighting (r_light, r_matrix) to GU hardware transform/lighting or the VFPU. Output must stay identical.",
-   "done_when": "fl_clay_draw <= 4 ms/frame in a 3v3 fight on hardware (PROFILE=1), screenshots unchanged in PPSSPP.",
-   "note": "Partial: exact inline floor/fmin, unorm LUT, bbox skip of ADC and near-clip prep, mesh texture/blend state memo; 15.8 -> 14.7 ms in a scripted 3v3 fight over PSPLink, screenshot bit-identical to HEAD. Hardware A/B: submit ~7 ms (~25 us per GU submit), ADC 2.4, clip prep 2.1, r_gu_begin list restarts ~1; per-draw splits with PROFILE=2. The __extendsfdf2 calls were only the MESH_DUMP fprintfs. Remaining per-draw and VFPU work split into P88 and P93."
+   "title": "Hardware speed: mesh submit CPU cost (r_gu_mesh_draw)",
+   "description": "About 150 submits a fight frame at ~18 us CPU each (texture part ~6 us, GE words ~6 us, blend memo + depth zoom ~4.4 us, flush ~1.5 us; P107 by removal), ~2.9 ms of fl_clay_draw. Scalar FPU code is slow on the Allegrex (P83: C bbox corners 8.9 us vs 0.86 us in VFPU registers), so move the depth-zoom sampling and texscale maths to VFPU registers, and cut the per-submit record reads. Output must stay identical.",
+   "done_when": "Submit cost per fight frame cut by >= 1.5 ms (fl_clay_draw, PROFILE=1 NO_FRAME_SKIP=1, fight6 on PSP-2003), PPSSPP shots f1-f6 unchanged."
+  },
+  {
+   "id": "P110",
+   "order": 40,
+   "phase": "P4",
+   "size": "M",
+   "status": "Ready",
+   "depends": [
+    "P83"
+   ],
+   "read": [
+    "port/render/r_gu.c",
+    "port/render/r_gu_mesh.c",
+    "port/docs/PSP.md"
+   ],
+   "title": "Hardware speed: per-draw mesh work before submit (clay_draw)",
+   "description": "With zero submits fl_clay_draw is still ~4 ms per drawn fight step (P107 4.78 ms minus P83's 0.8 ms bbox gain): colour/vertex copy, three matrix products, viewport key, ADC, clip prep, mesh_vram. Split it by removal as in PSP.md (P107), then move the scalar float work to VFPU registers or skip it when the inputs are unchanged. With P109 this is what is left of P83's fl_clay_draw <= 4 ms target.",
+   "done_when": "fl_clay_draw <= 4 ms per drawn step in fight6 on PSP-2003 (PROFILE=1 NO_FRAME_SKIP=1) together with P109, PPSSPP shots f1-f6 unchanged."
   },
   {
    "id": "P98",

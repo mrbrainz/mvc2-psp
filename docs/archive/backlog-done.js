@@ -1165,6 +1165,26 @@ window.BACKLOG_ARCHIVE = [
   "note": "Probes put the cost in the GE fetching 24-byte vertices from main RAM (about 3.6 ms; textures about 0.9). Unlit meshes now get a VRAM copy of gv in a 256 KB pool (MVC2_MESH_VRAM_KB, P88-style frame policy). PSP-2003 fight6: render pass 22.28-22.40 -> 19.91-19.93 ms per drawn step, fight display up to 18.7 -> 23.6 fps; PPSSPP shots identical."
  },
  {
+  "id": "P83",
+  "order": 39,
+  "phase": "P4",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P82",
+   "P107",
+   "P93"
+  ],
+  "read": [
+   "port/render/r_gu_mesh.c",
+   "port/docs/PSP.md"
+  ],
+  "title": "Hardware speed: GU mesh renderer (fl_clay_draw)",
+  "description": "Hardware profile (PSP-2003, PROFILE=1, 3v3 fight): frame 45-47 ms; game update 3; fl_clay_draw 17; func_003F0500__game packet build 13.5; fe_sync_handle 4.5 + func_003EA660 tex select 4.2; GE wait 0.2 (CPU-bound). fl_clay_draw does ~3.7k vertices/frame at ~1500 cycles each: remove soft-double maths (__extendsfdf2), inline fminf/floorf, move per-vertex transform/lighting (r_light, r_matrix) to GU hardware transform/lighting or the VFPU. Output must stay identical.",
+  "done_when": "fl_clay_draw <= 4 ms/frame in a 3v3 fight on hardware (PROFILE=1), screenshots unchanged in PPSSPP.",
+  "note": "fl_clay_draw 7.85 -> 6.94 ms per drawn fight step, render pass 19.94 -> 18.62 (PSP-2003, fight6, two runs each): the ADC bbox test now runs in VFPU registers (4.8 -> 0.86 us a call, 0 disagreements over 110k draws) and mesh indices sit in the VRAM pool beside the vertices (0.2 ms). PPSSPP shots f1-f6 byte-identical to HEAD; the 4 ms target moves to P109 (submit CPU) and P110 (per-draw work before submit)."
+ },
+ {
   "id": "P96",
   "order": 40,
   "phase": "P4",

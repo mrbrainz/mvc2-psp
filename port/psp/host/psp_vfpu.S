@@ -2,7 +2,7 @@
  * Assembled by psp-gcc; plain pointer/int args in a0-a3, so the o32 callers
  * and this code agree. Matrices are row-major float[16], row vectors:
  * out = a * b, k = (x, y, z, 1) * m. Scalar loads/stores: no alignment rule.
- * Clobbers only t-registers and VFPU matrices 0 and 1. */
+ * Clobbers t-registers and any VFPU matrix (nothing else uses the VFPU). */
     .set noreorder
     .set noat
     .text
@@ -384,3 +384,106 @@ vfpu_bbox_corners:
     jr      $ra
     nop
     .end vfpu_bbox_corners
+
+/* int vfpu_bbox_inside(const float m[16], const float bb[6])  (P83)
+ * 1 when every corner k = (c, 1) * m of the box bb (min xyz, max xyz) has
+ * k.w - s > 0 and |k.x|, |k.y|, |k.z| + s < k.w - s, s = 1e-5 * smax, where
+ * smax = max over columns of (max(|min|, |max|), 1) * |m| (>= the per-corner
+ * bound bbox_inside's C path uses); 0 when smax >= 1e30 or m is not finite.
+ * Corners are P + sums of the edge vectors (rounding far below s).  Corners
+ * go in the columns of M500/M600, so rows R5x3/R6x3 are four corners' w.
+ * Registers only: no stores, so no CPU/VFPU memory round trips. */
+    .globl vfpu_bbox_inside
+    .ent vfpu_bbox_inside
+vfpu_bbox_inside:
+    LOADM   $a0
+    lv.s    S300, 0($a1)
+    lv.s    S301, 4($a1)
+    lv.s    S302, 8($a1)
+    lv.s    S310, 12($a1)
+    lv.s    S311, 16($a1)
+    lv.s    S312, 20($a1)
+    vone.s  S303
+    vabs.q  C200, C000
+    vabs.q  C210, C010
+    vabs.q  C220, C020
+    vabs.q  C230, C030
+    vtfm4.q C400, M000, C300            /* P = (min, 1) * m */
+    vsub.t  C320, C310, C300            /* d = max - min */
+    vzero.q C330
+    vmov.s  S330, S320
+    vtfm4.q C410, M000, C330            /* D0 = d.x * row 0 */
+    vzero.q C330
+    vmov.s  S331, S321
+    vtfm4.q C420, M000, C330
+    vzero.q C330
+    vmov.s  S332, S322
+    vtfm4.q C430, M000, C330
+    vmov.q  C500, C400
+    vadd.q  C510, C400, C410
+    vadd.q  C520, C400, C420
+    vadd.q  C530, C510, C420
+    vadd.q  C600, C500, C430
+    vadd.q  C610, C510, C430
+    vadd.q  C620, C520, C430
+    vadd.q  C630, C530, C430
+    vabs.t  C100, C300                  /* smax */
+    vabs.t  C110, C310
+    vmax.t  C100, C100, C110
+    vone.s  S103
+    vtfm4.q C110, M200, C100
+    vmax.s  S700, S110, S111
+    vmax.s  S701, S112, S113
+    vmax.s  S700, S700, S701
+    li      $t0, 0x3727C5AC             /* 1e-5f */
+    mtv     $t0, S701
+    vmul.s  S701, S700, S701            /* s */
+    vone.q  C130
+    vscl.q  C130, C130, S701            /* s x4 */
+    vadd.q  C110, C130, C130            /* 2s x4 */
+    vsub.q  C120, R503, C110            /* w - 2s */
+    vsub.q  C100, R503, C130            /* w - s */
+    vabs.q  R500, R500
+    vabs.q  R501, R501
+    vabs.q  R502, R502
+    vsub.q  R500, C120, R500
+    vsub.q  R501, C120, R501
+    vsub.q  R502, C120, R502
+    vmin.q  C100, C100, R500
+    vmin.q  C100, C100, R501
+    vmin.q  C100, C100, R502
+    vsub.q  C120, R603, C110
+    vsub.q  R603, R603, C130
+    vmin.q  C100, C100, R603
+    vabs.q  R600, R600
+    vabs.q  R601, R601
+    vabs.q  R602, R602
+    vsub.q  R600, C120, R600
+    vsub.q  R601, C120, R601
+    vsub.q  R602, C120, R602
+    vmin.q  C100, C100, R600
+    vmin.q  C100, C100, R601
+    vmin.q  C100, C100, R602
+    vmin.s  S100, S100, S101
+    vmin.s  S102, S102, S103
+    vmin.s  S100, S100, S102
+    vadd.q  C200, C000, C010            /* finite check of m */
+    vadd.q  C210, C020, C030
+    vadd.q  C200, C200, C210
+    vfad.q  S710, C200
+    mfv     $t0, S100
+    mfv     $t1, S700
+    mfv     $t2, S710
+    li      $t3, 0x7F800000
+    slt     $v0, $zero, $t0             /* min > 0 (and not NaN/inf below) */
+    slt     $t4, $t0, $t3
+    and     $v0, $v0, $t4
+    li      $t5, 0x7149F2CA             /* 1e30f */
+    sltu    $t4, $t1, $t5
+    and     $v0, $v0, $t4
+    and     $t6, $t2, $t3
+    xor     $t6, $t6, $t3
+    sltu    $t4, $zero, $t6
+    jr      $ra
+    and     $v0, $v0, $t4
+    .end vfpu_bbox_inside

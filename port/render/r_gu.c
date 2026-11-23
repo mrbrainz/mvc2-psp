@@ -1317,10 +1317,10 @@ static void ge_mesh_emit(const GuTexScaleArgs *ts, const float *proj, const void
  * transformed by clip (row-major, v' = v * M, GE clip space), textured from
  * an fl texture handle (0 = untextured) with UVs scaled (su, sv) and offset
  * (ou, ov) in texture units of the handle's w x h.  ge_verts: where the GE
- * reads the same vertices (P108 VRAM copy), NULL = verts. */
+ * reads the same vertices (P108 VRAM copy), NULL = verts; ge_idx likewise for idx. */
 typedef struct GuVtxIdx { float u, v; uint32_t c; float x, y, z; } GuVtxIdx;   /* r_gu_mesh.c GVtx layout */
 int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const void *ge_verts, const uint16_t *idx,
-                   int count, float su, float sv, float ou, float ov)
+                   const uint16_t *ge_idx, int count, float su, float sv, float ou, float ov)
 {
     static ScePspFMatrix4 ident = { {1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1} };
     static unsigned ident_gen = ~0u;   /* list_gen whose GE state already has VIEW/MODEL = identity */
@@ -1398,14 +1398,14 @@ int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const 
     }
     if (ge_mode & 3) {
         if (prof) { t1 = psp_prof_now(); psp_prof_add(39, "          submit: blend/depth + matrices", t1 - t0); t0 = t1; }
-        if (ge_mode & 4) ge_mesh_check(tsp.su != -1e30f ? &tsp : NULL, (const float *)&proj, idx, ge_verts ? ge_verts : verts, count);
-        ge_mesh_emit(tsp.su != -1e30f ? &tsp : NULL, (const float *)&proj, idx, ge_verts ? ge_verts : verts, count);
+        if (ge_mode & 4) ge_mesh_check(tsp.su != -1e30f ? &tsp : NULL, (const float *)&proj, ge_idx ? ge_idx : idx, ge_verts ? ge_verts : verts, count);
+        ge_mesh_emit(tsp.su != -1e30f ? &tsp : NULL, (const float *)&proj, ge_idx ? ge_idx : idx, ge_verts ? ge_verts : verts, count);
     } else {
         sceGuDisable(GU_CLIP_PLANES);
         sceGuSetMatrix(GU_PROJECTION, &proj);
         if (prof) { t1 = psp_prof_now(); psp_prof_add(39, "          submit: blend/depth + matrices", t1 - t0); t0 = t1; }
         GuDrawArgs d = { GU_TRIANGLES, GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_INDEX_16BIT | GU_TRANSFORM_3D,
-                         count, idx, ge_verts ? ge_verts : verts };
+                         count, ge_idx ? ge_idx : idx, ge_verts ? ge_verts : verts };
         gu_draw(&d);
     }
     if (prof) psp_prof_add(40, "          submit: draw", psp_prof_now() - t0);

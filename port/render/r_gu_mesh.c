@@ -37,7 +37,7 @@ void r_viewport(int vi[4], float vf[2]);
 uint8_t r_gs_to_unorm(unsigned g);
 void r_gu_canvas_to_ge(float m[16]);
 void r_gu_canvas_key(float k[4]);
-int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const void *ge_verts, const uint16_t *idx,
+int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const void *ge_verts, const uint16_t *idx, const uint16_t *ge_idx,
                    int count, float su, float sv, float ou, float ov);
 
 int r_gu_mesh_cnt[3];   /* DRAWLOG: mesh draws, triangles, microseconds in fl_clay_draw */
@@ -68,6 +68,7 @@ typedef struct MMesh {
     int gvwb;                /* P88: gv written since its last D-cache writeback */
     int vstale;              /* P108: gv written since its VRAM copy */
     uint32_t voff, vused;    /* P108: VRAM copy of gv (offset, 0 none), pool epoch of its last use */
+    uint32_t ioff;           /* P83: VRAM copy of idx after gv's (0 none) */
     long used;               /* host frame gv was last handed to the GE (+1) */
     int bbok;                /* bb holds the cpu positions' bounding box */
     float bb[6];             /* min xyz, max xyz */
@@ -92,6 +93,7 @@ int vfpu_adc_codes(const float m[16], const void *mvtx, int n, uint8_t *out);
 int vfpu_clip_codes(const float m[16], const void *gvtx, int n, void *out[2]);
 void vfpu_bbox_corners(const float m[16], float k[32], float *smax);
 void vfpu_bbox(const void *mvtx, int n, float out[6]);
+int vfpu_bbox_inside(const float m[16], const float bb[6]);
 void vfpu_lit(const float p[26], const void *mvtx, const uint16_t *list, float *out3);
 static int use_vfpu = -1;
 static void fl_mat_mul_c(float out[16], const float a[16], const float b[16]);
@@ -738,6 +740,7 @@ static int bbox_corners(MMesh *me, const float cm[16], float k[8][4], float *sma
 static int bbox_inside(MMesh *me, const float cm[16])
 {
     float k[8][4], smax;
+    if (use_vfpu > 0 && me->bbok) return vfpu_bbox_inside(cm, me->bb);   /* P83: in VFPU registers, about 5x faster */
     if (!bbox_corners(me, cm, k, &smax)) return 0;
     {
         float m = 1e-5f * smax;
@@ -764,7 +767,7 @@ void psp_prof_add(int slot, const char *label, unsigned long long us);
  * while the frame used at least half of it and reset otherwise (a new scene)
  * or for a system dialog. */
 static uint32_t mv_base, mv_size, mv_next, mv_epoch = 1;
-static int mv_init, mv_full;
+static int mv_init, mv_full, mv_idx;
 static unsigned mv_stat[3];   /* draws from VRAM, copies, KB copied */
 uint32_t r_gu_mesh_vram(uint32_t *size);
 int r_gu_vram_ok(void);
@@ -781,26 +784,32 @@ void r_gu_mesh_vram_frame(int drop)
         unsigned used = 0;
         for (int h = 1; h < MAX_CLAY; h++)
             if (CLAY[h].voff && CLAY[h].vused == mv_epoch)
-                used += ((unsigned)CLAY[h].nverts * sizeof(GVtx) + 63u) & ~63u;
+                used += (((unsigned)CLAY[h].nverts * sizeof(GVtx) + 63u) & ~63u) +
+                        (CLAY[h].ioff ? ((unsigned)CLAY[h].nidx * 2u + 63u) & ~63u : 0);
         if (used * 2 >= mv_next) mv_full = 0;
     }
     mv_epoch++;
     if (!CLAY || (!mv_full && !drop)) return;
-    for (int h = 1; h < MAX_CLAY; h++) CLAY[h].voff = 0;
+    for (int h = 1; h < MAX_CLAY; h++) CLAY[h].voff = CLAY[h].ioff = 0;
     mv_next = 0;
     mv_full = 0;
 }
 /* the GE's copy of me->gv, or NULL (gv itself) */
 static const void *mesh_vram(MMesh *me)
 {
-    unsigned bytes = ((unsigned)me->nverts * sizeof(GVtx) + 63u) & ~63u;
-    if (!mv_init) { mv_base = r_gu_mesh_vram(&mv_size); mv_init = 1; }
+    unsigned vbytes = ((unsigned)me->nverts * sizeof(GVtx) + 63u) & ~63u, bytes = vbytes;
+    if (!mv_init) { mv_base = r_gu_mesh_vram(&mv_size); mv_init = 1; mv_idx = getenv("MVC2_MESH_VRAM_NOIDX") == NULL; }
     if (!mv_size || !r_gu_vram_ok()) return NULL;
+    if (mv_idx) bytes += ((unsigned)me->nidx * 2u + 63u) & ~63u;
     if (!me->voff) {
         if (mv_next + bytes > mv_size) { mv_full = 1; return NULL; }
         me->voff = mv_base + mv_next;
         mv_next += bytes;
         me->vstale = 1;
+        if (mv_idx) {   /* P83: the GE reads indices from VRAM too (MVC2_MESH_VRAM_NOIDX=1: off); they never change after build_mesh: copied once */
+            memcpy((void *)(uintptr_t)(0x44000000u + me->voff + vbytes), me->idx, (size_t)me->nidx * 2);
+            me->ioff = me->voff + vbytes;
+        }
     }
     if (me->vstale) {   /* not in this frame's list yet (clay_draw's stale check), so safe to rewrite */
         memcpy((void *)(uintptr_t)(0x44000000u + me->voff), me->gv, (size_t)me->nverts * sizeof(GVtx));   /* uncached VRAM */
@@ -1002,7 +1011,7 @@ static int clay_draw(int h)
             int n = near_clip(g, idx + rg->first, adc_count[r], &cv, &ci);
             PA(25, "        clay near_clip", t_nc);
             if (n >= 0) {
-                if (n) r_gu_mesh_draw(clip, me->textured ? rg->tex : 0, cv, NULL, ci, n, su, sv, ou, ov);
+                if (n) r_gu_mesh_draw(clip, me->textured ? rg->tex : 0, cv, NULL, ci, NULL, n, su, sv, ou, ov);
                 continue;
             }
         }
@@ -1011,7 +1020,9 @@ static int clay_draw(int h)
         while (merge && r + 1 < me->nrange && adc_count[r + 1] && rg->first + n == me->range[r + 1].first &&
                (!me->textured || me->range[r + 1].tex == rg->tex))
             n += adc_count[++r];
-        r_gu_mesh_draw(clip, me->textured ? rg->tex : 0, g, gge, idx + rg->first, n, su, sv, ou, ov);
+        r_gu_mesh_draw(clip, me->textured ? rg->tex : 0, g, gge, idx + rg->first,
+                       gge && idx == me->idx && me->ioff ? (const uint16_t *)(uintptr_t)(0x04000000u + me->ioff) + rg->first : NULL,
+                       n, su, sv, ou, ov);
         if (dump) {
             float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f, z0 = 1e9f, z1 = -1e9f, w0 = 1e9f, w1 = -1e9f;
             for (int k = 0; k < me->nverts; k++) {

@@ -461,6 +461,34 @@ Mesh submit cuts (P107, 2026-11-23, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP
 - **What paces the frame:** the GE's main-RAM traffic while meshes draw (see
   above), not submit CPU work (P108).
 
+ADC box test and mesh indices (P83, 2026-11-23, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1`, two runs each):
+- **ADC by removal:** `MVC2_NO_ADC=1` saves 1.4 ms. About 66 draws a frame
+  reach the ADC, and the bounding-box test passes for all but about 2. The
+  box test alone cost 0.9 ms. Only 1 box a frame is recomputed, and the
+  per-vertex test and the index filter cost under 0.2 ms.
+- **Why the box test was slow:** in a tight loop mid-fight it took 4.8 us
+  a call. A 4x4 `fl_mat_mul` took 0.87 us, and the C corner path took 8.9 us.
+  The corners went from CPU stores to VFPU loads and back, and scalar FPU
+  code is slow on this CPU. Caching the result per mesh hit only 4 of 66
+  draws, because the camera moves.
+- **The change:** `vfpu_bbox_inside` (`psp_vfpu.S`) runs the same corner
+  test in VFPU registers with no stores, in 0.86 us a call. Corners are
+  P + edge sums, the margin uses a bound >= the C path's, and it returns 0
+  for a non-finite matrix. A temporary check found 0 disagreements with the old test
+  over 109,568 draws.
+- **Indices in VRAM:** the P108 pool also holds each mesh's indices, copied
+  once, because they never change. The GE reads them from VRAM when the ADC
+  filtered nothing. `MVC2_MESH_VRAM_NOIDX=1` turns it off. The render pass
+  went 19.89 -> 19.66 ms.
+- **Result:** `fl_clay_draw` 7.85 -> 6.93-6.95 ms; render pass 19.94 ->
+  18.59-18.66 ms. In normal mode, fight display fps went from 12.57, 11.99,
+  23.58, 11.79, 9.83 (P108) to 14.98, 14.98, 27.16, 11.99, 10.47. PPSSPP
+  shots f1-f6 are byte-identical to HEAD.
+- **Left:** about 2.9 ms of submit CPU (P109), and about 4 ms of per-draw
+  work before submit (P110). `fl_clay_draw` <= 4 ms needs both.
+- **Measuring:** with temporary counters in, runs varied by about +-0.2 ms, not
+  0.05. Use A/B pairs in the same build and repeat each one.
+
 Hot routines first in .text (P101, 2026-11-23, PSP-2003, `fight6`, `PROFILE=1`):
 - **How it works:** every o32 TU is built with `-ffunction-sections`, and
   `port/psp/hot_order.ld` (`ld --section-ordering-file`) puts the 171
