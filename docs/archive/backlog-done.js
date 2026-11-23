@@ -1146,6 +1146,25 @@ window.BACKLOG_ARCHIVE = [
   "note": "psp_prof_scene.c times each step of the two render tasks without the mesh draws nested in them; psp_prof.c timers now exclude audio fills. PSP-2003 fight6: fights have 8.4 ms of non-mesh rendering, spread over 9 steps (largest 1.9 ms). Character select has 14.3 ms, mostly object list 6 (8.3 + 5.5 ms), ticketed as P98 and P99."
  },
  {
+  "id": "P108",
+  "order": 39,
+  "phase": "P4",
+  "size": "L",
+  "status": "Done",
+  "depends": [
+   "P107"
+  ],
+  "read": [
+   "port/docs/PSP.md",
+   "port/render/r_gu.c",
+   "port/render/r_gu_mesh.c"
+  ],
+  "title": "Hardware speed: less GE main-RAM traffic while meshes draw",
+  "description": "P107 by removal: with every mesh command written but zero-vertex draws, the fight render pass is 18.1 ms instead of 23.0, so the GE reading mesh data from main RAM slows the CPU about 4.9 ms a drawn step (bus contention); submit CPU work is not what paces the frame. First find which reads cost (vertices, indices, CLUT/texture misses, display list) with probes that keep the CPU work equal; then cut the biggest: e.g. a 16-byte vertex (16-bit UV and positions with the scale in the matrix) or static meshes vertices resident in VRAM (shared with the P88 texture cache).",
+  "done_when": "Fight render pass per drawn step (NO_FRAME_SKIP=1, PROFILE=1, hardware) at least 2 ms lower; screenshots match visually in PPSSPP.",
+  "note": "Probes put the cost in the GE fetching 24-byte vertices from main RAM (about 3.6 ms; textures about 0.9). Unlit meshes now get a VRAM copy of gv in a 256 KB pool (MVC2_MESH_VRAM_KB, P88-style frame policy). PSP-2003 fight6: render pass 22.28-22.40 -> 19.91-19.93 ms per drawn step, fight display up to 18.7 -> 23.6 fps; PPSSPP shots identical."
+ },
+ {
   "id": "P96",
   "order": 40,
   "phase": "P4",

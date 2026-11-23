@@ -57,7 +57,8 @@ typedef struct PalRec { uint32_t *clut; int ncolors, used; unsigned gen; } PalRe
 static unsigned int __attribute__((aligned(16))) list[LIST_BYTES / 4];
 static uint32_t vr_base, vr_next, vr_top;   /* P87 mesh texture VRAM cache (offsets) */
 static void vr_frame(void);
-static int vr_full, vr_off = -1, vr_pause, vr_drop;   /* pause: frames left without the cache (system dialog up); drop: reset at the next frame end */
+static int vr_full, vr_off = -1, vr_pause, vr_drop;
+static uint32_t mv_base, mv_size;   /* P108: mesh vertex pool, the top of VRAM (r_gu_mesh.c) */   /* pause: frames left without the cache (system dialog up); drop: reset at the next frame end */
 static unsigned vr_epoch = 1;   /* presented frames (P88) */
 static int is_index(int fmt);
 static uint32_t __attribute__((aligned(16))) black_clut[256];
@@ -198,6 +199,14 @@ int r_init(void)
         sceGuDepthBuffer((void *)(BUF_W * SCR_H * bpp * 2), BUF_W);
         vr_base = vr_next = (uint32_t)(BUF_W * SCR_H * bpp * 2 + BUF_W * SCR_H * 2);
         vr_top = 2u << 20;
+        {   /* P108: MVC2_MESH_VRAM_KB (default 256, 0 = off) of it for mesh vertices */
+            const char *e = getenv("MVC2_MESH_VRAM_KB");
+            unsigned kb = e ? (unsigned)atoi(e) : 256u;
+            if (kb > 512u) kb = 512u;
+            mv_size = kb << 10;
+            vr_top -= mv_size;
+            mv_base = vr_top;
+        }
         if (present_c16) {
             static const ScePspIMatrix4 dith = { { -4, 0, -3, 1 }, { 2, -2, 3, -1 }, { -3, 1, -4, 0 }, { 3, -1, 2, -2 } };
             sceGuSetDither(&dith);
@@ -347,6 +356,10 @@ static void vr_frame(void)
                 used += ((unsigned)t->pw * (unsigned)t->ph * (is_index(t->fmt) ? 1u : 4u) + 63u) & ~63u;
         }
         if (used * 2 >= vr_next - vr_base) vr_full = 0;
+    }
+    {   /* P108: the mesh vertex pool's own frame policy (r_gu_mesh.c) */
+        extern void r_gu_mesh_vram_frame(int drop);
+        r_gu_mesh_vram_frame(vr_drop);
     }
     vr_epoch++;
     if (!vr_full && !vr_drop) return;
@@ -1164,6 +1177,11 @@ const uint8_t *r_light(int i) { return R.lights[i < 0 ? 0 : i > 2 ? 2 : i]; }
 void r_viewport(int vi[4], float vf[2]) { memcpy(vi, R.vp_i, 16); memcpy(vf, R.vp_f, 8); }
 uint8_t r_gs_to_unorm(unsigned g) { return gs_to_unorm(g); }
 
+/* P108: the mesh vertex pool (offsets from the VRAM base; size 0 = none) and
+ * whether VRAM may be used this frame (not while a system dialog is up) */
+uint32_t r_gu_mesh_vram(uint32_t *size) { *size = mv_size; return mv_base; }
+int r_gu_vram_ok(void) { return !vr_pause && !vr_drop; }
+
 /* before a mesh draw: 2D batches out, list open with room for `bytes` of
  * sceGuGetMemory (a restart later would overwrite it) */
 void r_gu_begin(unsigned bytes)
@@ -1298,10 +1316,11 @@ static void ge_mesh_emit(const GuTexScaleArgs *ts, const float *proj, const void
 /* One indexed 3D draw: GuVtx-layout vertices (u, v, 8888 colour, x, y, z),
  * transformed by clip (row-major, v' = v * M, GE clip space), textured from
  * an fl texture handle (0 = untextured) with UVs scaled (su, sv) and offset
- * (ou, ov) in texture units of the handle's w x h. */
+ * (ou, ov) in texture units of the handle's w x h.  ge_verts: where the GE
+ * reads the same vertices (P108 VRAM copy), NULL = verts. */
 typedef struct GuVtxIdx { float u, v; uint32_t c; float x, y, z; } GuVtxIdx;   /* r_gu_mesh.c GVtx layout */
-int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const uint16_t *idx, int count,
-                   float su, float sv, float ou, float ov)
+int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const void *ge_verts, const uint16_t *idx,
+                   int count, float su, float sv, float ou, float ov)
 {
     static ScePspFMatrix4 ident = { {1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1} };
     static unsigned ident_gen = ~0u;   /* list_gen whose GE state already has VIEW/MODEL = identity */
@@ -1379,14 +1398,14 @@ int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const 
     }
     if (ge_mode & 3) {
         if (prof) { t1 = psp_prof_now(); psp_prof_add(39, "          submit: blend/depth + matrices", t1 - t0); t0 = t1; }
-        if (ge_mode & 4) ge_mesh_check(tsp.su != -1e30f ? &tsp : NULL, (const float *)&proj, idx, verts, count);
-        ge_mesh_emit(tsp.su != -1e30f ? &tsp : NULL, (const float *)&proj, idx, verts, count);
+        if (ge_mode & 4) ge_mesh_check(tsp.su != -1e30f ? &tsp : NULL, (const float *)&proj, idx, ge_verts ? ge_verts : verts, count);
+        ge_mesh_emit(tsp.su != -1e30f ? &tsp : NULL, (const float *)&proj, idx, ge_verts ? ge_verts : verts, count);
     } else {
         sceGuDisable(GU_CLIP_PLANES);
         sceGuSetMatrix(GU_PROJECTION, &proj);
         if (prof) { t1 = psp_prof_now(); psp_prof_add(39, "          submit: blend/depth + matrices", t1 - t0); t0 = t1; }
         GuDrawArgs d = { GU_TRIANGLES, GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_INDEX_16BIT | GU_TRANSFORM_3D,
-                         count, idx, verts };
+                         count, idx, ge_verts ? ge_verts : verts };
         gu_draw(&d);
     }
     if (prof) psp_prof_add(40, "          submit: draw", psp_prof_now() - t0);

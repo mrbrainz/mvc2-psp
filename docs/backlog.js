@@ -47,6 +47,7 @@ window.BACKLOG = {
   "P101",
   "P102",
   "P107",
+  "P108",
   "P11",
   "P12",
   "P13",
@@ -226,24 +227,6 @@ window.BACKLOG = {
    "title": "Hardware speed: audio mixing on the Media Engine",
    "description": "Ideas from gibletto/mvc2-naomi-dc ports/port/psp (AGPL-3.0: ideas only, no code copied). Once P104 owns the ME, run the frame's sound mix there after the list build, if the profile shows mixing costs the main CPU measurable time per frame. Output must stay sample-identical.",
    "done_when": "Mix time per frame measured on hardware; if moved, WAV output identical to the main-CPU mix and frame time measured before and after."
-  },
-  {
-   "id": "P108",
-   "order": 39,
-   "phase": "P4",
-   "size": "L",
-   "status": "Ready",
-   "depends": [
-    "P107"
-   ],
-   "read": [
-    "port/docs/PSP.md",
-    "port/render/r_gu.c",
-    "port/render/r_gu_mesh.c"
-   ],
-   "title": "Hardware speed: less GE main-RAM traffic while meshes draw",
-   "description": "P107 by removal: with every mesh command written but zero-vertex draws, the fight render pass is 18.1 ms instead of 23.0, so the GE reading mesh data from main RAM slows the CPU about 4.9 ms a drawn step (bus contention); submit CPU work is not what paces the frame. First find which reads cost (vertices, indices, CLUT/texture misses, display list) with probes that keep the CPU work equal; then cut the biggest: e.g. a 16-byte vertex (16-bit UV and positions with the scale in the matrix) or static meshes vertices resident in VRAM (shared with the P88 texture cache).",
-   "done_when": "Fight render pass per drawn step (NO_FRAME_SKIP=1, PROFILE=1, hardware) at least 2 ms lower; screenshots match visually in PPSSPP."
   },
   {
    "id": "P41",

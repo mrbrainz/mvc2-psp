@@ -37,8 +37,8 @@ void r_viewport(int vi[4], float vf[2]);
 uint8_t r_gs_to_unorm(unsigned g);
 void r_gu_canvas_to_ge(float m[16]);
 void r_gu_canvas_key(float k[4]);
-int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const uint16_t *idx, int count,
-                   float su, float sv, float ou, float ov);
+int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const void *ge_verts, const uint16_t *idx,
+                   int count, float su, float sv, float ou, float ov);
 
 int r_gu_mesh_cnt[3];   /* DRAWLOG: mesh draws, triangles, microseconds in fl_clay_draw */
 int fl_mesh_debug;
@@ -66,6 +66,8 @@ typedef struct MMesh {
     uint32_t ckey[3];        /* what gv's colours were computed for */
     int cvalid;
     int gvwb;                /* P88: gv written since its last D-cache writeback */
+    int vstale;              /* P108: gv written since its VRAM copy */
+    uint32_t voff, vused;    /* P108: VRAM copy of gv (offset, 0 none), pool epoch of its last use */
     long used;               /* host frame gv was last handed to the GE (+1) */
     int bbok;                /* bb holds the cpu positions' bounding box */
     float bb[6];             /* min xyz, max xyz */
@@ -267,7 +269,7 @@ static void build_mesh(MMesh *me, const Pol *p, size_t mo)
     me->cpu = (MVtx *)calloc((size_t)nv, sizeof *me->cpu);
     me->gv = (GVtx *)memalign(16, (size_t)nv * sizeof *me->gv);
     if (!me->cpu || !me->gv) { me->desc = -1; return; }
-    me->gvwb = 1;
+    me->gvwb = me->vstale = 1;
     for (int i = 0; i < nv; i++) {
         MVtx *v = &me->cpu[i];
         for (int k = 0; k < 3; k++) v->pos[k] = rdf(p, sp + 12 + 12 * i + 4 * k);
@@ -754,6 +756,62 @@ void psp_prof_add(int slot, const char *label, unsigned long long us);
 #define PT(v) unsigned long long v = prof ? psp_prof_now() : 0
 #define PA(slot, label, v) do { if (prof) psp_prof_add(slot, label, psp_prof_now() - v); } while (0)
 
+/* P108: mesh vertices for the GE in VRAM.  The GE fetches one vertex per
+ * index from main RAM, and in fights that bus traffic slowed the CPU about
+ * 3.6 ms a drawn step (PSP.md).  Unlit meshes drawn from gv get a copy in a
+ * pool at the top of VRAM (r_gu_mesh_vram), refreshed when gv is rewritten;
+ * the CPU keeps reading gv.  Like the P88 texture cache, a full pool is kept
+ * while the frame used at least half of it and reset otherwise (a new scene)
+ * or for a system dialog. */
+static uint32_t mv_base, mv_size, mv_next, mv_epoch = 1;
+static int mv_init, mv_full;
+static unsigned mv_stat[3];   /* draws from VRAM, copies, KB copied */
+uint32_t r_gu_mesh_vram(uint32_t *size);
+int r_gu_vram_ok(void);
+int psp_prof_on(void);
+void r_gu_mesh_vram_frame(int drop)
+{
+    if (psp_prof_on()) {
+        psp_prof_add(49, "  mesh vertex VRAM draws (count)", 1000ull * mv_stat[0]);
+        psp_prof_add(50, "  mesh vertex VRAM copies (count)", 1000ull * mv_stat[1]);
+        psp_prof_add(51, "  mesh vertex VRAM KB copied (count)", 1000ull * (mv_stat[2] >> 10));
+    }
+    mv_stat[0] = mv_stat[1] = mv_stat[2] = 0;
+    if (CLAY && mv_full && !drop) {
+        unsigned used = 0;
+        for (int h = 1; h < MAX_CLAY; h++)
+            if (CLAY[h].voff && CLAY[h].vused == mv_epoch)
+                used += ((unsigned)CLAY[h].nverts * sizeof(GVtx) + 63u) & ~63u;
+        if (used * 2 >= mv_next) mv_full = 0;
+    }
+    mv_epoch++;
+    if (!CLAY || (!mv_full && !drop)) return;
+    for (int h = 1; h < MAX_CLAY; h++) CLAY[h].voff = 0;
+    mv_next = 0;
+    mv_full = 0;
+}
+/* the GE's copy of me->gv, or NULL (gv itself) */
+static const void *mesh_vram(MMesh *me)
+{
+    unsigned bytes = ((unsigned)me->nverts * sizeof(GVtx) + 63u) & ~63u;
+    if (!mv_init) { mv_base = r_gu_mesh_vram(&mv_size); mv_init = 1; }
+    if (!mv_size || !r_gu_vram_ok()) return NULL;
+    if (!me->voff) {
+        if (mv_next + bytes > mv_size) { mv_full = 1; return NULL; }
+        me->voff = mv_base + mv_next;
+        mv_next += bytes;
+        me->vstale = 1;
+    }
+    if (me->vstale) {   /* not in this frame's list yet (clay_draw's stale check), so safe to rewrite */
+        memcpy((void *)(uintptr_t)(0x44000000u + me->voff), me->gv, (size_t)me->nverts * sizeof(GVtx));   /* uncached VRAM */
+        me->vstale = 0;
+        mv_stat[1]++; mv_stat[2] += bytes;
+    }
+    me->vused = mv_epoch;
+    mv_stat[0]++;
+    return (const void *)(uintptr_t)(0x04000000u + me->voff);
+}
+
 static int clay_draw(int h)
 {
     static int *adc_count, adc_cap;
@@ -765,6 +823,7 @@ static int clay_draw(int h)
     float cscale, modv[4] = { 1.f, 1.f, 1.f, 1.f }, wv[16], mvp[16], vpm[16], ge[16], clip[16], vf[2];
     float hw, hh, su = 1.f, sv = 1.f, ou = 0.f, ov = 0.f;
     GVtx *g;
+    const void *gge = NULL;   /* P108: where the GE reads g, NULL = g */
     if (!CLAY || h <= 0 || h >= MAX_CLAY) return 0;
     me = &CLAY[h];
     if (!unorm_ok) unorm_init();
@@ -797,7 +856,7 @@ static int clay_draw(int h)
     r_gu_begin((unsigned)me->nverts * sizeof(GVtx) + (unsigned)me->nidx * 2 + 64 +
                ((me->desc == 19 || (me->desc >= 44 && me->desc <= 46)) ? (unsigned)me->nidx * (6 * sizeof(GVtx) + 12) + 32 : 0));
     if (lit) {
-        if (me->dirty) { positions(me, me->gv); me->dirty = 0; me->cvalid = 0; me->gvwb = 1; }
+        if (me->dirty) { positions(me, me->gv); me->dirty = 0; me->cvalid = 0; me->gvwb = me->vstale = 1; }
         g = (GVtx *)sceGuGetMemory((unsigned)me->nverts * sizeof *g);   /* per draw */
         memcpy(g, me->gv, (size_t)me->nverts * sizeof *g);
         colours_lit(me, g, modv, cscale);
@@ -815,15 +874,15 @@ static int clay_draw(int h)
             colours_unlit(me, g, matcol, modv, cscale);
             wb(g, (size_t)me->nverts * sizeof *g);
         } else {
-            if (me->dirty) { positions(me, me->gv); me->dirty = 0; me->cvalid = 0; me->gvwb = 1; }
+            if (me->dirty) { positions(me, me->gv); me->dirty = 0; me->cvalid = 0; me->gvwb = me->vstale = 1; }
             if (!me->cvalid || memcmp(key, me->ckey, sizeof key)) {
                 colours_unlit(me, me->gv, matcol, modv, cscale);
                 memcpy(me->ckey, key, sizeof key);
                 me->cvalid = 1;
-                me->gvwb = 1;
+                me->gvwb = me->vstale = 1;
             }
             g = me->gv;
-            if (me->gvwb) { wb(g, (size_t)me->nverts * sizeof *g); me->gvwb = 0; }   /* P88: only when written */
+            if (!(gge = mesh_vram(me)) && me->gvwb) { wb(g, (size_t)me->nverts * sizeof *g); me->gvwb = 0; }   /* P88: only when written */
             me->used = mvc2_host_frame + 1;
         }
     }
@@ -943,7 +1002,7 @@ static int clay_draw(int h)
             int n = near_clip(g, idx + rg->first, adc_count[r], &cv, &ci);
             PA(25, "        clay near_clip", t_nc);
             if (n >= 0) {
-                if (n) r_gu_mesh_draw(clip, me->textured ? rg->tex : 0, cv, ci, n, su, sv, ou, ov);
+                if (n) r_gu_mesh_draw(clip, me->textured ? rg->tex : 0, cv, NULL, ci, n, su, sv, ou, ov);
                 continue;
             }
         }
@@ -952,7 +1011,7 @@ static int clay_draw(int h)
         while (merge && r + 1 < me->nrange && adc_count[r + 1] && rg->first + n == me->range[r + 1].first &&
                (!me->textured || me->range[r + 1].tex == rg->tex))
             n += adc_count[++r];
-        r_gu_mesh_draw(clip, me->textured ? rg->tex : 0, g, idx + rg->first, n, su, sv, ou, ov);
+        r_gu_mesh_draw(clip, me->textured ? rg->tex : 0, g, gge, idx + rg->first, n, su, sv, ou, ov);
         if (dump) {
             float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f, z0 = 1e9f, z1 = -1e9f, w0 = 1e9f, w1 = -1e9f;
             for (int k = 0; k < me->nverts; k++) {

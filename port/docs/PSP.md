@@ -414,6 +414,33 @@ Mesh submit cost by removal (P107, 2026-11-23, PSP-2003, `fight6`, `PROFILE=1 NO
   draw, so it is inconclusive). `MVC2_NO_VRAM_TEX=1` adds 1 ms. Copying each
   draw's vertices into a VRAM ring costs more than it saves (13.1 ms).
 
+Mesh vertices in VRAM (P108, 2026-11-23, PSP-2003, `fight6`, `PROFILE=1`):
+- **Probes, render pass per drawn fight step:** 22.57 ms as built; 21.65 ms
+  with mesh textures read from VRAM; 21.67 ms with every index pointing at
+  vertex 0, which means no pixels and so no texture reads either; 18.05 ms
+  with zero-vertex draws. So texture reads cost about 0.9 ms. The rest,
+  about 3.6 ms, is the GE fetching a 24-byte vertex from main RAM for every
+  index. Drawing pixels costs the CPU nothing.
+- **The change:** unlit meshes drawn from `gv` get a copy in a pool at the
+  top of VRAM, and the GE reads that copy. The copy is refreshed when `gv`
+  is rewritten, only on the path where `gv` is not yet in this frame's list.
+  The CPU keeps reading `gv`. The pool follows the P88 texture-cache policy:
+  a full pool is kept while the frame used at least half of it, and it is
+  reset otherwise or for a system dialog. `MVC2_MESH_VRAM_KB` sets its size
+  (default 256 KB; 0 = off). It comes out of the texture cache, which drops
+  from about 690 to 434 KB.
+- **Pool sizes, render pass:** off 22.40 ms, 128 KB 21.11 ms, 256 KB
+  19.93 ms, 384 KB 19.86 ms (384 KB was worse in character select). About
+  105 draws a frame read from VRAM, and about 1 KB a frame is copied.
+- **Repeat run:** render pass 22.28 -> 19.91 ms; `fl_clay_draw`
+  8.78 -> 7.82 ms.
+- **Normal mode, fight display rate (fps):** 11.99 -> 12.57, 11.99 -> 11.99,
+  18.73 -> 23.58, 9.99 -> 11.79, 8.99 -> 9.83.
+- **PPSSPP:** shots f1-f6 are byte-identical to the build before P107, with
+  the pool on and off. Check that a PPSSPP launch actually ran: some
+  launches exit without running the game, leaving the previous run's shots
+  and log in place.
+
 Mesh submit cuts (P107, 2026-11-23, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1`, two runs each):
 - **Counts, per fight frame (about 144 submits):** about 97 reuse the
   previous submit's texture, and 47 bind a texture. About 35-40 are a
