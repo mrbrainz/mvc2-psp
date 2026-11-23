@@ -45,16 +45,23 @@ static uint8_t (*oracle_ram_buf_get(void))[ORACLE_HASH_HI - ORACLE_HASH_LO]
 # state_dump.c: unchanged, compiled from the copy so it includes the patched header
 psp_patch(port/host/state_dump.c port/host/state_dump.c)
 
-# fe_mesh.c (P96): the per-draw render-state hand-off in func_003F0500 goes
-# through psp_mesh_state.c, which lets the renderer read the game's copies.
+# fe_mesh.c (P96): everything func_003F0500 does between the game's body and
+# fl_clay_draw (state sync, texture re-sync, the per-draw render-state
+# hand-off, the dump/verbose logs) is one call, psp_mesh_predraw()
+# (port/psp/host/psp_mesh_state.c); the upstream lines stay in the copy
+# under #if 0.
 psp_patch(port/host/fe/fe_mesh.c port/host/fe/fe_mesh.c
-"        fl_set_render_state(0x16, (uintptr_t)EE_BSS_PTR(0x0061C720));
-        fl_set_render_state(0x17, (uintptr_t)EE_BSS_PTR(0x0061C6E0));
-        fl_set_render_state(0x19, (uintptr_t)EE_BSS_PTR(0x0061BEE0));
-        fl_set_render_state(0x1A, (uintptr_t)EE_BSS_PTR(0x0061BF20));
-        fl_set_clip_matrix((const float *)EE_BSS_PTR(0x0061BDE0));
-        fl_set_render_state(0x59, (uintptr_t)EE_BSS_PTR(0x0061B2F0));
-        fl_set_render_state(0x5A, (uintptr_t)EE_BSS_PTR(0x0061B354));
-        fl_set_render_state(0x5B, (uintptr_t)EE_BSS_PTR(0x0061B3B8));"
+"        fe_sync_state();
+        {   /* textures the game (re)loaded into a record since it was last synced */"
 "        /* PSP patch (port/psp/patches, P96): port/psp/host/psp_mesh_state.c */
-        { extern void psp_mesh_handoff(void); psp_mesh_handoff(); }")
+        { extern void psp_mesh_predraw(int, u32); psp_mesh_predraw(h, fmt); }
+#if 0
+        fe_sync_state();
+        {   /* textures the game (re)loaded into a record since it was last synced */"
+"        fl_clay_draw(h);
+    }
+    return r;"
+"#endif
+        fl_clay_draw(h);
+    }
+    return r;")

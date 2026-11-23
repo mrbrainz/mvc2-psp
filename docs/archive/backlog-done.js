@@ -1127,6 +1127,25 @@ window.BACKLOG_ARCHIVE = [
   "note": "psp_prof_scene.c times each step of the two render tasks without the mesh draws nested in them; psp_prof.c timers now exclude audio fills. PSP-2003 fight6: fights have 8.4 ms of non-mesh rendering, spread over 9 steps (largest 1.9 ms). Character select has 14.3 ms, mostly object list 6 (8.3 + 5.5 ms), ticketed as P98 and P99."
  },
  {
+  "id": "P96",
+  "order": 40,
+  "phase": "P4",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P89"
+  ],
+  "read": [
+   "port/host/fe/fe_mesh.c",
+   "port/render/r_gu.c",
+   "port/render/r_gu_mesh.c"
+  ],
+  "title": "Hardware speed: per-draw state hand-off in fe_mesh.c (upstream change)",
+  "description": "After P89 the func_003F0500 wrapper is still ~2.3 ms a fight frame: fe_mesh.c re-hands view/proj, world, clip and three lights (fl_set_render_state x7 + fl_set_clip_matrix) and re-syncs the clay's textures on every mesh draw, cache-miss bound on the PSP. Needs a change to shared fe_mesh.c (ask first): hand over only what changed, or let the renderer read the game's state at draw time; drop the texture re-sync that __wrap_func_003EA660 already did; update the format in place instead of fl_clay_build when only the format word toggles.",
+  "done_when": "Wrapper <= 1 ms in the scripted 3v3 fight; native/browser port unaffected; game-state trace and rendering unchanged.",
+  "note": "Patched fe_mesh.c copy (port/psp/patches) + psp_mesh_state.c: the renderer reads the game's matrices in place, lights only for lit draws; PPSSPP fight wrapper 1.24 -> 0.68 ms, state dump A/B 0 diverging words, MVC2_MESH_CHECK 1.56 M draws unchanged. PSP-2003 fight6: profiled wrapper 3.53 -> 2.15 ms (about 3.0 -> 1.6 ms once the profiler's own ~0.5 ms is removed); 0 format rebuilds, and the rest is spread over small per-draw calls (PSP.md). Then one psp_mesh_predraw() call replaces the whole pre-draw stretch (fe_sync_state, texture re-sync, hand-off, logs): character select 0.5-1.6 ms a drawn step faster, fights within noise; state dump and shots unchanged. The 1 ms target was not reached: what is left is call and cache-miss cost spread over the draw."
+ },
+ {
   "id": "P73",
   "order": 42,
   "phase": "P6",

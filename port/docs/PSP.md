@@ -326,6 +326,21 @@ Mesh hand-off (P96, 2026-11-23):
   draw, which `fe_sync_handle`'s same-frame check returns early; and the
   `fe_sync_state` origin and mode-word copy. No single part is large, so the
   rest is spread over small per-draw calls, probably cache-miss bound.
+- **Merged pre-draw (2026-11-23):** the patch now replaces everything
+  between the game's body and `fl_clay_draw` with one call,
+  `psp_mesh_predraw()`. That covers the origin and mode-word sync, the
+  texture re-sync, the hand-off and the dump/verbose logs, and the upstream
+  lines stay under `#if 0`. Timed separately, the remaining pieces were
+  `fe_sync_state` (about 1 mode-word change a frame, never with a 2D batch to
+  flush), the logging guards, and under 0.1 ms of texture re-sync: call and
+  cache-miss cost, too small to time. PSP-2003 `fight6`, `NO_FRAME_SKIP=1`,
+  no `PROFILE`, two runs each: character select 28.7-29.0 -> 27.2 ms and
+  22.5-22.6 -> 21.9-22.1 ms a step; fights within noise. One light block
+  (36 draws, 60 fps either way) went 7.0 -> 7.5 ms, likely a code-layout
+  shift (the P101 ordering predates the new function). The profiled wrapper
+  in fights is 1.4-1.8 ms, about 0.2 ms less than before. In PPSSPP:
+  `MVC2_MESH_CHECK` 0 changed, state dump 3,057 frames 0 diverging, shots
+  identical.
 - **PSP-1000:** crashes during boot after the 23 MB EE heap (about 700 KB
   free), before any frame (P74-P79).
 - **Kept:** the per-draw texture re-sync and `fe_sync_state` (see above).
