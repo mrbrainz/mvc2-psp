@@ -80,6 +80,7 @@ window.BACKLOG = {
   "P70",
   "P71",
   "P73",
+  "P77",
   "P81",
   "P82",
   "P85",
@@ -331,22 +332,6 @@ window.BACKLOG = {
    "title": "Low profile: renderer memory budgets",
    "description": "In the low profile, cap the texture cache, character atlas pages and mesh buffers to the P73 budgets (evict sooner, 16-bit textures where they look the same), without visible changes in normal play. Full profile unchanged.",
    "done_when": "Low profile 3v3 fight and full arcade run in PPSSPP stay within the renderer budget with no missing or corrupt textures (DRAWLOG counters, screenshots compared with the full profile)."
-  },
-  {
-   "id": "P77",
-   "order": 46,
-   "phase": "P6",
-   "size": "M",
-   "status": "Backlog",
-   "depends": [
-    "P73"
-   ],
-   "read": [
-    "port/docs/PSP.md"
-   ],
-   "title": "Smaller program image (all models)",
-   "description": "Find the largest static data in the 9.2 MB ELF (debug tables, unused upstream data, zero-filled arrays that can move to the heap) and shrink it without behaviour changes. Applies to every model, so only changes that cost the full profile nothing.",
-   "done_when": "ELF size reduction recorded in PSP.md; full-profile scripted run logic hashes and frame times unchanged."
   },
   {
    "id": "P78",

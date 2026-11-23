@@ -9,6 +9,7 @@
  *                   HOME -> Exit does (PPSSPP has no HOME menu)
  *   PROFILE=1       stage timings (psp_prof.c)
  *   DRAWLOG=1       draw counters per 60 frames
+ *   HASH=1          real time: the logic hash every 60 frames, as FRAMES
  *   VERBOSE=1       host_verbose (libmc requests, file loads)
  *   anything else   setenv, e.g. MVC2_STATE_DUMP / MVC2_STATE_SNAP for
  *                   port/tools/oracle/compare_ports.py, MVC2_PS2FP_OFF=1
@@ -136,7 +137,7 @@ static long quit_after;
 extern int fe_cnt[8];
 extern int r_gu_char_cnt[3];
 extern int r_gu_mesh_cnt[3];     /* r_gu_mesh.c: mesh draws, triangles */   /* r_gu_char.c: draws, parts, tile decodes */
-static int drawlog = -1;
+static int drawlog = -1, hashlog = -1;
 
 /* STAGE=N (testing, 0-16): every stage load (func_00170170 mode 1) loads
  * stage N, and the stage id (D_004C27D0, also the BGM id) is set to it */
@@ -184,6 +185,8 @@ static void rt_update(void *u)
     (void)u;
     if (drawlog < 0)
         drawlog = getenv("DRAWLOG") != NULL;
+    if (hashlog < 0)
+        hashlog = getenv("HASH") != NULL;
     {
         PadRaw p0 = *plat_pad(0), p1 = *plat_pad(1);
         p0.buttons |= press_bits(mvc2_host_frame);
@@ -199,6 +202,8 @@ static void rt_update(void *u)
         host_pad_set(1, &p1);
     }
     mvc2_frame();
+    if (hashlog && mvc2_host_frame % 60 == 0)
+        fprintf(stderr, "frame %ld hash %016llx\n", (long)mvc2_host_frame, ra_state_hash());
     if (drawlog && mvc2_host_frame % 60 == 0) {
         const unsigned char *g = (const unsigned char *)EE_BSS_PTR(0x004F4300);
         fprintf(stderr, "[draw] frame %ld state %d %d %d: tt %d t %d sp %d q %d fill %d | rej tt %d sp %d q %d | char %d/%d dec %d | mesh %d/%d %d us\n",

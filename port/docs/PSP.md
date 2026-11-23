@@ -202,7 +202,7 @@ the EE heap allocation. Not measured on hardware.
 
 | Consumer | Now (MB) | Low target (MB) | How (ticket) |
 |---|---:|---:|---|
-| Program image: `.text` 3.5, `.data` 0.6, `.bss` 4.7 | 8.9 | 5.5 | `.bss` holds 1.5 MB of unused oracle buffers (`state_dump.c`), a 1 MB GE display list and the 1.5 MB EE BSS (P77) |
+| Program image: `.text` 3.5, `.data` 0.6, `.bss` 3.1 (was 8.9 before P77) | 7.3 | 5.5 | `.bss` holds a 1 MB GE display list and the 1.5 MB EE BSS (P77 done) |
 | Thread stacks (main, audio 64 KB, watchdog, callback) | 0.3 | 0.3 | |
 | EE heap (game arena 22 MB, 6 MB handle pool inside it) | 23.0 | 16.5 | arena written 16.2 MB, highest offset 21.3; pool written 4.4 (P75) |
 | Music: whole ADX track in one `disc_load` block | 4.7 | 0.1 | stream it from the disc (P78) |
@@ -215,6 +215,37 @@ Even at these targets the PSP-1000 is short by about 3.5 MB. The EE arena
 target is the pages it has ever written, not its peak live use, which is not
 measured yet (P75 has to measure it). It fits only if the arena's live peak
 is about 13 MB or lower, or if game data is loaded on demand (P80).
+
+### Program image (P77)
+
+2026-11-23, `llvm-readelf -S` on the PRX: 8.97 → 7.31 MB (`.text` 3.49,
+`.data` 0.62, `.bss` 4.76 → 3.10). Two changes:
+
+- The oracle state buffer (1.48 MB, used only with `MVC2_STATE_DUMP`) is now
+  allocated when first used. Upstream `dump_format.h` is unchanged. The build
+  compiles `state_dump.c` from a patched copy instead: see
+  `port/psp/patches/apply_upstream_patches.cmake`. That script stops the build
+  if the text it patches has changed upstream.
+- `r_gu.c` sizes its texture and palette tables to the game's records, 384 and
+  256 entries, saving about 175 KB.
+
+Kept as they were:
+
+- The 1 MB display list: its measured peak is 958 KB.
+- `--gc-sections`: it drops about 7,900 EE data symbols that the game reaches
+  through EE addresses.
+
+How it was checked, in PPSSPP with the full `arcade_psp.txt`:
+
+- Frame times with `PROFILE=1` are unchanged: mean update 31.78 ms before,
+  31.64 ms after.
+- An `MVC2_STATE_DUMP` comparison (`compare_ports.py`) of this build against
+  the previous one found 0 diverging words over 21,498 frames.
+- Snapshots at frames 3400 and 14200 match up to EE 0x01D34380, where the PSP's
+  23 MB EE heap ends. `state_dump.c` assumes the 28 MB upstream heap, so a PSP
+  snapshot past that address holds host memory, not game state.
+
+Not checked on hardware.
 
 ## PSPLink (hardware over USB)
 

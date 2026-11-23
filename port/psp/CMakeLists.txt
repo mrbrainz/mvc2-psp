@@ -43,6 +43,15 @@ add_custom_command(
   COMMENT "psp_glue.py: BSS/data/stub glue for the PSP link")
 # ---- host core (as upstream's mvc2_host_core, with the PSP libc headers) ---
 file(GLOB HOST_CORE_SRCS CONFIGURE_DEPENDS "${MVC2_ROOT}/port/host/*.c")
+# state_dump.c is built from a patched copy (port/psp/patches, P77)
+set(PATCHED "${CMAKE_BINARY_DIR}/patched")
+list(FILTER HOST_CORE_SRCS EXCLUDE REGEX "/port/host/state_dump\\.c$")
+add_custom_command(OUTPUT "${PATCHED}/port/host/state_dump.c" "${PATCHED}/port/tools/oracle/dump_format.h"
+  COMMAND ${CMAKE_COMMAND} -DROOT=${MVC2_ROOT} -DOUT=${PATCHED} -P "${PSP_DIR}/patches/apply_upstream_patches.cmake"
+  DEPENDS "${PSP_DIR}/patches/apply_upstream_patches.cmake" "${MVC2_ROOT}/port/host/state_dump.c"
+          "${MVC2_ROOT}/port/tools/oracle/dump_format.h"
+  COMMENT "PSP patches to upstream copies (port/psp/patches)")
+list(APPEND HOST_CORE_SRCS "${PATCHED}/port/host/state_dump.c")
 set(PLATFORM_CORE_SRCS "${MVC2_ROOT}/port/platform/fs.c" "${MVC2_ROOT}/port/platform/pad.c"
   "${MVC2_ROOT}/port/audio/tsd_client.c")
 add_library(psp_host_core OBJECT ${HOST_CORE_SRCS} ${PLATFORM_CORE_SRCS})

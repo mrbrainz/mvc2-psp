@@ -1008,6 +1008,23 @@ window.BACKLOG_ARCHIVE = [
   "note": "PSP.md 'PSP-1000 budget (P73)': a full arcade run in PPSSPP peaks at 44.8 MB (EE heap 23, image 8.9, renderer 5.7, a whole music track 4.7). The low targets add up to 26.8 MB against about 23.3 MB on the PSP-1000, so it is still short by about 3.5 MB unless the arena's live peak (not measured yet, P75) is about 13 MB or lower, or P80 is done. Booting as a PSP-1000 in PPSSPP fails at the EE heap allocation."
  },
  {
+  "id": "P77",
+  "order": 46,
+  "phase": "P6",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P73"
+  ],
+  "read": [
+   "port/docs/PSP.md"
+  ],
+  "title": "Smaller program image (all models)",
+  "description": "Find the largest static data in the 9.2 MB ELF (debug tables, unused upstream data, zero-filled arrays that can move to the heap) and shrink it without behaviour changes. Applies to every model, so only changes that cost the full profile nothing.",
+  "done_when": "ELF size reduction recorded in PSP.md; full-profile scripted run logic hashes and frame times unchanged.",
+  "note": "Image 8.97 → 7.31 MB: the oracle buffer is now allocated on first use (a build-time patch of a copy, port/psp/patches), and the r_gu tables are sized to 384/256. A state-dump compare against the previous build found 0 diverging words over 21,498 frames, and frame times were unchanged in PPSSPP. Logic hashes can't be compared across builds because they include host pointers; not run on hardware."
+ },
+ {
   "id": "P97",
   "order": 52,
   "phase": "P4",

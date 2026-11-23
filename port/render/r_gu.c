@@ -40,8 +40,8 @@
 #define SCR_W 480
 #define SCR_H 272
 #define BUF_W 512
-#define MAX_TEX 4096
-#define MAX_PAL 4096
+#define MAX_TEX 384             /* the game's texture records (D_006207A0[384]), P77 */
+#define MAX_PAL 256             /* its palette records (D_0061C7A0[256]), P77 */
 #define MAX_VERTS 4096          /* per batch */
 #define LIST_BYTES (1 << 20)    /* display list; restarted mid-frame when nearly full */
 
