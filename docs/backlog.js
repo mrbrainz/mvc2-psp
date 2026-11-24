@@ -50,6 +50,7 @@ window.BACKLOG = {
   "P108",
   "P109",
   "P11",
+  "P112",
   "P12",
   "P13",
   "P14",
@@ -123,24 +124,6 @@ window.BACKLOG = {
    "description": "With zero submits fl_clay_draw is still ~4 ms per drawn fight step (P107 4.78 ms minus P83's 0.8 ms bbox gain): colour/vertex copy, three matrix products, viewport key, ADC, clip prep, mesh_vram. Split it by removal as in PSP.md (P107), then move the scalar float work to VFPU registers or skip it when the inputs are unchanged. This is what is left of P83's fl_clay_draw <= 4 ms target.",
    "done_when": "fl_clay_draw <= 4 ms per drawn step in fight6 on PSP-2003 (PROFILE=1 NO_FRAME_SKIP=1) PPSSPP shots f1-f6 unchanged.",
    "note": "Partial: fused VFPU matrix chain, clip box test in VFPU registers, a registers-only clip pre-pass, and no DRAWLOG timer syscalls unless DRAWLOG: fl_clay_draw 6.89 -> 6.26 ms, render pass 17.88 -> 17.28 (PSP-2003, fight6, two runs each; fused matrices bit-identical over 299k draws, clip tests agree over 186k), PPSSPP shots identical. Target unmet; build layout moves results by up to 1.2 ms (P112)."
-  },
-  {
-   "id": "P112",
-   "order": 40,
-   "phase": "P4",
-   "size": "M",
-   "status": "Ready",
-   "depends": [
-    "P101"
-   ],
-   "read": [
-    "port/psp/hot_order.ld",
-    "port/psp/tools/hot_order.py",
-    "port/docs/PSP.md"
-   ],
-   "title": "Hardware speed: stable code layout for the render pass",
-   "description": "Render-pass timings move by up to 1.2 ms with code layout alone (P110): moving ~2 KB of VFPU routines into or after the P101 hot block, or a static function losing its inlining (two call sites), cost 0.5-1.2 ms; an 8 KB align after the hot block did not stabilise it. Regenerate hot_order.ld from a fresh MVC2_PSP_HOTPROF run, decide where the VFPU asm (not instrumented) goes, and find a layout rule (alignment of the hot block, .rodata/.data) that keeps the mapping when unrelated code changes size.",
-   "done_when": "Two builds that differ only by unrelated code size (e.g. 2 KB of unused functions) measure within 0.1 ms on the fight6 render pass (PSP-2003, PROFILE=1 NO_FRAME_SKIP=1), and the hot order is regenerated."
   },
   {
    "id": "P98",

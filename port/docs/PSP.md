@@ -559,6 +559,30 @@ Per-draw mesh work (P110, 2026-11-24, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SK
 - **Doubling overstates:** within one build, the summed doubling costs above
   were about 1.3 ms, and the cuts saved 0.85 ms.
 
+Stable code layout (P112, 2026-11-24, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1`):
+- **What moved timings:** padding inserted after the P101 hot block shifts
+  all other code and data. Fight render pass by padding: 0 KB 17.25 ms,
+  1 KB 18.25, 2 KB 17.72, 4 KB 17.47, 6 KB 17.39, 8 KB 17.25. The 8 KB
+  period is the cache way size. Shifting only the data by 1 KB cost
+  +0.26 ms. Code not in the hot list is sorted by name, so a new function
+  named `p...` moved every per-draw helper after it (`psp_mesh_predraw`,
+  `r_*`).
+- **The rule now:** `hot_order.ld` lists every function the HOTPROF run
+  called (2,127, 685 KB), ordered by calls. libpspgu, libc
+  `memcpy`/`memset`/`memcmp` and `psp_vfpu.o` (not instrumented) follow the
+  first 96 KB, where they sat before. `.rodata`, `.data` and `.bss` each
+  start at a fixed offset in an 8 KB period (`ALIGN(0x2000) + phase`, which
+  costs about 24 KB). `hot_order.py` writes all of this; regenerate after
+  big changes to called code.
+- **Check:** an unused 2 KB function moves the render pass by 0.04 ms
+  (before: 0.19 ms, and 0.5-1 ms when it shifted the code after the hot
+  block). A 2 KB shift after the first 96 KB moves it by about 0.1 ms.
+  Render pass 17.35-17.40 ms, about 0.1 ms above the old layout's lucky
+  phase. PPSSPP shots f1-f6 are byte-identical.
+- **Not covered:** a size change in a called function still moves the
+  functions ranked after it, by about 0.1 ms. `.sceStub.text` (syscall
+  stubs) still follows `.text`.
+
 Hot routines first in .text (P101, 2026-11-23, PSP-2003, `fight6`, `PROFILE=1`):
 - **How it works:** every o32 TU is built with `-ffunction-sections`, and
   `port/psp/hot_order.ld` (`ld --section-ordering-file`) puts the 171
@@ -568,7 +592,9 @@ Hot routines first in .text (P101, 2026-11-23, PSP-2003, `fight6`, `PROFILE=1`):
   which writes `hot.txt` at exit. Run `fight6` in PPSSPP (call counts don't
   depend on timing), then:
 
-      python3 port/psp/tools/hot_order.py build/port-psp-hot/mvc2_psp hot.txt -o port/psp/hot_order.ld --budget 96
+      python3 port/psp/tools/hot_order.py build/port-psp-hot/mvc2_psp hot.txt -o port/psp/hot_order.ld
+
+  (P112: the default budget now takes every called function; see below.)
 
 - **Result (two runs each, A/B against the build before P101):**
   render pass 11.0 -> 10.6 ms a step; game update 1.43 -> 1.38 ms.

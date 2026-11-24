@@ -1241,6 +1241,25 @@ window.BACKLOG_ARCHIVE = [
   "note": "Measured, no lossless cut left: mesh vertices are done (105 of 107 gv draws read the VRAM pool, lit draws ~0), and character pages or CLUTs from VRAM change the pass by <= 0.05 ms. RAM textures still cost ~0.9 ms (same reads from VRAM: 18.10 -> 17.18), but every fight texture uses all 256 palette entries and the working set is ~2.5x the 434 KB cache; a binds-per-KB VRAM policy moved 21 binds a frame to VRAM yet was 0.14 ms slower, a 160 KB mesh pool gained nothing. Lossy texture options stay in P105."
  },
  {
+  "id": "P112",
+  "order": 40,
+  "phase": "P4",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P101"
+  ],
+  "read": [
+   "port/psp/hot_order.ld",
+   "port/psp/tools/hot_order.py",
+   "port/docs/PSP.md"
+  ],
+  "title": "Hardware speed: stable code layout for the render pass",
+  "description": "Render-pass timings move by up to 1.2 ms with code layout alone (P110): moving ~2 KB of VFPU routines into or after the P101 hot block, or a static function losing its inlining (two call sites), cost 0.5-1.2 ms; an 8 KB align after the hot block did not stabilise it. Regenerate hot_order.ld from a fresh MVC2_PSP_HOTPROF run, decide where the VFPU asm (not instrumented) goes, and find a layout rule (alignment of the hot block, .rodata/.data) that keeps the mapping when unrelated code changes size.",
+  "done_when": "Two builds that differ only by unrelated code size (e.g. 2 KB of unused functions) measure within 0.1 ms on the fight6 render pass (PSP-2003, PROFILE=1 NO_FRAME_SKIP=1), and the hot order is regenerated.",
+  "note": "hot_order.ld regenerated with every called function (2127, 685 KB) by calls, libpspgu/libc mem*/psp_vfpu.o placed after the first 96 KB, and .rodata/.data/.bss pinned to fixed 8 KB-period offsets (+24 KB). An unused 2 KB function now moves the fight render pass by 0.04 ms (was 0.19-1.0), a 2 KB shift after the hot core by ~0.1 (was 0.5-1.0); render pass 17.35-17.40 ms (0.1 above the old lucky layout), PPSSPP shots identical."
+ },
+ {
   "id": "P73",
   "order": 42,
   "phase": "P6",
