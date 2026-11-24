@@ -1556,7 +1556,7 @@ static void me_wait_all(void)
     if (t) psp_prof_add(54, "  ME list build wait (list close)", psp_prof_now() - t);
 }
 
-static void me_init(void)
+__attribute__((noinline, cold)) static void me_init(void)
 {
     const char *e = getenv("MVC2_ME_BUILD");
     me_on = e ? atoi(e) & 3 : 2;   /* default: the main CPU (P116) */
@@ -1593,7 +1593,7 @@ void r_gu_me_stop(void)
 
 /* MVC2_ME_CHECK: one item's words (bind forced, shadow empty) against the
  * sceGu calls mesh_emit made for the same state, into a scratch list */
-static void me_check(const MeItem *m)
+__attribute__((noinline, cold)) static void me_check(const MeItem *m)
 {
     static ScePspFMatrix4 ident = { {1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1} };
     static unsigned bad, n;
@@ -1792,7 +1792,13 @@ static void rec_build(void)
     if (!rec_n || rec_busy) return;
     rec_busy = 1;
     if (me_on) {
+        unsigned long long t = psp_prof_on() ? psp_prof_now() : 0;
         rec_build_me();
+        if (t) {
+            psp_prof_add(58, "  rec_build (mesh items -> words)", psp_prof_now() - t);
+            psp_prof_add(59, "  rec_build runs (count)", 1000);
+            psp_prof_add(60, "  rec_build items (count)", 1000ull * (unsigned)rec_n);
+        }
         rec_items += (unsigned)rec_n;
         rec_n = 0;
         rec_busy = 0;
@@ -1829,7 +1835,7 @@ int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const 
     if (me_pend_n) me_release();   /* P104: a CALL the ME finished lets the GE on */
     r_flush();       /* a pending 2D batch (and the items before it) first */
     canvas_bind();   /* the frame's clear first */
-    if (rec_n == REC_MAX) rec_build();
+    if (rec_n == REC_MAX) { if (psp_prof_on()) psp_prof_add(61, "  rec_build at REC_MAX (count)", 1000); rec_build(); }
     it = &rec[rec_n++];
     memcpy(it->clip, clip, sizeof it->clip);
     it->verts = verts; it->ge_verts = ge_verts; it->idx = idx; it->ge_idx = ge_idx;

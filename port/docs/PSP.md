@@ -606,6 +606,24 @@ Media Engine spike (P114, 2026-11-24, PSP-2003 ARK-4, `fight6`, `PROFILE=1 NO_FR
 - **Not yet checked:** sleep/resume and quitting to the XMB with our code
   on the ME.
 
+Per-draw code footprint (P110, 2026-11-24, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1`, two runs each):
+- **Split by removal (after P116):** `fl_clay_draw` 4.48 ms over ~102 draws:
+  entry + `r_gu_begin` 0.76, colours/vertex copy 0.54, matrices 0.71, ADC
+  0.50, clip prep 0.55, range loop 0.54, recording the submits 0.88 (with the
+  GE's bus traffic). 5-7 us per stage per draw whatever the arithmetic:
+  I-cache misses (the game's packet build runs between draws). `rec_build`
+  is 0.66 ms a frame (~109 items, ~3.5 runs, never at `REC_MAX`).
+- **Change:** rare paths out of the per-draw code (`COLD`: noinline, cold):
+  viewport rebuild, scalar fallbacks, `MESH_DUMP`, list-memory vertex
+  copies, colours, positions, `near_clip`, `bbox_corners`, `me_check`;
+  `fl_clay_draw` 14.7 -> 5.5 KB. `near_clip` copies the mesh's vertices once
+  per draw and keeps unclipped triangles' indices (it de-indexed every
+  triangle of a clipped range); the same triangles reach the GE in order.
+- **Result:** `fl_clay_draw` 4.40-4.64 -> 3.87 (with a dead env switch still
+  in) / 4.15 (final), render pass 16.2 -> 15.27 / 15.67-15.70; normal mode
+  fight fps 19.98 19.98 29.00 14.98 13.76. PPSSPP shots f1-f6 identical.
+  Removing the dead switch moved the layout by ~0.3 ms (P112).
+
 Mesh words on the Media Engine (P104 design (a), 2026-11-24, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1`, one build, one run each):
 - **How:** `rec_build` resolves per item what needs main-CPU state (texture
   key, `tex_addr` VRAM copies, in-use gens, depth zoom) into a `MeItem`;

@@ -411,7 +411,8 @@ static inline float fmn(float a, float b) { return b < a ? b : (a == a ? a : b);
 /* r_gs_to_unorm for 0..1023 (ge_color's clamp range), filled on first use */
 static uint8_t unorm_lut[1024];
 static int unorm_ok;
-static void unorm_init(void)
+#define COLD __attribute__((noinline, cold))   /* P110: off the per-draw path (I-cache) */
+COLD static void unorm_init(void)
 {
     for (unsigned k = 0; k < 1024; k++) unorm_lut[k] = r_gs_to_unorm(k);
     unorm_ok = 1;
@@ -433,7 +434,7 @@ static uint32_t ge_color(const float c[4], int textured)
            (uint32_t)r_gs_to_unorm(ch[3]) << 24;
 }
 
-static void positions(MMesh *me, GVtx *g)
+COLD static void positions(MMesh *me, GVtx *g)
 {
     for (int i = 0; i < me->nverts; i++) {
         const MVtx *v = &me->cpu[i];
@@ -443,7 +444,7 @@ static void positions(MMesh *me, GVtx *g)
 }
 
 /* unlit colours: vertex colour programs and material colour programs */
-static void colours_unlit(MMesh *me, GVtx *g, int matcol, const float modv[4], float cscale)
+COLD static void colours_unlit(MMesh *me, GVtx *g, int matcol, const float modv[4], float cscale)
 {
     if (!matcol) {
         float cs[4] = { 0.5f, 0.5f, 0.5f, 0.5f };
@@ -478,7 +479,7 @@ static float *lit_out;
 static int lit_cap;
 
 /* lit programs (format 0x100), per draw: the world matrix moves the lights */
-static void colours_lit(MMesh *me, GVtx *g, const float modv[4], float cscale)
+COLD static void colours_lit(MMesh *me, GVtx *g, const float modv[4], float cscale)
 {
     float ldir[3][3], lamb_base[3];
     const float *w = r_matrix(0x19);
@@ -608,7 +609,7 @@ static uint8_t *cl_code;
 static float *cl_xyw;
 static int cl_cap;
 
-static int bbox_corners(MMesh *me, const float cm[16], float k[8][4], float *smaxp);
+COLD static int bbox_corners(MMesh *me, const float cm[16], float k[8][4], float *smaxp);
 
 /* P83: no outcode can be set when every bounding-box corner is inside the
  * near plane and the guard band with a rounding margin (convex, linear) */
@@ -653,25 +654,33 @@ static int clip_prepare(const float clip[16], const GVtx *g, int nverts)
     return any;
 }
 
-/* Returns the new index count into (*ov, *oi), or -1 when no triangle of
- * this range needs clipping (draw it as it is). */
-static int near_clip(const GVtx *g, const uint16_t *idx, int count, GVtx **ov, uint16_t **oi)
+/* Returns the new index count into *oi, or -1 when no triangle of this
+ * range needs clipping (draw it as it is).  P110: the vertices go in one
+ * buffer per draw (b): the mesh's own, copied once, then each clipped
+ * polygon's; triangles that need no clipping keep their indices.  The GE
+ * gets the same triangles in the same order as when every one was copied. */
+typedef struct NcBuf { GVtx *v; int nv, room; } NcBuf;   /* room: clipped polygons' vertices */
+COLD static int near_clip(NcBuf *b, const GVtx *g, int nverts, const uint16_t *idx, int count, uint16_t **oi)
 {
     int n = 0, any = 0;
-    GVtx *v;
     uint16_t *ix;
     for (int k = 0; k < count && !any; k++) any = cl_code[idx[k]];
     if (!any) return -1;
-    v = (GVtx *)sceGuGetMemory((unsigned)(count * 6) * sizeof *v);
+    if (!b->v) {
+        b->v = (GVtx *)sceGuGetMemory((unsigned)(nverts + b->room) * sizeof *b->v);
+        memcpy(b->v, g, (size_t)nverts * sizeof *g);   /* list memory: the uncached mirror */
+        b->nv = nverts;
+    }
     ix = (uint16_t *)sceGuGetMemory(((unsigned)count * 12 + 15) & ~15u);
     for (int k = 0; k + 2 < count; k += 3) {
         const uint16_t *t3 = idx + k;
         uint8_t c0 = cl_code[t3[0]], c1 = cl_code[t3[1]], c2 = cl_code[t3[2]];
-        CVtx a[9], b[9], *in = a, *out = b, *tp;
-        int m = 3;
+        CVtx a[9], c[9], *in = a, *out = c, *tp;
+        int m = 3, base;
         if (c0 & c1 & c2) continue;                       /* all outside one plane */
         if (!(c0 | c1 | c2)) {
-            for (int j = 0; j < 3; j++) { v[n] = g[t3[j]]; ix[n] = (uint16_t)n; n++; }
+            ix[n] = t3[0]; ix[n + 1] = t3[1]; ix[n + 2] = t3[2];
+            n += 3;
             continue;
         }
         for (int j = 0; j < 3; j++) {
@@ -689,14 +698,15 @@ static int near_clip(const GVtx *g, const uint16_t *idx, int count, GVtx **ov, u
             }
             m = o; tp = in; in = out; out = tp;
         }
+        if (m < 3) continue;
+        base = b->nv;
+        for (int j = 0; j < m; j++) b->v[b->nv++] = in[j].v;
         for (int q = 1; q + 1 < m; q++) {
-            v[n] = in[0].v; v[n + 1] = in[q].v; v[n + 2] = in[q + 1].v;
-            ix[n] = (uint16_t)n; ix[n + 1] = (uint16_t)(n + 1); ix[n + 2] = (uint16_t)(n + 2);
+            ix[n] = (uint16_t)base; ix[n + 1] = (uint16_t)(base + q); ix[n + 2] = (uint16_t)(base + q + 1);
             n += 3;
         }
     }
-    sceKernelDcacheWritebackRange(v, (unsigned)n * sizeof *v);
-    *ov = v; *oi = ix;
+    *oi = ix;
     return n;
 }
 
@@ -704,7 +714,7 @@ static int near_clip(const GVtx *g, const uint16_t *idx, int count, GVtx **ov, u
  * with w > 0 (with a margin above float rounding), every vertex is too: the
  * box is a convex cone and the transform is linear, so the per-vertex test
  * would mark nothing and can be skipped. */
-static int bbox_corners(MMesh *me, const float cm[16], float k[8][4], float *smaxp)
+COLD static int bbox_corners(MMesh *me, const float cm[16], float k[8][4], float *smaxp)
 {
     float smax = 0.f;
     if (!me->bbok && use_vfpu > 0 && me->nverts > 0) {   /* P93 */
@@ -828,6 +838,95 @@ static const void *mesh_vram(MMesh *me)
     return (const void *)(uintptr_t)(0x04000000u + me->voff);
 }
 
+/* this draw's vertices in list memory: lit, or unlit with gv already in
+ * this frame's list (clay_draw) */
+COLD static GVtx *colours_list(MMesh *me, int lit, int matcol, const float modv[4], float cscale)
+{
+    GVtx *g;
+    if (lit && me->dirty) { positions(me, me->gv); me->dirty = 0; me->cvalid = 0; me->gvwb = me->vstale = 1; }
+    g = (GVtx *)sceGuGetMemory((unsigned)me->nverts * sizeof *g);   /* per draw */
+    memcpy(g, me->gv, (size_t)me->nverts * sizeof *g);
+    if (lit) { colours_lit(me, g, modv, cscale); return g; }
+    if (me->dirty) positions(me, g);
+    colours_unlit(me, g, matcol, modv, cscale);
+    wb(g, (size_t)me->nverts * sizeof *g);
+    return g;
+}
+
+COLD static int grow_int(int **p, int *cap, int n)
+{
+    free(*p);
+    *cap = n;
+    *p = (int *)malloc((size_t)n * sizeof **p);
+    if (!*p) { *cap = 0; return 0; }
+    return 1;
+}
+
+/* viewport * canvas -> GE (clay_draw, on a viewport change) */
+COLD static void vp_build(const int vi[4], const float vf[2], float t[16])
+{
+    float vpm[16], ge[16], hw, hh;
+    hw = (float)(vi[2] / 2);
+    hh = (float)((vi[3] / 2) / 2) * 2.f;
+    memset(vpm, 0, sizeof vpm);
+    vpm[0] = hw / 1.3333330154418945f / (FL_SCREEN_W / 2.f);
+    vpm[12] = ((float)vi[0] + hw) / (FL_SCREEN_W / 2.f) - 1.f;
+    vpm[5] = hh / (FL_SCREEN_H / 2.f);
+    vpm[13] = 1.f - ((float)vi[1] + hh) / (FL_SCREEN_H / 2.f);
+    vpm[10] = -(vf[1] - vf[0]);
+    vpm[15] = 1.f;
+    vpm[3] = vpm[7] = vpm[11] = 0.f;
+    /* x' = x * ax + w * bx: the w row carries bx (row 3 is w's contribution) */
+    r_gu_canvas_to_ge(ge);
+    fl_mat_mul(t, vpm, ge);
+}
+
+/* the scalar matrix chain (no VFPU) */
+COLD static void mats_c(const float *t, const float *cs, float clip[16], float *cm)
+{
+    float wv[16], mvp[16];
+    fl_mat_mul(wv, r_matrix(0x19), r_matrix(0x16));
+    fl_mat_mul(mvp, wv, r_matrix(0x17));
+    fl_mat_mul(clip, mvp, t);
+    if (cm) fl_mat_mul(cm, wv, cs);
+}
+
+/* the scalar ADC outcodes (no VFPU) */
+COLD static int adc_c(const MMesh *me, const float cm[16], uint8_t *out)
+{
+    int any = 0;
+    for (int i = 0; i < me->nverts; i++) {
+        const float *q = me->cpu[i].pos;
+        float k[4];
+        for (int j = 0; j < 4; j++) k[j] = q[0] * cm[j] + q[1] * cm[4 + j] + q[2] * cm[8 + j] + cm[12 + j];
+        k[3] = fabsf(k[3]);
+        out[i] = fabsf(k[0]) > k[3] || fabsf(k[1]) > k[3] || fabsf(k[2]) > k[3];
+        any |= out[i];
+    }
+    return any;
+}
+
+/* MESH_DUMP: one range's clip-space extent */
+COLD static void mesh_dump(const MMesh *me, int h, int r, const MRange *rg, int n, uint32_t fmt, const GVtx *g,
+                           const uint16_t *idx, const float clip[16], const int vi[4])
+{
+    float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f, z0 = 1e9f, z1 = -1e9f, w0 = 1e9f, w1 = -1e9f;
+    for (int k = 0; k < me->nverts; k++) {
+        const float *q = me->cpu[k].pos;
+        float c[4];
+        for (int j = 0; j < 4; j++) c[j] = q[0] * clip[j] + q[1] * clip[4 + j] + q[2] * clip[8 + j] + clip[12 + j];
+        if (c[3] == 0.f) continue;
+        { float X = c[0] / c[3], Y = c[1] / c[3], Z = c[2] / c[3];
+          if (X < x0) x0 = X; if (X > x1) x1 = X; if (Y < y0) y0 = Y; if (Y > y1) y1 = Y; if (Z < z0) z0 = Z; if (Z > z1) z1 = Z; if (c[3] < w0) w0 = c[3]; if (c[3] > w1) w1 = c[3]; }
+    }
+    fprintf(stderr, "[mesh] %d r%d fmt %08X desc %d tex %08X n %d/%d col %08X\n", h, r, (unsigned)fmt, me->desc,
+            (unsigned)rg->tex, n, rg->count, (unsigned)g[idx[rg->first]].c);
+    fprintf(stderr, "[mesh]   ndc x %.2f..%.2f y %.2f..%.2f\n", x0, x1, y0, y1);
+    fprintf(stderr, "[mesh]   z %.3f..%.3f ad0 %08X\n", z0, z1, (unsigned)r_state_ad0());
+    fprintf(stderr, "[mesh]   clip %.3f %.3f %.3f %.3f\n", clip[0], clip[5], clip[10], clip[11]);
+    fprintf(stderr, "[mesh]   vi %d %d %d %d w %.2f..%.2f\n", vi[0], vi[1], vi[2], vi[3], w0, w1);
+}
+
 static int clay_draw(int h)
 {
     static int *adc_count, adc_cap;
@@ -836,8 +935,8 @@ static int clay_draw(int h)
     MMesh *me;
     uint32_t fmt, gm;
     int lit, matcol, mod, vi[4], clipping;
-    float cscale, modv[4] = { 1.f, 1.f, 1.f, 1.f }, wv[16], mvp[16], vpm[16], ge[16], clip[16], vf[2];
-    float hw, hh, su = 1.f, sv = 1.f, ou = 0.f, ov = 0.f;
+    float cscale, modv[4] = { 1.f, 1.f, 1.f, 1.f }, clip[16], vf[2];
+    float su = 1.f, sv = 1.f, ou = 0.f, ov = 0.f;
     GVtx *g;
     const void *gge = NULL;   /* P108: where the GE reads g, NULL = g */
     if (!CLAY || h <= 0 || h >= MAX_CLAY) return 0;
@@ -850,12 +949,7 @@ static int clay_draw(int h)
         if (at == -2) { const char *e = getenv("MESH_DUMP"); at = e ? atol(e) : -1; }
         dump = at == mvc2_host_frame;
     }
-    if (adc_cap < me->nrange) {
-        free(adc_count);
-        adc_cap = me->nrange;
-        adc_count = (int *)malloc((size_t)adc_cap * sizeof *adc_count);
-        if (!adc_count) { adc_cap = 0; return 0; }
-    }
+    if (adc_cap < me->nrange && !grow_int(&adc_count, &adc_cap, me->nrange)) return 0;
     fmt = me->fmt;
     cscale = (me->desc == 2 || me->desc == 4 || me->desc == 8 || me->desc == 10 || me->desc == 12 || me->desc == 14 ||
               me->desc == 16 || me->desc == 18) ? 255.f : 128.f;
@@ -870,12 +964,9 @@ static int clay_draw(int h)
     }
     PT(t_col);
     r_gu_begin((unsigned)me->nverts * sizeof(GVtx) + (unsigned)me->nidx * 2 + 64 +
-               ((me->desc == 19 || (me->desc >= 44 && me->desc <= 46)) ? (unsigned)me->nidx * (6 * sizeof(GVtx) + 12) + 32 : 0));
+               ((me->desc == 19 || (me->desc >= 44 && me->desc <= 46)) ? (unsigned)me->nverts * sizeof(GVtx) + (unsigned)me->nidx * (6 * sizeof(GVtx) + 12) + 64 : 0));
     if (lit) {
-        if (me->dirty) { positions(me, me->gv); me->dirty = 0; me->cvalid = 0; me->gvwb = me->vstale = 1; }
-        g = (GVtx *)sceGuGetMemory((unsigned)me->nverts * sizeof *g);   /* per draw */
-        memcpy(g, me->gv, (size_t)me->nverts * sizeof *g);
-        colours_lit(me, g, modv, cscale);
+        g = colours_list(me, 1, matcol, modv, cscale);
     } else {
         extern volatile long mvc2_host_frame;
         uint32_t key[3] = { mod ? gm : 0xFFFFFFFFu, fmt, (uint32_t)matcol };
@@ -884,11 +975,7 @@ static int clay_draw(int h)
             /* gv is already in this frame's display list: rewriting it would
              * change that earlier draw too (grey water, flickering edges), so
              * build this draw's copy in list memory */
-            g = (GVtx *)sceGuGetMemory((unsigned)me->nverts * sizeof *g);
-            memcpy(g, me->gv, (size_t)me->nverts * sizeof *g);
-            if (me->dirty) positions(me, g);
-            colours_unlit(me, g, matcol, modv, cscale);
-            wb(g, (size_t)me->nverts * sizeof *g);
+            g = colours_list(me, 0, matcol, modv, cscale);
         } else {
             if (me->dirty) { positions(me, me->gv); me->dirty = 0; me->cvalid = 0; me->gvwb = me->vstale = 1; }
             if (!me->cvalid || memcmp(key, me->ckey, sizeof key)) {
@@ -917,19 +1004,7 @@ static int clay_draw(int h)
         float k[10];
         memcpy(k, vi, 16); memcpy(k + 4, vf, 8); r_gu_canvas_key(k + 6);
         if (!ok || memcmp(k, key, sizeof k)) {
-            hw = (float)(vi[2] / 2);
-            hh = (float)((vi[3] / 2) / 2) * 2.f;
-            memset(vpm, 0, sizeof vpm);
-            vpm[0] = hw / 1.3333330154418945f / (FL_SCREEN_W / 2.f);
-            vpm[12] = ((float)vi[0] + hw) / (FL_SCREEN_W / 2.f) - 1.f;
-            vpm[5] = hh / (FL_SCREEN_H / 2.f);
-            vpm[13] = 1.f - ((float)vi[1] + hh) / (FL_SCREEN_H / 2.f);
-            vpm[10] = -(vf[1] - vf[0]);
-            vpm[15] = 1.f;
-            vpm[3] = vpm[7] = vpm[11] = 0.f;
-            /* x' = x * ax + w * bx: the w row carries bx (row 3 is w's contribution) */
-            r_gu_canvas_to_ge(ge);
-            fl_mat_mul(t, vpm, ge);
+            vp_build(vi, vf, t);
             memcpy(key, k, sizeof k);
             ok = 1;
         }
@@ -937,10 +1012,7 @@ static int clay_draw(int h)
             const float *mp[7] = { r_matrix(0x19), r_matrix(0x16), r_matrix(0x17), t, clip_src ? clip_src : clipm, clip, adc ? cm : NULL };
             vfpu_mesh_mats(mp);
         } else {
-            fl_mat_mul(wv, r_matrix(0x19), r_matrix(0x16));
-            fl_mat_mul(mvp, wv, r_matrix(0x17));
-            fl_mat_mul(clip, mvp, t);
-            if (adc) fl_mat_mul(cm, wv, clip_src ? clip_src : clipm);
+            mats_c(t, clip_src ? clip_src : clipm, clip, adc ? cm : NULL);
         }
     }
 
@@ -970,14 +1042,7 @@ static int clay_draw(int h)
                 out = (uint8_t *)malloc((size_t)out_cap);
             }
             if (out && use_vfpu > 0) any = vfpu_adc_codes(cm, me->cpu, me->nverts, out);   /* P93 */
-            else for (int i = 0; out && i < me->nverts; i++) {
-                const float *q = me->cpu[i].pos;
-                float k[4];
-                for (int j = 0; j < 4; j++) k[j] = q[0] * cm[j] + q[1] * cm[4 + j] + q[2] * cm[8 + j] + cm[12 + j];
-                k[3] = fabsf(k[3]);
-                out[i] = fabsf(k[0]) > k[3] || fabsf(k[1]) > k[3] || fabsf(k[2]) > k[3];
-                any |= out[i];
-            }
+            else if (out) any = adc_c(me, cm, out);
             if (any) {
                 uint16_t *f = (uint16_t *)sceGuGetMemory(((unsigned)me->nidx * 2 + 15) & ~15u);
                 for (int r = 0; r < me->nrange; r++) {
@@ -1012,6 +1077,14 @@ static int clay_draw(int h)
         psp_prof_add(28, "        clay clipping-program verts (count)", 1000ull * (unsigned)me->nverts);
         if (clipping) psp_prof_add(29, "        clay draws needing near_clip (count)", 1000);
     } }
+    NcBuf nb = { NULL, 0, 0 };
+    if (clipping)   /* room for the clipped polygons: at most 8 vertices each */
+        for (int r = 0; r < me->nrange; r++)
+            for (int k = 0; k + 2 < adc_count[r]; k += 3) {
+                const uint16_t *t3 = idx + me->range[r].first + k;
+                uint8_t c0 = cl_code[t3[0]], c1 = cl_code[t3[1]], c2 = cl_code[t3[2]];
+                if ((c0 | c1 | c2) && !(c0 & c1 & c2)) nb.room += 8;
+            }
     static int merge = -1;   /* MVC2_MESH_NOMERGE=1: one submit per range (A/B) */
     if (merge < 0) merge = getenv("MVC2_MESH_NOMERGE") == NULL;
     for (int r = 0; r < me->nrange; r++) {
@@ -1019,13 +1092,12 @@ static int clay_draw(int h)
         int n = adc_count[r];
         if (!n) continue;
         if (clipping) {
-            GVtx *cv;
             uint16_t *ci;
             PT(t_nc);
-            int n = near_clip(g, idx + rg->first, adc_count[r], &cv, &ci);
+            int n = near_clip(&nb, g, me->nverts, idx + rg->first, adc_count[r], &ci);
             PA(25, "        clay near_clip", t_nc);
             if (n >= 0) {
-                if (n) r_gu_mesh_draw(clip, me->textured ? rg->tex : 0, cv, NULL, ci, NULL, n, su, sv, ou, ov);
+                if (n) r_gu_mesh_draw(clip, me->textured ? rg->tex : 0, nb.v, NULL, ci, NULL, n, su, sv, ou, ov);
                 continue;
             }
         }
@@ -1037,23 +1109,7 @@ static int clay_draw(int h)
         r_gu_mesh_draw(clip, me->textured ? rg->tex : 0, g, gge, idx + rg->first,
                        gge && idx == me->idx && me->ioff ? (const uint16_t *)(uintptr_t)(0x04000000u + me->ioff) + rg->first : NULL,
                        n, su, sv, ou, ov);
-        if (dump) {
-            float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f, z0 = 1e9f, z1 = -1e9f, w0 = 1e9f, w1 = -1e9f;
-            for (int k = 0; k < me->nverts; k++) {
-                const float *q = me->cpu[k].pos;
-                float c[4];
-                for (int j = 0; j < 4; j++) c[j] = q[0] * clip[j] + q[1] * clip[4 + j] + q[2] * clip[8 + j] + clip[12 + j];
-                if (c[3] == 0.f) continue;
-                { float X = c[0] / c[3], Y = c[1] / c[3], Z = c[2] / c[3];
-                  if (X < x0) x0 = X; if (X > x1) x1 = X; if (Y < y0) y0 = Y; if (Y > y1) y1 = Y; if (Z < z0) z0 = Z; if (Z > z1) z1 = Z; if (c[3] < w0) w0 = c[3]; if (c[3] > w1) w1 = c[3]; }
-            }
-            fprintf(stderr, "[mesh] %d r%d fmt %08X desc %d tex %08X n %d/%d col %08X\n", h, r, (unsigned)fmt, me->desc,
-                    (unsigned)rg->tex, adc_count[r], rg->count, (unsigned)g[idx[rg->first]].c);
-            fprintf(stderr, "[mesh]   ndc x %.2f..%.2f y %.2f..%.2f\n", x0, x1, y0, y1);
-            fprintf(stderr, "[mesh]   z %.3f..%.3f ad0 %08X\n", z0, z1, (unsigned)r_state_ad0());
-            fprintf(stderr, "[mesh]   clip %.3f %.3f %.3f %.3f\n", clip[0], clip[5], clip[10], clip[11]);
-            fprintf(stderr, "[mesh]   vi %d %d %d %d w %.2f..%.2f\n", vi[0], vi[1], vi[2], vi[3], w0, w1);
-        }
+        if (dump) mesh_dump(me, h, r, rg, adc_count[r], fmt, g, idx, clip, vi);
         r_gu_mesh_cnt[0]++;
         r_gu_mesh_cnt[1] += adc_count[r] / 3;
     }

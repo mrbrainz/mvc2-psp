@@ -142,7 +142,7 @@ window.BACKLOG = {
    "title": "Hardware speed: per-draw mesh work before submit (clay_draw)",
    "description": "With zero submits fl_clay_draw is still ~4 ms per drawn fight step (P107 4.78 ms minus P83's 0.8 ms bbox gain): colour/vertex copy, three matrix products, viewport key, ADC, clip prep, mesh_vram. Split it by removal as in PSP.md (P107), then move the scalar float work to VFPU registers or skip it when the inputs are unchanged. This is what is left of P83's fl_clay_draw <= 4 ms target.",
    "done_when": "fl_clay_draw <= 4 ms per drawn step in fight6 on PSP-2003 (PROFILE=1 NO_FRAME_SKIP=1) PPSSPP shots f1-f6 unchanged.",
-   "note": "Partial: fused VFPU matrix chain, clip box test in VFPU registers, a registers-only clip pre-pass, and no DRAWLOG timer syscalls unless DRAWLOG: fl_clay_draw 6.89 -> 6.26 ms, render pass 17.88 -> 17.28 (PSP-2003, fight6, two runs each; fused matrices bit-identical over 299k draws, clip tests agree over 186k), PPSSPP shots identical. Target unmet; build layout moves results by up to 1.2 ms (P112)."
+   "note": "Partial. P110a: fused VFPU matrices, clip box test and pre-pass in registers (6.89 -> 6.26 ms). P110b: rarely run paths moved out of the per-draw code (noinline/cold: fl_clay_draw 14.7 -> 5.5 KB), near_clip keeps unclipped triangles' indices: fl_clay_draw 4.40-4.64 -> 3.87 ms in one layout, 4.15 in the final one (two runs each, PSP-2003 fight6), render pass 16.2 -> 15.3-15.7; PPSSPP shots identical. Target met only in one layout (P112 effect, ~0.3 ms)."
   },
   {
    "id": "P98",
