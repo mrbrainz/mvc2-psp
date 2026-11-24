@@ -1185,6 +1185,23 @@ window.BACKLOG_ARCHIVE = [
   "note": "fl_clay_draw 7.85 -> 6.94 ms per drawn fight step, render pass 19.94 -> 18.62 (PSP-2003, fight6, two runs each): the ADC bbox test now runs in VFPU registers (4.8 -> 0.86 us a call, 0 disagreements over 110k draws) and mesh indices sit in the VRAM pool beside the vertices (0.2 ms). PPSSPP shots f1-f6 byte-identical to HEAD; the 4 ms target moves to P109 (submit CPU) and P110 (per-draw work before submit)."
  },
  {
+  "id": "P114",
+  "order": 39,
+  "phase": "P4",
+  "size": "S",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/psp/host/psp_me.c",
+   "port/psp/host/psp_me_stub.S",
+   "port/docs/PSP.md"
+  ],
+  "title": "Spike: our own code on the Media Engine (before P103/P104)",
+  "description": "P103 only pays off if P104 can run the list build on the Media Engine. Boot our code on the ME of the PSP-2003 under ARK-4 (kubridge kuKernelCall: stub at the ME reset vector, ME reset pulsed), give it list-build-sized memory work, and measure how much that slows the main CPU in a fight; check sleep/resume and quitting to the XMB.",
+  "done_when": "ME runs our code on the PSP-2003; fight6 render pass and fl_clay_draw with the ME idle, streaming and doing ~512 KB per step recorded in PSP.md; sleep/resume and exit behaviour recorded; go/no-go for P103/P104 in the note.",
+  "note": "Go for P103/P104: our code runs on the ME (psp_me.c, ME_SPIKE=1..3); ME copying 512 KB per logic step costs the main CPU +0.25 ms render pass (17.63 -> 17.88), flat-out copying +2.25 (PSP.md). Sleep/resume and XMB exit moved to P115."
+ },
+ {
   "id": "P96",
   "order": 40,
   "phase": "P4",
@@ -1275,6 +1292,42 @@ window.BACKLOG_ARCHIVE = [
   "description": "Measure every consumer against the PSP-1000's user memory (~24 MB): ELF sections (largest static symbols), EE heap high-water, renderer (textures, atlases, mesh buffers, CLUTs), audio, PSPSDK/newlib and kernel allocations. Run a full arcade run in PPSSPP with the PSP-1000 model. Set a per-consumer target budget for the low profile.",
   "done_when": "PSP.md has the per-consumer table, the PSP-1000 total and a target budget per consumer that fits with headroom, without loading game data from the memory stick (or the shortfall if it cannot).",
   "note": "PSP.md 'PSP-1000 budget (P73)': a full arcade run in PPSSPP peaks at 44.8 MB (EE heap 23, image 8.9, renderer 5.7, a whole music track 4.7). The low targets add up to 26.8 MB against about 23.3 MB on the PSP-1000, so it is still short by about 3.5 MB unless the arena's live peak (not measured yet, P75) is about 13 MB or lower, or P80 is done. Booting as a PSP-1000 in PPSSPP fails at the EE heap allocation."
+ },
+ {
+  "id": "P113",
+  "order": 44,
+  "phase": "P4",
+  "size": "S",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/render/r_gu.c",
+   "port/psp/host/psp_main.c",
+   "port/platform/platform_psp.c"
+  ],
+  "title": "Partial fight frames shown with NO_FRAME_SKIP=1 on hardware",
+  "description": "PSP-2003 over PSPLink, fight6 with NO_FRAME_SKIP=1 (the P110 profiling mode): now and then a frame shows only the sky and a few stage meshes (mast, crow's nest); the rest of the ship, the characters and the HUD are missing. Seen on HEAD (3230c14a3) and with the mesh reuse guard keyed on the GE list tag; three watched runs with frame skip on (normal play) were clean, HEAD included. In this mode about 8 logic steps are drawn into one back buffer per present and the 1 MB list restarts mid-frame (r_gu_begin / r_flush). Find which step's draws reach the screen and why the rest are lost.",
+  "done_when": "Cause found; fixed, or shown to be limited to NO_FRAME_SKIP=1 with the reason in PSP.md; a watched NO_FRAME_SKIP=1 fight6 run shows no partial frames.",
+  "note": "Not a renderer bug: the game's own round-start blink (D_004F1CB0 toggled by func_0016CFB0/CFE0; func_001529A0 then draws only layers 0xE/0x12). Same per-frame draw counts in PPSSPP; low display rates hold a blink frame. Recorded in PSP.md."
+ },
+ {
+  "id": "P103",
+  "order": 44,
+  "phase": "P4",
+  "size": "L",
+  "status": "Done",
+  "depends": [
+   "P102"
+  ],
+  "read": [
+   "port/docs/PSP.md",
+   "port/render/r_gu.c",
+   "port/render/r_gu_mesh.c"
+  ],
+  "title": "Hardware speed: record the frame's draws, build the GE list afterwards",
+  "description": "Ideas from gibletto/mvc2-naomi-dc ports/port/psp (AGPL-3.0: ideas only, no code copied). Today the GE list is written while the game's draw code runs. Split it: during the frame record compact draw items (state, texture, mesh, matrix, vertices as references or copies of what the game may rewrite next frame), then turn the record into the GE list in one pass after the frame. On the main CPU alone this is the step that makes P104 possible; it also groups list writes for the cache.",
+  "done_when": "Recorded path is the default; frame time measured on hardware no worse than before; screenshots bit-identical in PPSSPP; a check mode builds the list one frame late to prove the game does not touch what the record refers to.",
+  "note": "Mesh submits recorded and built per run (before any other list write); render pass 17.33 -> 16.73 ms, fl_clay_draw 6.28 -> 4.80 (PSP-2003 fight6, two runs); PPSSPP shots identical; MVC2_REC_CHECK found no data changed between record and build (229k items). The one-frame-late check moves to P104, where the build leaves the frame."
  },
  {
   "id": "P77",

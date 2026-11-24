@@ -208,6 +208,7 @@ static void rt_update(void *u)
         static int skip = -1;
         if (skip < 0) { skip = getenv("NO_FRAME_SKIP") == NULL; plat_set_frame_skip(skip); }
         r_set_discard(skip && !plat_step_is_last());
+        { extern void psp_me_spike_step(void); psp_me_spike_step(); }   /* P114 spike */
         mvc2_frame();
         r_set_discard(0);
     }
@@ -248,6 +249,11 @@ static void rt_update(void *u)
                 (long)mvc2_host_frame, st.logic_fps, st.update_ms, st.slowed, st.render_fps, st.dropped_render);
         psp_audio_hw_report();
         psp_disc_report();
+        {   /* P114 spike */
+            extern int psp_me_spike_report(unsigned out[4]);
+            unsigned o[4];
+            if (psp_me_spike_report(o)) fprintf(stderr, "[me] heartbeat +%u, moved %u KB, cmd %u done %u\n", o[0], o[1], o[2], o[3]);
+        }
     }
 }
 
@@ -261,6 +267,11 @@ static void rt_pause(void *u, int paused)
 {
     (void)u;
     fprintf(stderr, "[plat] %s\n", paused ? "suspend" : "resume");
+    if (!paused) {   /* P114 spike */
+        extern int psp_me_spike_resumed(void);
+        int r = psp_me_spike_resumed();
+        if (r) fprintf(stderr, "[me] after resume: %s (%d)\n", r == 1 ? "still running" : "booted again", r);
+    }
 }
 
 int mvc2_psp_run(int frames)
@@ -280,6 +291,13 @@ int mvc2_psp_run(int frames)
         extern int psp_log_screen;
         psp_log_screen = 0;   /* the log stays in mvc2_psp.log only */
         fe_render_init();   /* the game's render-library calls draw with sceGu */
+    }
+    {   /* P114 spike (ME_SPIKE in env.txt) */
+        extern int psp_me_spike_init(void);
+        extern int psp_me_spike_report(unsigned out[4]);
+        unsigned o[4];
+        int r = psp_me_spike_init();
+        if (psp_me_spike_report(o)) fprintf(stderr, "[me] spike: kuKernelCall %d, heartbeat after 20 ms %u\n", r, o[0]);
     }
     psp_audio_init();
     psp_1p_init();

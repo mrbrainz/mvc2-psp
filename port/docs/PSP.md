@@ -558,6 +558,63 @@ Per-draw mesh work (P110, 2026-11-24, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SK
   end moved only by what you changed.
 - **Doubling overstates:** within one build, the summed doubling costs above
   were about 1.3 ms, and the cuts saved 0.85 ms.
+- **Split by removal (2026-11-24, after P112, early return at each stage,
+  `fl_clay_draw` 6.53 ms as built):** entry and `r_gu_begin` 0.65, colours
+  and vertex copy 0.45, matrices 0.58, ADC 0.54, clip prep 0.44, range loop
+  with `near_clip` (5 draws, ~76 us each) 0.83, flush/canvas 0.07, texture
+  key and bind 1.11 (the 47 binds ~0.5), blend/depth key 0.29, depth zoom
+  0.27, emitting the draws with the GE drawing ~1.4 (submit work alone
+  without draws 5.18). No stage is over ~1.1 ms: 4 ms needs most of them
+  cut, or the work off the main CPU (P103/P104).
+- **Tried, no gain:** writing list-memory bulk data (lit and stale vertex
+  copies, ADC index lists, `near_clip` output) through the cached alias
+  with a write-back instead of the uncached mirror: 6.57 ms.
+
+Recorded mesh submits (P103, 2026-11-24, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1`):
+- **How:** `r_gu_mesh_draw` records each submit (clip matrix copied, the
+  blend/depth/`state_ad0` it reads, pointers, UV scale) and `rec_build`
+  writes the GE words with the old emit code (`mesh_emit`), the item's
+  state put back into R, before anything else writes to the list: a 2D
+  batch, a clear, a fill, a scissor change, a texture or CLUT about to
+  change (`in_use_sync`), a list close. Fights have ~115 submits in ~2 runs
+  a frame and no texture syncs inside a run (PPSSPP count).
+- **Switches:** `MVC2_REC_OFF=1` emits at the call (A/B only; it measures
+  1.3 ms slower than HEAD in this layout). `MVC2_REC_CHECK=1` hashes each
+  item's indices and vertices at record and build: 229,390 items, none
+  changed. Shots f1-f6 byte-identical on, off and checked (PPSSPP).
+- **Result (two runs each, `hot_order.ld` regenerated):** render pass
+  17.33 (HEAD, same session) -> 16.73-16.74 ms; `fl_clay_draw` 6.28 ->
+  4.80-4.82 (the submit work now runs in `rec_build`). With the old hot
+  order the recorded path measured 16.44-16.45.
+- **Not covered:** 2D batches are still written at the call. The build
+  runs in the same frame as the record; a one-frame-late build (P104)
+  needs the referenced vertex copies, `gv` and textures kept a frame.
+
+Media Engine spike (P114, 2026-11-24, PSP-2003 ARK-4, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1`, one run each):
+- **Boot:** `psp_me.c` (`ME_SPIKE=1..3` in env.txt) copies `psp_me_stub.S`
+  to the ME reset vector 0xBFC00000 through kubridge `kuKernelCall`,
+  leaves entry/stack/argument at 0xBFC00600 and pulses bits 0x14 of
+  0xBC10004C. The stub sets the ME bus clocks (0xBC100050 |= 0xF), Status
+  0x30000000, drops the ME caches and jumps to C in kseg0 with a stack in
+  main RAM. Shared words: main CPU through 0x40000000, ME through
+  0xA0000000. The ME code must be o32 like the rest (an EABI unit calling
+  o32 libc crashed: o32 callees write the caller's 0..15($sp)).
+- **Main CPU cost of ME memory traffic** (render pass / `fl_clay_draw`):
+  ME idle 17.63 / 6.38 ms; 512 KB copied per logic step (~30 MB/s, a
+  list-build stand-in, always finished in the step) 17.88 / 6.63 (+0.25);
+  copying flat out (~100-150 MB/s) 19.88 / 7.61 (+2.25).
+- **Not yet checked:** sleep/resume and quitting to the XMB with our code
+  on the ME.
+
+Round-start blink (P113, 2026-11-24, PSP-2003 and PPSSPP, `fight6`, `NO_FRAME_SKIP=1`):
+- **What was seen:** now and then a held frame with only the sky and a few
+  stage meshes; no rest of the ship, characters or HUD.
+- **Cause, the game's own:** `func_0016CFB0`/`func_0016CFE0` count
+  D_004F1CB8 down and set D_004F1CB0 to its bit 0 or bit 1; while it is 1,
+  `func_001529A0` draws only layers 0xE/0x12 (no stage layers 5/7, no
+  active objects). Steps 1812-1822 alternate ~116 and ~46 draws, the same
+  counts in PPSSPP. At 60 fps it is a blink; at 5-15 fps a blink frame
+  stays up for 100+ ms. Nothing to fix in the renderer.
 
 Stable code layout (P112, 2026-11-24, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1`):
 - **What moved timings:** padding inserted after the P101 hot block shifts

@@ -97,6 +97,10 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/psp_vfpu.o"   # P88: VFPU kernels
   COMMAND ${PSPDEV}/bin/psp-gcc -c "${PSP_DIR}/host/psp_vfpu.S" -o "${CMAKE_BINARY_DIR}/psp_vfpu.o"
   DEPENDS "${PSP_DIR}/host/psp_vfpu.S")
 list(APPEND PSP_EABI_OBJS "${CMAKE_BINARY_DIR}/psp_vfpu.o")
+add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/psp_me_stub.o"   # P114 spike: ME reset stub
+  COMMAND ${PSPDEV}/bin/psp-gcc -c "${PSP_DIR}/host/psp_me_stub.S" -o "${CMAKE_BINARY_DIR}/psp_me_stub.o"
+  DEPENDS "${PSP_DIR}/host/psp_me_stub.S")
+list(APPEND PSP_EABI_OBJS "${CMAKE_BINARY_DIR}/psp_me_stub.o")
 # The ~16k EE data units go in through an archive (their paths overflow the
 # command line collect2 builds), whole: every unit is kept, as upstream links
 # them all; --sort-section=name puts them in EE order regardless.
@@ -118,7 +122,7 @@ set_source_files_properties("${MVC2_ROOT}/port/host/fe/fe_render.c" "${MVC2_ROOT
 set_property(SOURCE "${PATCHED}/port/host/fe/fe_mesh.c" APPEND PROPERTY INCLUDE_DIRECTORIES "${MVC2_ROOT}/port/host/fe")
 add_executable(mvc2_psp ${STUB_SRCS} ${GLUE_SRCS} ${PSP_EABI_OBJS} ${PSP_RENDER_SRCS} ${PSP_AUDIO_SRCS}
   "${PSP_DIR}/host/psp_main.c" "${PSP_DIR}/host/libc_o32.c" "${PSP_DIR}/host/psp_fpu.c"
-  "${PSP_DIR}/host/psp_prof.c" "${PSP_DIR}/host/psp_fe_sync.c" "${PSP_DIR}/host/psp_packet.c" "${PSP_DIR}/host/psp_disc.c" "${PSP_DIR}/host/psp_script.c" "${PSP_DIR}/host/psp_ee_hwm.c" "${PSP_DIR}/host/psp_ee_heap.c" "${PSP_DIR}/host/psp_saveui.c" "${PSP_DIR}/host/psp_1p.c" "${PSP_DIR}/host/psp_credits.c" "${PSP_DIR}/host/psp_reslist.c" "${PSP_DIR}/host/psp_mesh_state.c" "${PSP_DIR}/host/psp_prof_scene.c" "${MVC2_ROOT}/port/platform/platform_psp.c"
+  "${PSP_DIR}/host/psp_prof.c" "${PSP_DIR}/host/psp_fe_sync.c" "${PSP_DIR}/host/psp_packet.c" "${PSP_DIR}/host/psp_disc.c" "${PSP_DIR}/host/psp_script.c" "${PSP_DIR}/host/psp_ee_hwm.c" "${PSP_DIR}/host/psp_ee_heap.c" "${PSP_DIR}/host/psp_saveui.c" "${PSP_DIR}/host/psp_1p.c" "${PSP_DIR}/host/psp_credits.c" "${PSP_DIR}/host/psp_reslist.c" "${PSP_DIR}/host/psp_mesh_state.c" "${PSP_DIR}/host/psp_prof_scene.c" "${PSP_DIR}/host/psp_me.c" "${MVC2_ROOT}/port/platform/platform_psp.c"
   $<TARGET_OBJECTS:psp_host_core>)
 target_include_directories(mvc2_psp PRIVATE "${MVC2_ROOT}/port/stubs" "${PSP_DIR}/host"
   "${MVC2_ROOT}/port/host" "${MVC2_ROOT}/port/platform" "${GLUE}")

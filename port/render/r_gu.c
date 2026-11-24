@@ -121,8 +121,10 @@ void r_gu_toggle_stretch(void)
 }
 int r_gu_stretch(void) { return present_stretch; }
 
+static void rec_build(void);   /* P103 */
 static void apply_scissor(void)
 {
+    rec_build();
     int x0 = (int)floorf(R.scissor[0] * R.sx + R.ox), y0 = (int)floorf(R.scissor[1] * R.sy + R.oy);
     int x1 = (int)ceilf((R.scissor[0] + R.scissor[2]) * R.sx + R.ox);
     int y1 = (int)ceilf((R.scissor[1] + R.scissor[3]) * R.sy + R.oy);
@@ -171,6 +173,7 @@ static void list_close(void)
 {
     unsigned long long t = 0;
     if (!R.list_open) return;
+    rec_build();
     if (psp_prof_on()) t = psp_prof_now();
     sceGuFinish();
     sceGuSync(0, 0);
@@ -293,6 +296,7 @@ static void canvas_bind(void)
 {
     list_open();
     if (R.clear_pending) {
+        rec_build();
         uint32_t c = R.clear_color;
         mesh_bd_ok = 0;   /* depth mask */
         sceGuScissor(0, 0, SCR_W, SCR_H);
@@ -407,6 +411,7 @@ void r_flush(void)
 {
     GuVtx *v;
     if (!R.nverts || !R.inited || r_discard) { R.nverts = 0; return; }
+    rec_build();   /* P103: recorded mesh submits come first */
     mesh_tex_ok = mesh_bd_ok = 0;   /* the 2D batch sets its own texture, blend and depth state */
     canvas_bind();
     if (sceGuCheckList() > LIST_BYTES - (int)sizeof R.verts - 4096) {   /* nearly full */
@@ -834,6 +839,7 @@ void fl_frame_end(void) { r_flush(); }
  * change those earlier draws too (P28: grey water). Run the list first. */
 static void in_use_sync(unsigned gen)
 {
+    rec_build();   /* P103: recorded submits bind the old texture/CLUT */
     mesh_tex_ok = 0;   /* a texture or CLUT is about to change */
     if (R.list_open && gen == R.list_gen) r_gu_sync();
 }
@@ -1156,6 +1162,7 @@ int fl_fill_screen(int mode, uint32_t c)
 {
     if (mode != 0 && mode != 1) return 0;
     r_flush();
+    rec_build();
     if (!R.inited || r_discard) return 0;
     canvas_bind();
     mesh_bd_ok = 0;
@@ -1354,8 +1361,8 @@ static void ge_mesh_emit(const GuTexScaleArgs *ts, const float *proj, const void
  * (ou, ov) in texture units of the handle's w x h.  ge_verts: where the GE
  * reads the same vertices (P108 VRAM copy), NULL = verts; ge_idx likewise for idx. */
 typedef struct GuVtxIdx { float u, v; uint32_t c; float x, y, z; } GuVtxIdx;   /* r_gu_mesh.c GVtx layout */
-int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const void *ge_verts, const uint16_t *idx,
-                   const uint16_t *ge_idx, int count, float su, float sv, float ou, float ov)
+static int mesh_emit(const float clip[16], uint32_t tex, const void *verts, const void *ge_verts, const uint16_t *idx,
+                     const uint16_t *ge_idx, int count, float su, float sv, float ou, float ov, int flushed)
 {
     static ScePspFMatrix4 ident = { {1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1} };
     static unsigned ident_gen = ~0u;   /* list_gen whose GE state already has VIEW/MODEL = identity */
@@ -1367,8 +1374,7 @@ int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const 
     if (!R.inited || count <= 0) return 0;
     if (ge_mode < 0) ge_mode = (getenv("MVC2_GE_SCEGU") ? 0 : 1) | (getenv("MVC2_GE_CHECK") ? 4 : 0);
     tsp.su = -1e30f;
-    r_flush();
-    canvas_bind();
+    if (!flushed) { r_flush(); canvas_bind(); }
     if (prof) { t1 = psp_prof_now(); psp_prof_add(37, "          submit: flush + canvas", t1 - t0); t0 = t1; }
     if (tex && i >= 0 && i < MAX_TEX && R.tex[i].used && R.tex[i].pw <= 512 && R.tex[i].ph <= 512) {
         TexRec *t = &R.tex[i];
@@ -1448,3 +1454,80 @@ int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const 
     return 1;
 }
 
+/* P103: mesh submits are recorded (clip copied, the state they read
+ * snapshotted) and turned into GE words by rec_build in one pass, before
+ * anything else writes to the list (2D batch, clear, fill, scissor, a
+ * texture or CLUT about to change, list close).  The words are mesh_emit's,
+ * run with each item's state in R.  MVC2_REC_OFF=1: emit at the call, as
+ * before.  MVC2_REC_CHECK=1: hash each item's indices and the vertices they
+ * use when recorded and again when built; a difference is logged. */
+typedef struct RecItem {
+    float clip[16];
+    const void *verts, *ge_verts;
+    const uint16_t *idx, *ge_idx;
+    uint32_t tex, ad0, chk;
+    int count;
+    float su, sv, ou, ov;
+    int blend_ok, bl_op, bl_src, bl_dst, ztest, zwrite;
+    unsigned bl_srcfix, bl_dstfix;
+} RecItem;
+#define REC_MAX 128
+static RecItem rec[REC_MAX];
+static int rec_n, rec_mode = -1, rec_busy;
+static unsigned rec_bad, rec_items;
+
+static uint32_t rec_hash(const RecItem *it)
+{
+    uint32_t h = 2166136261u;
+    int top = 0;
+    for (int k = 0; k < it->count; k++) { h = (h ^ it->idx[k]) * 16777619u; if (it->idx[k] > top) top = it->idx[k]; }
+    for (int k = 0; k < (top + 1) * 24; k++) h = (h ^ ((const uint8_t *)it->verts)[k]) * 16777619u;
+    return h;
+}
+
+static void rec_build(void)
+{
+    if (!rec_n || rec_busy) return;
+    rec_busy = 1;
+    int b0 = R.blend_ok, b1 = R.bl_op, b2 = R.bl_src, b3 = R.bl_dst, z0 = R.ztest, z1 = R.zwrite;
+    unsigned f0 = R.bl_srcfix, f1 = R.bl_dstfix;
+    uint32_t a0 = R.state_ad0;
+    for (int i = 0; i < rec_n; i++) {
+        const RecItem *it = &rec[i];
+        if (rec_mode == 2 && rec_hash(it) != it->chk && rec_bad++ < 8)
+            fprintf(stderr, "[rec] item %u: vertex or index data changed before the build\n", rec_items + (unsigned)i);
+        R.blend_ok = it->blend_ok; R.bl_op = it->bl_op; R.bl_src = it->bl_src; R.bl_dst = it->bl_dst;
+        R.bl_srcfix = it->bl_srcfix; R.bl_dstfix = it->bl_dstfix; R.ztest = it->ztest; R.zwrite = it->zwrite;
+        R.state_ad0 = it->ad0;
+        mesh_emit(it->clip, it->tex, it->verts, it->ge_verts, it->idx, it->ge_idx, it->count, it->su, it->sv, it->ou, it->ov, 1);
+    }
+    R.blend_ok = b0; R.bl_op = b1; R.bl_src = b2; R.bl_dst = b3; R.ztest = z0; R.zwrite = z1;
+    R.bl_srcfix = f0; R.bl_dstfix = f1; R.state_ad0 = a0;
+    if (rec_mode == 2 && ((rec_items + (unsigned)rec_n) >> 14) != (rec_items >> 14))
+        fprintf(stderr, "[rec] check: %u items, %u changed\n", rec_items + (unsigned)rec_n, rec_bad);
+    rec_items += (unsigned)rec_n;
+    rec_n = 0;
+    rec_busy = 0;
+}
+
+int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const void *ge_verts, const uint16_t *idx,
+                   const uint16_t *ge_idx, int count, float su, float sv, float ou, float ov)
+{
+    RecItem *it;
+    if (!R.inited || count <= 0) return 0;
+    if (rec_mode < 0) rec_mode = getenv("MVC2_REC_OFF") ? 0 : getenv("MVC2_REC_CHECK") ? 2 : 1;
+    if (!rec_mode) return mesh_emit(clip, tex, verts, ge_verts, idx, ge_idx, count, su, sv, ou, ov, 0);
+    r_flush();       /* a pending 2D batch (and the items before it) first */
+    canvas_bind();   /* the frame's clear first */
+    if (rec_n == REC_MAX) rec_build();
+    it = &rec[rec_n++];
+    memcpy(it->clip, clip, sizeof it->clip);
+    it->verts = verts; it->ge_verts = ge_verts; it->idx = idx; it->ge_idx = ge_idx;
+    it->tex = tex; it->count = count; it->su = su; it->sv = sv; it->ou = ou; it->ov = ov;
+    it->blend_ok = R.blend_ok; it->bl_op = R.bl_op; it->bl_src = R.bl_src; it->bl_dst = R.bl_dst;
+    it->bl_srcfix = R.bl_srcfix; it->bl_dstfix = R.bl_dstfix; it->ztest = R.ztest; it->zwrite = R.zwrite;
+    it->ad0 = R.state_ad0;
+    if (rec_mode == 2) it->chk = rec_hash(it);
+    R.cur_tex = -1; R.cur_mode = -1;   /* as mesh_emit: the next 2D batch rebinds */
+    return 1;
+}

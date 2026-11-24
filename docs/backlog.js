@@ -46,11 +46,14 @@ window.BACKLOG = {
   "P100",
   "P101",
   "P102",
+  "P103",
   "P107",
   "P108",
   "P109",
   "P11",
   "P112",
+  "P113",
+  "P114",
   "P12",
   "P13",
   "P14",
@@ -107,6 +110,21 @@ window.BACKLOG = {
  ],
  "activities": [
   {
+   "id": "P115",
+   "order": 39,
+   "phase": "P4",
+   "size": "XS",
+   "status": "Ready",
+   "depends": [],
+   "read": [
+    "port/psp/host/psp_me.c",
+    "port/docs/PSP.md"
+   ],
+   "title": "Media Engine: sleep/resume and quitting to the XMB (EBOOT, ME_SPIKE=3)",
+   "description": "From the memory stick (PSPLink's USB drops on sleep): EBOOT with env.txt ME_SPIKE=3, into a fight, sleep and wake, then quit to the XMB and use music/video there. The [me] after resume line says whether our ME code survived sleep or was booted again. Needed before P104 is the default.",
+   "done_when": "Behaviour after resume and after quitting to the XMB recorded in PSP.md; anything broken filed as a ticket under P104."
+  },
+  {
    "id": "P110",
    "order": 40,
    "phase": "P4",
@@ -162,24 +180,6 @@ window.BACKLOG = {
    "done_when": "func_00151A20(6) <= 2 ms in fight6's character select (PROFILE=1, hardware); game-state trace unchanged."
   },
   {
-   "id": "P103",
-   "order": 44,
-   "phase": "P4",
-   "size": "L",
-   "status": "Ready",
-   "depends": [
-    "P102"
-   ],
-   "read": [
-    "port/docs/PSP.md",
-    "port/render/r_gu.c",
-    "port/render/r_gu_mesh.c"
-   ],
-   "title": "Hardware speed: record the frame's draws, build the GE list afterwards",
-   "description": "Ideas from gibletto/mvc2-naomi-dc ports/port/psp (AGPL-3.0: ideas only, no code copied). Today the GE list is written while the game's draw code runs. Split it: during the frame record compact draw items (state, texture, mesh, matrix, vertices as references or copies of what the game may rewrite next frame), then turn the record into the GE list in one pass after the frame. On the main CPU alone this is the step that makes P104 possible; it also groups list writes for the cache.",
-   "done_when": "Recorded path is the default; frame time measured on hardware no worse than before; screenshots bit-identical in PPSSPP; a check mode builds the list one frame late to prove the game does not touch what the record refers to."
-  },
-  {
    "id": "P104",
    "order": 45,
    "phase": "P4",
@@ -194,7 +194,7 @@ window.BACKLOG = {
    ],
    "title": "Hardware speed: build the GE list on the Media Engine",
    "description": "Ideas from gibletto/mvc2-naomi-dc ports/port/psp (AGPL-3.0: ideas only, no code copied). Take the Media Engine from the firmware (kernel access via ARK-4's kubridge; the firmware's ME code halted as for sleep, ours started at its reset vector, given back before sleep and taken again on wake) and run P103's list build there while the main CPU runs the game's next frame; the GE draws it a frame later. The ME's caches are not coherent with the main CPU's: shared data written back/invalidated by hand, the handshake word in its own cache line through the uncached mirror. Double-buffer the list, vertices and anything the record refers to.",
-   "done_when": "List build off the main CPU in fights; frame time and display fps in a 3v3 fight on the PSP-2003 measured before and after; sleep/resume works; screenshots identical apart from the one-frame delay."
+   "done_when": "A one-frame-late build check (MVC2_REC_CHECK) passes; List build off the main CPU in fights; frame time and display fps in a 3v3 fight on the PSP-2003 measured before and after; sleep/resume works; screenshots identical apart from the one-frame delay."
   },
   {
    "id": "P105",
