@@ -115,9 +115,11 @@ set(PSP_AUDIO_SRCS "${MVC2_ROOT}/port/audio/audio_psp.c" "${MVC2_ROOT}/port/audi
 # Renderer: r_gu.c (sceGu) behind upstream's frontend binding fe_render.c,
 # which is compiled unchanged; decode.c (TIM2) is GL-free.
 set(PSP_RENDER_SRCS "${MVC2_ROOT}/port/render/r_gu.c" "${MVC2_ROOT}/port/render/decode.c"
-  "${MVC2_ROOT}/port/render/r_gu_char.c" "${MVC2_ROOT}/port/render/r_gu_mesh.c" "${MVC2_ROOT}/port/host/fe/fe_render.c" "${MVC2_ROOT}/port/host/fe/fe_char.c"
+  "${MVC2_ROOT}/port/render/r_gu_char.c" "${MVC2_ROOT}/port/render/r_gu_mesh.c" "${MVC2_ROOT}/port/render/r_gu_me.c" "${MVC2_ROOT}/port/host/fe/fe_render.c" "${MVC2_ROOT}/port/host/fe/fe_char.c"
   "${PATCHED}/port/host/fe/fe_mesh.c")
 set_source_files_properties("${MVC2_ROOT}/port/host/fe/fe_render.c" "${MVC2_ROOT}/port/host/fe/fe_char.c" "${PATCHED}/port/host/fe/fe_mesh.c" PROPERTIES OBJECT_DEPENDS "${GLUE}/mvc2_host_protos.h")
+# P104: r_gu_me.c also runs on the Media Engine: no libc calls, no jump tables
+set_source_files_properties("${MVC2_ROOT}/port/render/r_gu_me.c" PROPERTIES COMPILE_OPTIONS "-ffreestanding;-fno-builtin;-fno-jump-tables")
 # the patched fe_mesh.c's relative includes ("../host.h") resolve from upstream's fe/
 set_property(SOURCE "${PATCHED}/port/host/fe/fe_mesh.c" APPEND PROPERTY INCLUDE_DIRECTORIES "${MVC2_ROOT}/port/host/fe")
 add_executable(mvc2_psp ${STUB_SRCS} ${GLUE_SRCS} ${PSP_EABI_OBJS} ${PSP_RENDER_SRCS} ${PSP_AUDIO_SRCS}
@@ -149,7 +151,7 @@ target_link_options(mvc2_psp PRIVATE -no-pie "@${GLUE}/link_extra.rsp" -Wl,--sor
   -Wl,--wrap=func_001044E0 -Wl,--wrap=host_ee_heap_base -Wl,--wrap=host_ee_heap_top
   -Wl,--wrap=func_0041DF70 -Wl,--wrap=func_0041EE80
   -Wl,--wrap=func_00130040 -Wl,--wrap=func_0038B2E0 -Wl,--wrap=func_00128CA0 -Wl,--wrap=func_00149690 -Wl,--wrap=func_00149020 -Wl,--wrap=func_0016B440
-  -Wl,--wrap=mkdir
+  -Wl,--wrap=mkdir -Wl,--wrap=sceGeListUpdateStallAddr
   # P91 scene-step timers (psp_prof_scene.c)
   -Wl,--wrap=func_0016D130 -Wl,--wrap=func_00153710 -Wl,--wrap=func_00153590 -Wl,--wrap=func_001536C0 -Wl,--wrap=func_00152AD0 -Wl,--wrap=func_001534D0 -Wl,--wrap=func_00153390 -Wl,--wrap=func_00153350 -Wl,--wrap=func_00153250 -Wl,--wrap=func_00153310 -Wl,--wrap=func_003ED1C0 -Wl,--wrap=func_00153A40 -Wl,--wrap=func_0016DF90 -Wl,--wrap=func_00123090 -Wl,--wrap=func_00151A20 -Wl,--wrap=func_001520E0 -Wl,--wrap=func_00122FE0 -Wl,--wrap=func_00123060 -Wl,--wrap=func_0016E080)
 # P101: each function in its own section, and the hottest ones first in

@@ -606,6 +606,32 @@ Media Engine spike (P114, 2026-11-24, PSP-2003 ARK-4, `fight6`, `PROFILE=1 NO_FR
 - **Not yet checked:** sleep/resume and quitting to the XMB with our code
   on the ME.
 
+Mesh words on the Media Engine (P104 design (a), 2026-11-24, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1`, one build, one run each):
+- **How:** `rec_build` resolves per item what needs main-CPU state (texture
+  key, `tex_addr` VRAM copies, in-use gens, depth zoom) into a `MeItem`;
+  `gume_build` (`r_gu_me.c`, no libgu/libc/static data) writes all the mesh
+  words (bind, CLUT, blend/depth, matrices, draws) into a block reserved in
+  the list that the list CALLs. `MVC2_ME_BUILD=1`: the ME builds it, the
+  stall held before the block's JUMP until done (`__wrap_sceGeListUpdateStallAddr`),
+  `list_close` waits; `=2`: the main CPU builds it; `MVC2_ME_CHECK=1`: every
+  item against sceGu's words (295k items, 0 differ; PPSSPP shots f1-f6
+  identical in all modes; hardware f1-f3 identical, f4-f6 differ run to run
+  even within one mode). PPSSPP does not run our ME code (falls back to `=2`).
+- **Result, render pass / `fl_clay_draw`:** default 16.64 / 4.70; ME 16.24 /
+  4.68; main CPU 16.12-16.18 / 4.63-4.64. The gain is the writer, not the ME;
+  the ME never made `list_close` wait, GE held ~7 times a frame.
+- **Exit:** a PSPLink `reset` leaves the ME running our code, which then
+  corrupts the next program; `r_gu_me_stop` (end of main, exit callback)
+  parks it in a loop in its reset-vector memory (`psp_me_park`).
+- **Bug found on the way:** a block one word short (bind is 16 words)
+  lost its RET to the CALL after it; the GE re-CALLed it forever (hung only
+  with `=2`). `=2` now aborts on an overflow.
+- **Default since P116:** `=2` (main CPU) with `hot_order.ld` regenerated;
+  `MVC2_ME_BUILD=0` restores `mesh_emit`. Two runs each: render pass 16.56-16.59
+  -> 16.20-16.24 ms, `fl_clay_draw` 4.70 -> 4.59-4.64. Normal mode, fight
+  display fps by block: 19.98 19.98 28.50 14.98 12.99 -> 19.98 19.98 28.97
+  14.98 14.05 (one run each).
+
 Round-start blink (P113, 2026-11-24, PSP-2003 and PPSSPP, `fight6`, `NO_FRAME_SKIP=1`):
 - **What was seen:** now and then a held frame with only the sky and a few
   stage meshes; no rest of the ship, characters or HUD.

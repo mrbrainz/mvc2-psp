@@ -1330,6 +1330,24 @@ window.BACKLOG_ARCHIVE = [
   "note": "Mesh submits recorded and built per run (before any other list write); render pass 17.33 -> 16.73 ms, fl_clay_draw 6.28 -> 4.80 (PSP-2003 fight6, two runs); PPSSPP shots identical; MVC2_REC_CHECK found no data changed between record and build (229k items). The one-frame-late check moves to P104, where the build leaves the frame."
  },
  {
+  "id": "P116",
+  "order": 44,
+  "phase": "P4",
+  "size": "S",
+  "status": "Done",
+  "depends": [
+   "P103"
+  ],
+  "read": [
+   "port/render/r_gu.c",
+   "port/render/r_gu_me.c"
+  ],
+  "title": "Hardware speed: mesh GE words from a libgu-free writer, CALLed per run",
+  "description": "From P104: rec_build resolves each recorded submit into an item and gume_build (r_gu_me.c) writes all its words (bind, CLUT, blend/depth, matrices, draw) into a block the list CALLs, in place of mesh_emit's sceGu calls.",
+  "done_when": "Words checked against sceGu's; PPSSPP shots f1-f6 identical; render pass and fight display fps measured on the PSP-2003 before and after.",
+  "note": "Default now (MVC2_ME_BUILD=0: the old path); MVC2_ME_CHECK 295k items 0 differ, PPSSPP shots identical, hot_order.ld regenerated. PSP-2003 fight6: render pass 16.56-16.59 -> 16.20-16.24 ms, fl_clay_draw 4.70 -> 4.59-4.64; normal-mode fight fps about the same (13.0 -> 14.1 in the slowest block)."
+ },
+ {
   "id": "P77",
   "order": 46,
   "phase": "P6",

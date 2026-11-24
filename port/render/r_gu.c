@@ -32,6 +32,7 @@
 #include "render.h"
 #include "decode.h"
 #include "../psp/host/psp_gu_shim.h"
+#include "r_gu_me.h"
 
 /* sceGu calls with > 4 args must go through the EABI shim */
 #define sceGuBlendFunc use_gu_blend
@@ -122,6 +123,8 @@ void r_gu_toggle_stretch(void)
 int r_gu_stretch(void) { return present_stretch; }
 
 static void rec_build(void);   /* P103 */
+static void me_wait_all(void), me_prof(void), me_diag(void), me_init(void), me_release(void);   /* P104 */
+static int me_pend_n;
 static void apply_scissor(void)
 {
     rec_build();
@@ -174,8 +177,11 @@ static void list_close(void)
     unsigned long long t = 0;
     if (!R.list_open) return;
     rec_build();
+    me_wait_all();   /* P104: the ME's CALL blocks written, the stall released */
+    me_prof();
     if (psp_prof_on()) t = psp_prof_now();
     sceGuFinish();
+    me_diag();   /* P104 */
     sceGuSync(0, 0);
     if (t) { psp_prof_add(20, "  GE list run (sceGuSync)", psp_prof_now() - t); psp_prof_add(21, "  GE lists per frame (count, not ms)", 1000); }
     R.list_open = 0;
@@ -237,6 +243,7 @@ int r_init(void)
     sceGuDisplay(GU_TRUE);
     R.inited = 1;
     fl_default_state();
+    me_init();   /* P104 */
     return 0;
 }
 
@@ -1361,6 +1368,30 @@ static void ge_mesh_emit(const GuTexScaleArgs *ts, const float *proj, const void
  * (ou, ov) in texture units of the handle's w x h.  ge_verts: where the GE
  * reads the same vertices (P108 VRAM copy), NULL = verts; ge_idx likewise for idx. */
 typedef struct GuVtxIdx { float u, v; uint32_t c; float x, y, z; } GuVtxIdx;   /* r_gu_mesh.c GVtx layout */
+/* depth zoom: z' = (z + w) * DEPTH_ZOOM - w, as depth_of.  A mesh
+     * wholly nearer than the zoomed window (the ending's CAPCOM logo at
+     * NDC -0.6) would land past the GE's depth range and be dropped;
+     * depth_of clamps such depths to the top, so clamp the mesh too
+     * (sampled from a few of its vertices) */
+static void depth_zoom(float *m, const void *verts, const uint16_t *idx, int count)
+{
+    const GuVtxIdx *vv = (const GuVtxIdx *)verts;
+    int near = 1;
+    float zs = -1.f;
+    for (int k = 0; k < 4 && near; k++) {
+        const float *q = &vv[idx[k * (count - 1) / 3]].x;
+        float zc = q[0] * m[2] + q[1] * m[6] + q[2] * m[10] + m[14];
+        float wc = q[0] * m[3] + q[1] * m[7] + q[2] * m[11] + m[15];
+        near = wc > 0.f && zc / wc > -1.f + 2.f / DEPTH_ZOOM;
+        if (near && zc / wc > zs) zs = zc / wc;
+    }
+    /* near: the same zoom, anchored so the mesh's nearest sampled depth
+     * sits just under the top (its layers keep their order) */
+    for (int r = 0; r < 4; r++)
+        m[r * 4 + 2] = near ? m[r * 4 + 2] * DEPTH_ZOOM + m[r * 4 + 3] * (0.999f - zs * DEPTH_ZOOM)
+                            : (m[r * 4 + 2] + m[r * 4 + 3]) * DEPTH_ZOOM - m[r * 4 + 3];
+}
+
 static int mesh_emit(const float clip[16], uint32_t tex, const void *verts, const void *ge_verts, const uint16_t *idx,
                      const uint16_t *ge_idx, int count, float su, float sv, float ou, float ov, int flushed)
 {
@@ -1407,28 +1438,7 @@ static int mesh_emit(const float clip[16], uint32_t tex, const void *verts, cons
         }
     }
     memcpy(&proj, clip, sizeof proj);   /* sceGuSetMatrix copies the values into the list */
-    {   /* depth zoom: z' = (z + w) * DEPTH_ZOOM - w, as depth_of.  A mesh
-         * wholly nearer than the zoomed window (the ending's CAPCOM logo at
-         * NDC -0.6) would land past the GE's depth range and be dropped;
-         * depth_of clamps such depths to the top, so clamp the mesh too
-         * (sampled from a few of its vertices) */
-        float *m = (float *)&proj;
-        const GuVtxIdx *vv = (const GuVtxIdx *)verts;
-        int near = 1;
-        float zs = -1.f;
-        for (int k = 0; k < 4 && near; k++) {
-            const float *q = &vv[idx[k * (count - 1) / 3]].x;
-            float zc = q[0] * m[2] + q[1] * m[6] + q[2] * m[10] + m[14];
-            float wc = q[0] * m[3] + q[1] * m[7] + q[2] * m[11] + m[15];
-            near = wc > 0.f && zc / wc > -1.f + 2.f / DEPTH_ZOOM;
-            if (near && zc / wc > zs) zs = zc / wc;
-        }
-        /* near: the same zoom, anchored so the mesh's nearest sampled depth
-         * sits just under the top (its layers keep their order) */
-        for (int r = 0; r < 4; r++)
-            m[r * 4 + 2] = near ? m[r * 4 + 2] * DEPTH_ZOOM + m[r * 4 + 3] * (0.999f - zs * DEPTH_ZOOM)
-                                : (m[r * 4 + 2] + m[r * 4 + 3]) * DEPTH_ZOOM - m[r * 4 + 3];
-    }
+    depth_zoom((float *)&proj, verts, idx, count);
     /* GE clip planes cull clip-space z < 0, where the game's depth range
      * (larger = nearer, as the GS) puts every mesh; the VU1 reject above
      * (r_gu_mesh.c) stands in for the GS's own guard-band handling */
@@ -1485,10 +1495,309 @@ static uint32_t rec_hash(const RecItem *it)
     return h;
 }
 
+/* P104: a run's words built by gume_build (r_gu_me.c) into a block
+ * reserved in the list (sceGuGetMemory) that the list CALLs.  The main CPU
+ * resolves what needs its state (texture key, VRAM copies, in-use gens,
+ * depth zoom); the rest runs on the Media Engine (MVC2_ME_BUILD=1) while
+ * the main CPU goes on.  Until the ME is done the stall address is held at
+ * the CALL (__wrap_sceGeListUpdateStallAddr); list_close waits for it.
+ * MVC2_ME_BUILD=2 (the default, P116): the main CPU runs gume_build at the
+ * hand-off; =0: mesh_emit's sceGu path (A/B).  MVC2_ME_CHECK=1 (implies 2):
+ * every item's words against sceGu's for the same state. */
+static int me_on;   /* 0 mesh_emit, 1 ME, 2 main CPU (default); +4 check */
+static uint32_t __attribute__((aligned(64))) me_shared[96];
+static uint8_t __attribute__((aligned(64))) me_stack[16384];
+static MeItem __attribute__((aligned(64))) me_items[MS_NJOB][REC_MAX];
+static MeShadow me_shadow;
+static uint32_t me_head, me_words0;
+static unsigned me_gen = ~0u;
+static uint32_t me_bind[5];   /* tbp, pw, ph, clut, flag bits of the last bind (the GE holds it while mesh_tex_ok) */
+static struct { uint32_t seq; void *pos; } me_pend[MS_NJOB];
+static void *me_stall;
+static unsigned me_held, me_local_words, me_last_bound, me_jobs;
+static uint32_t *me_last_blk;
+static volatile uint32_t *me_sh(void) { return (volatile uint32_t *)((uintptr_t)me_shared | 0x40000000u); }
+
+int __real_sceGeListUpdateStallAddr(int qid, void *stall);
+static void me_poll(void)
+{
+    uint32_t tail = me_sh()[MS_TAIL];
+    int k = 0;
+    while (k < me_pend_n && (int32_t)(tail - me_pend[k].seq) > 0) k++;
+    if (!k) return;
+    for (int j = k; j < me_pend_n; j++) me_pend[j - k] = me_pend[j];
+    me_pend_n -= k;
+}
+int __wrap_sceGeListUpdateStallAddr(int qid, void *stall)
+{
+    me_stall = stall;
+    if (me_pend_n) {
+        me_poll();
+        if (me_pend_n) { stall = me_pend[0].pos; me_held++; }
+    }
+    return __real_sceGeListUpdateStallAddr(qid, stall);
+}
+/* jobs the ME finished: let the GE run on to the next pending CALL */
+static void me_release(void)
+{
+    int n0 = me_pend_n;
+    if (!n0) return;
+    me_poll();
+    if (me_pend_n != n0) __real_sceGeListUpdateStallAddr(ge_list_executed[0], me_pend_n ? me_pend[0].pos : me_stall);
+}
+static void me_wait_all(void)
+{
+    unsigned long long t;
+    if (!me_pend_n) return;
+    t = psp_prof_on() ? psp_prof_now() : 0;
+    while (me_sh()[MS_TAIL] != me_head)
+        for (int k = 0; k < 50; k++) __asm__ volatile("nop");
+    me_release();
+    if (t) psp_prof_add(54, "  ME list build wait (list close)", psp_prof_now() - t);
+}
+
+static void me_init(void)
+{
+    const char *e = getenv("MVC2_ME_BUILD");
+    me_on = e ? atoi(e) & 3 : 2;   /* default: the main CPU (P116) */
+    if (getenv("MVC2_ME_CHECK")) me_on = 2 | 4;
+    if (me_on == 3) me_on = 0;
+    if (me_on == 1 && getenv("ME_SPIKE")) { fprintf(stderr, "[me] ME_SPIKE set: list build stays on the main CPU\n"); me_on = 2; }
+    if (me_on == 1) {
+        extern int psp_me_boot_into(void (*entry)(volatile uint32_t *), void *stack_top, void *shared);
+        uint32_t b;
+        int r;
+        memset(me_shared, 0, sizeof me_shared);
+        r = psp_me_boot_into(gume_serve, me_stack + sizeof me_stack, me_shared);
+        b = me_sh()[MS_BEAT];
+        sceKernelDelayThread(2000);
+        if (me_sh()[MS_BEAT] == b) { fprintf(stderr, "[me] list build: ME did not start (%d), main CPU\n", r); me_on = 2; }
+    }
+    if (me_on & 5) fprintf(stderr, "[me] list build on the %s%s\n", (me_on & 3) == 1 ? "Media Engine" : "main CPU", me_on & 4 ? ", checked against sceGu" : "");
+}
+
+/* program exit: the ME leaves our code (which the next program overwrites)
+ * for the park loop in its own memory */
+void r_gu_me_stop(void)
+{
+    extern uint32_t psp_me_park_addr(void);
+    volatile uint32_t *sh = me_sh();
+    if ((me_on & 3) != 1) return;
+    sh[MS_PARK] = psp_me_park_addr();
+    __asm__ volatile("sync" ::: "memory");
+    sh[MS_QUIT] = 1;
+    for (int i = 0; i < 100 && !sh[MS_PARKED]; i++) sceKernelDelayThread(100);
+    fprintf(stderr, "[me] list build: ME %s\n", sh[MS_PARKED] ? "parked" : "did not answer");
+    me_on = 2;
+}
+
+/* MVC2_ME_CHECK: one item's words (bind forced, shadow empty) against the
+ * sceGu calls mesh_emit made for the same state, into a scratch list */
+static void me_check(const MeItem *m)
+{
+    static ScePspFMatrix4 ident = { {1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1} };
+    static unsigned bad, n;
+    MeItem c = *m;
+    MeShadow s0;
+    uint32_t a[ME_ITEM_WORDS + ME_EXTRA_WORDS], b[ME_ITEM_WORDS + ME_EXTRA_WORDS + 8], *save = gu_list->current;
+    int na, nb;
+    const uint32_t *d = m->bd;
+    memset(&s0, 0, sizeof s0);
+    if (c.flags & MI_TEX) c.flags |= MI_BIND;
+    na = gume_build(&c, 1, MJ_RESET_BD | MJ_NEWLIST, &s0, a);
+    if (na > ME_ITEM_WORDS + ME_EXTRA_WORDS && bad++ < 8) fprintf(stderr, "[me] check: item %u: %d words, over the bound\n", n + 1, na);
+    na -= 7;   /* draw words (sceGuDrawArray's, P102) and RET */
+    gu_list->current = b;
+    if (c.flags & MI_TEX) {
+        GuTexImageArgs ti = { 0, (int)c.pw, (int)c.ph, (int)c.pw, (const void *)(uintptr_t)c.tbp };
+        int filt = (c.flags & MI_NEAREST) ? GU_NEAREST : GU_LINEAR, wrap = (c.flags & MI_CLAMP) ? GU_CLAMP : GU_REPEAT;
+        sceGuEnable(GU_TEXTURE_2D);
+        if (c.flags & MI_IDX) {
+            sceGuClutMode(GU_PSM_8888, 0, 0xFF, 0);
+            sceGuClutLoad(256 / 8, (const void *)(uintptr_t)c.clut);
+            sceGuTexMode(GU_PSM_T8, 0, 0, (c.flags & MI_SWZ) ? 1 : 0);
+        } else {
+            sceGuTexMode(GU_PSM_8888, 0, 0, (c.flags & MI_SWZ) ? 1 : 0);
+        }
+        gu_teximage(&ti);
+        sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
+        sceGuTexFilter(filt, filt);
+        sceGuTexWrap(wrap, wrap);
+        sceGuTexFlush();
+    } else {
+        sceGuDisable(GU_TEXTURE_2D);
+    }
+    if (d[0]) { GuBlendArgs bl = { (int)d[1], (int)d[2], (int)d[3], d[4], d[5] }; sceGuEnable(GU_BLEND); gu_blend(&bl); }
+    else sceGuDisable(GU_BLEND);
+    sceGuEnable(GU_DEPTH_TEST);
+    sceGuDepthFunc(d[6] == 0 ? GU_NEVER : d[6] == 3 ? GU_GREATER : d[6] == 7 ? GU_ALWAYS : GU_GEQUAL);
+    sceGuDepthMask(d[7] ? GU_FALSE : GU_TRUE);
+    sceGuSetMatrix(GU_VIEW, &ident);
+    sceGuSetMatrix(GU_MODEL, &ident);
+    if (c.flags & MI_TEX) {
+        GuTexScaleArgs ts;
+        memcpy(&ts, c.ts, sizeof ts);
+        gu_texscale(&ts);
+    }
+    sceGuDisable(GU_CLIP_PLANES);
+    sceGuSetMatrix(GU_PROJECTION, (const ScePspFMatrix4 *)c.proj);
+    nb = (int)(gu_list->current - b);
+    gu_list->current = save;
+    n++;
+    if (na != nb || memcmp(a, b, (size_t)na * 4)) {
+        if (bad++ < 8) {
+            int k = 0;
+            while (k < na && k < nb && a[k] == b[k]) k++;
+            fprintf(stderr, "[me] check: item %u: %d words, sceGu %d; first difference at %d: %08x, sceGu %08x\n",
+                    n, na, nb, k, k < na ? (unsigned)a[k] : 0u, k < nb ? (unsigned)b[k] : 0u);
+        }
+    }
+    if ((n & 0x3FFF) == 0) fprintf(stderr, "[me] check: %u items, %u differ\n", n, bad);
+}
+
+/* rec[] -> one job: items resolved here, words by gume_build */
+static void rec_build_me(void)
+{
+    volatile uint32_t *sh = me_sh();
+    int slot = (int)(me_head % MS_NJOB);
+    MeItem *mi = me_items[(me_on & 3) == 1 ? slot : 0];
+    unsigned flags = 0, bound = ME_EXTRA_WORDS;
+    uint32_t *blk;
+    if ((me_on & 3) == 1 && (int32_t)(me_head - sh[MS_TAIL]) >= MS_NJOB) {   /* every slot still being built */
+        unsigned long long t = psp_prof_on() ? psp_prof_now() : 0;
+        while ((int32_t)(me_head - sh[MS_TAIL]) >= MS_NJOB) for (int k = 0; k < 50; k++) __asm__ volatile("nop");
+        me_release();
+        if (t) psp_prof_add(55, "  ME list build wait (slots full)", psp_prof_now() - t);
+    }
+    for (int k = 0; k < rec_n; k++) {
+        const RecItem *it = &rec[k];
+        MeItem *m = &mi[k];
+        int i = (int)(it->tex & 0xFFFF) - 1, p = (int)(it->tex >> 16) - 1;
+        uint32_t f = 0;
+        if (rec_mode == 2 && rec_hash(it) != it->chk && rec_bad++ < 8)
+            fprintf(stderr, "[rec] item %u: vertex or index data changed before the build\n", rec_items + (unsigned)k);
+        if (it->tex && i >= 0 && i < MAX_TEX && R.tex[i].used && R.tex[i].pw <= 512 && R.tex[i].ph <= 512) {
+            TexRec *t = &R.tex[i];
+            float ts[4] = { it->su * t->w / t->pw, it->sv * t->h / t->ph, it->ou * t->w / t->pw, it->ov * t->h / t->ph };
+            const uint32_t *clut = (t->fmt == FL_TEX_IDX4 || t->fmt == FL_TEX_IDX8) && p >= 0 && p < MAX_PAL && R.pal[p].used
+                                       ? R.pal[p].clut : NULL;
+            uint32_t key[7] = { (uint32_t)i, (uint32_t)p, (uint32_t)(uintptr_t)t->pix, (uint32_t)t->pw << 16 | (uint32_t)t->ph,
+                                (uint32_t)t->fmt, (uint32_t)(uintptr_t)clut, it->ad0 & 0x30000u };
+            f = MI_TEX;
+            if (mesh_tex_ok && !memcmp(key, mesh_tex_key, sizeof key)) {
+                t->gen = R.list_gen;
+                if (clut) R.pal[p].gen = R.list_gen;
+            } else {
+                int idx8 = t->fmt == FL_TEX_IDX4 || t->fmt == FL_TEX_IDX8;
+                me_bind[0] = (uint32_t)(uintptr_t)tex_addr(t);
+                t->gen = R.list_gen;
+                me_bind[1] = (uint32_t)t->pw; me_bind[2] = (uint32_t)t->ph;
+                me_bind[3] = 0;
+                if (idx8) {
+                    const uint32_t *c = clut ? clut : black_clut;
+                    if (clut) R.pal[p].gen = R.list_gen;
+                    me_bind[3] = (uint32_t)(uintptr_t)c;
+                }
+                me_bind[4] = (idx8 ? MI_IDX : 0) | (t->swz ? MI_SWZ : 0) | ((it->ad0 & 0x10000) ? MI_NEAREST : 0) | ((it->ad0 & 0x20000) ? MI_CLAMP : 0);
+                memcpy(mesh_tex_key, key, sizeof key);
+                mesh_tex_ok = 1;
+                f |= MI_BIND;
+            }
+            f |= me_bind[4];
+            m->tbp = me_bind[0]; m->pw = me_bind[1]; m->ph = me_bind[2]; m->clut = me_bind[3];
+            memcpy(m->ts, ts, sizeof ts);
+        } else {
+            mesh_tex_ok = 0;
+        }
+        m->flags = f;
+        {
+            float pj[16];
+            memcpy(pj, it->clip, sizeof pj);
+            depth_zoom(pj, it->verts, it->idx, it->count);
+            memcpy(m->proj, pj, sizeof pj);
+        }
+        m->vaddr = (uint32_t)(uintptr_t)(it->ge_verts ? it->ge_verts : it->verts);
+        m->iaddr = (uint32_t)(uintptr_t)(it->ge_idx ? it->ge_idx : it->idx);
+        m->count = (uint32_t)it->count;
+        m->bd[0] = (uint32_t)it->blend_ok; m->bd[1] = (uint32_t)it->bl_op; m->bd[2] = (uint32_t)it->bl_src;
+        m->bd[3] = (uint32_t)it->bl_dst; m->bd[4] = it->bl_srcfix; m->bd[5] = it->bl_dstfix;
+        m->bd[6] = (uint32_t)it->ztest; m->bd[7] = (uint32_t)it->zwrite;
+        if (me_on & 4) me_check(m);
+        bound += ME_ITEM_WORDS;
+    }
+    if (!mesh_bd_ok) flags |= MJ_RESET_BD;
+    mesh_bd_ok = 1;
+    if (me_gen != R.list_gen) { flags |= MJ_NEWLIST; me_gen = R.list_gen; }
+    /* the block, reserved by hand (as sceGuGetMemory: BASE + JUMP over it),
+     * so the GE never reaches its words before they are final: the main CPU
+     * writes them before the JUMP; with the ME the GE is held before the JUMP */
+    {
+        uint32_t *jmp = (uint32_t *)gu_list->current, *end;
+        blk = jmp + 2;
+        end = blk + bound;
+        if ((me_on & 3) == 1) {
+            volatile uint32_t *j = sh + MS_JOBS + 4 * slot;
+            sceKernelDcacheWritebackRange(mi, (unsigned)rec_n * sizeof *mi);
+            j[0] = (uint32_t)(uintptr_t)mi | 0xA0000000u;
+            j[1] = (uint32_t)rec_n;
+            j[2] = flags;
+            j[3] = ((uint32_t)(uintptr_t)blk & 0x1FFFFFFFu) | 0xA0000000u;
+            me_pend[me_pend_n].seq = me_head; me_pend[me_pend_n].pos = jmp; me_pend_n++;
+            __asm__ volatile("sync" ::: "memory");
+            sh[MS_HEAD] = ++me_head;
+        } else {
+            unsigned w = (unsigned)gume_build(mi, (unsigned)rec_n, flags, &me_shadow, blk);
+            me_local_words += w;
+            if (w > bound) { fprintf(stderr, "[me] block overflow: %u words, %u reserved\n", w, bound); abort(); }
+        }
+        me_last_blk = blk; me_last_bound = bound; me_jobs++;
+        jmp[0] = 0x10000000u | (((uint32_t)(uintptr_t)end >> 8) & 0xF0000u);
+        jmp[1] = 0x08000000u | ((uint32_t)(uintptr_t)end & 0xFFFFFFu);
+        gu_list->current = end;
+        sceGuCallList(blk);   /* its stall update: held at jmp while the ME builds */
+    }
+    R.cur_tex = -1; R.cur_mode = -1;
+}
+
+/* P104 diagnosis: a list that does not end in 2 s is logged */
+static void me_diag(void)
+{
+    if (me_on) {
+        int st = 0, k;
+        for (k = 0; k < 2000 && (st = sceGeListSync(ge_list_executed[0], 1)) != PSP_GE_LIST_DONE; k++) sceKernelDelayThread(1000);
+        if (st != PSP_GE_LIST_DONE) {
+            fprintf(stderr, "[me] list stuck: state %d, list %p..%p, stall %p, pend %d, jobs %u, last block %p (%u words)\n",
+                    st, (void *)list, (void *)gu_list->current, me_stall, me_pend_n, me_jobs, (void *)me_last_blk, me_last_bound);
+            fprintf(stderr, "[me] GE: base %08x vaddr %08x iaddr %08x prim %08x vtype %08x tbp %08x tsize %08x clut %08x\n",
+                    sceGeGetCmd(0x10), sceGeGetCmd(0x01), sceGeGetCmd(0x02), sceGeGetCmd(0x04), sceGeGetCmd(0x12),
+                    sceGeGetCmd(0xA0), sceGeGetCmd(0xB8), sceGeGetCmd(0xB0));
+            fflush(stderr);
+        }
+    }
+}
+
+/* PROFILE: per list close */
+static void me_prof(void)
+{
+    uint32_t w;
+    if (!me_on || !psp_prof_on()) return;
+    w = (me_on & 3) == 1 ? me_sh()[MS_WORDS] : me_local_words;
+    psp_prof_add(56, "  ME list build words (count)", 1000ull * (w - me_words0));
+    psp_prof_add(57, "  GE held at an ME call (count)", 1000ull * me_held);
+    me_words0 = w; me_held = 0;
+}
+
 static void rec_build(void)
 {
     if (!rec_n || rec_busy) return;
     rec_busy = 1;
+    if (me_on) {
+        rec_build_me();
+        rec_items += (unsigned)rec_n;
+        rec_n = 0;
+        rec_busy = 0;
+        return;
+    }
     int b0 = R.blend_ok, b1 = R.bl_op, b2 = R.bl_src, b3 = R.bl_dst, z0 = R.ztest, z1 = R.zwrite;
     unsigned f0 = R.bl_srcfix, f1 = R.bl_dstfix;
     uint32_t a0 = R.state_ad0;
@@ -1517,6 +1826,7 @@ int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const 
     if (!R.inited || count <= 0) return 0;
     if (rec_mode < 0) rec_mode = getenv("MVC2_REC_OFF") ? 0 : getenv("MVC2_REC_CHECK") ? 2 : 1;
     if (!rec_mode) return mesh_emit(clip, tex, verts, ge_verts, idx, ge_idx, count, su, sv, ou, ov, 0);
+    if (me_pend_n) me_release();   /* P104: a CALL the ME finished lets the GE on */
     r_flush();       /* a pending 2D batch (and the items before it) first */
     canvas_bind();   /* the frame's clear first */
     if (rec_n == REC_MAX) rec_build();

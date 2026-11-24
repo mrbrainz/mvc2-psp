@@ -73,6 +73,7 @@ static int exit_cb(int a, int b, void *c) {
     exit_req = 1;
     for (i = 0; i < 300 && !main_done; i++)
         sceKernelDelayThread(10000);
+    { extern void r_gu_me_stop(void); r_gu_me_stop(); }   /* P104: main did not get there */
     sceKernelExitGame();
     return 0;
 }

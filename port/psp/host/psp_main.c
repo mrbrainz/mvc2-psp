@@ -327,6 +327,7 @@ int mvc2_psp_run(int frames)
     { extern void psp_ee_hwm(void); psp_ee_hwm(); }
     psp_mem_report("end");
     { extern void psp_hot_dump(void) __attribute__((weak)); if (psp_hot_dump) psp_hot_dump(); }   /* P101 */
+    { extern void r_gu_me_stop(void); r_gu_me_stop(); }   /* P104: ME off our code */
     psp_log("[host] done\n");
     return 0;
 }

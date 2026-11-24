@@ -16,7 +16,7 @@
 #include <stdlib.h>
 #include <malloc.h>
 
-extern char psp_me_stub[], psp_me_stub_end[];
+extern char psp_me_stub[], psp_me_stub_end[], psp_me_park[];
 
 /* shared words, each group in its own cache line */
 enum { SH_BEAT = 0, SH_CMD = 16, SH_MODE, SH_SRC, SH_DST, SH_BYTES, SH_DONE = 32, SH_KB };
@@ -82,17 +82,30 @@ static int me_boot_k(uint32_t entry, uint32_t sp, uint32_t arg)
 }
 
 static int me_mode;
-static int me_boot(void)
+static int me_boot_at(uint32_t entry, uint32_t sp, uint32_t arg)
 {
     KernelCallArg a = {0};
     int ret;
     sceKernelDcacheWritebackInvalidateAll();   /* shared words, stack and buffers in RAM, not in our cache */
-    a.arg1 = kseg0((const void *)psp_me_main);
-    a.arg2 = kseg0(me_stack + sizeof me_stack);
-    a.arg3 = (uint32_t)(uintptr_t)me_shared | 0xA0000000u;
+    a.arg1 = entry; a.arg2 = sp; a.arg3 = arg;
     ret = kuKernelCall((void *)me_boot_k, &a);
     sceKernelDelayThread(20000);
     return ret;
+}
+static int me_boot(void)
+{
+    return me_boot_at(kseg0((const void *)psp_me_main), kseg0(me_stack + sizeof me_stack),
+                      (uint32_t)(uintptr_t)me_shared | 0xA0000000u);
+}
+
+/* P104: the park loop's address on the ME (inside the copied stub) */
+uint32_t psp_me_park_addr(void) { return 0xBFC00000u + (uint32_t)(psp_me_park - psp_me_stub); }
+
+/* P104: boot the ME into entry(shared), shared reached through kseg1 */
+int psp_me_boot_into(void (*entry)(volatile uint32_t *), void *stack_top, void *shared)
+{
+    if ((unsigned)(psp_me_stub_end - psp_me_stub) > 0x600) return -2;
+    return me_boot_at(kseg0((const void *)entry), kseg0(stack_top), (uint32_t)(uintptr_t)shared | 0xA0000000u);
 }
 
 static uint32_t me_bytes, me_beat0, me_kb0;

@@ -54,6 +54,7 @@ window.BACKLOG = {
   "P112",
   "P113",
   "P114",
+  "P116",
   "P12",
   "P13",
   "P14",
@@ -194,7 +195,8 @@ window.BACKLOG = {
    ],
    "title": "Hardware speed: build the GE list on the Media Engine",
    "description": "Ideas from gibletto/mvc2-naomi-dc ports/port/psp (AGPL-3.0: ideas only, no code copied). Take the Media Engine from the firmware (kernel access via ARK-4's kubridge; the firmware's ME code halted as for sleep, ours started at its reset vector, given back before sleep and taken again on wake) and run P103's list build there while the main CPU runs the game's next frame; the GE draws it a frame later. The ME's caches are not coherent with the main CPU's: shared data written back/invalidated by hand, the handshake word in its own cache line through the uncached mirror. Double-buffer the list, vertices and anything the record refers to.",
-   "done_when": "A one-frame-late build check (MVC2_REC_CHECK) passes; List build off the main CPU in fights; frame time and display fps in a 3v3 fight on the PSP-2003 measured before and after; sleep/resume works; screenshots identical apart from the one-frame delay."
+   "done_when": "A one-frame-late build check (MVC2_REC_CHECK) passes; List build off the main CPU in fights; frame time and display fps in a 3v3 fight on the PSP-2003 measured before and after; sleep/resume works; screenshots identical apart from the one-frame delay.",
+   "note": "Design (a) built (MVC2_ME_BUILD=1, PSP.md): the ME building the words measured no better than the main-CPU writer (P116), 16.24 vs 16.12-16.18 ms render pass. Next try: move the per-item prep (texture key, depth zoom) to the ME, after P115."
   },
   {
    "id": "P105",

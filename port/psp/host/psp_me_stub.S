@@ -7,6 +7,7 @@
 	.text
 	.globl psp_me_stub
 	.globl psp_me_stub_end
+	.globl psp_me_park
 psp_me_stub:
 	lui	$k0, 0xBC10
 	lw	$k1, 0x50($k0)		/* bus clock enable: ME bits on */
@@ -36,5 +37,11 @@ psp_me_stub:
 	lw	$sp, 0x604($t0)		/* stack top (kseg0) */
 	lw	$a0, 0x608($t0)		/* argument */
 	jr	$t1
+	nop
+/* P104: where our ME code goes when the program exits (its own code may be
+ * gone or overwritten next): a loop in the ME's reset-vector memory */
+psp_me_park:
+	sync
+1:	b	1b
 	nop
 psp_me_stub_end:
