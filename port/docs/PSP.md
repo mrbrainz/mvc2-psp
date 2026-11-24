@@ -517,6 +517,23 @@ Mesh submit cost and swizzled textures (P109, 2026-11-23, PSP-2003, `fight6`, `P
 - **Left:** the rest of the RAM traffic (P111) and the per-draw work before
   submit (P110).
 
+GE main-RAM traffic (P111, 2026-11-24, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1`, two runs each; closed, no lossless cut):
+- **Textures:** about 33 binds a fight frame read from RAM. Pointing them at
+  VRAM (same reads, wrong pixels) took the render pass from 18.10 to
+  17.18 ms, so they cost about 0.9 ms. Every fight texture is IDX8 and uses
+  all 256 palette entries, so none can become T4. The working set is about
+  1.1 MB against a 434 KB cache.
+- **VRAM choice:** one 512x512 texture (256 KB, 8 binds a frame) holds 60%
+  of the cache. A policy that keeps the most binds per KB moved binds from
+  33 RAM / 14 VRAM to 12 / 34, but the pass went 18.31 -> 18.45 ms: big,
+  rarely bound textures are read the most. Keeping textures over 128 KB out
+  measured -0.25 ms in this one scene, too little to generalise.
+- **Other readers:** 105 of 107 `gv` draws already read the P108 pool, and
+  lit draws are about 0 a frame. Character atlas pages from VRAM: -0.05 ms.
+  CLUT loads are about 47 KB a frame. A 160 KB mesh pool (more texture
+  space) gave the same pass as 256 KB; 128 KB was 0.6 ms worse.
+- **Left:** cutting texture reads means lossy copies (P105).
+
 Hot routines first in .text (P101, 2026-11-23, PSP-2003, `fight6`, `PROFILE=1`):
 - **How it works:** every o32 TU is built with `-ffunction-sections`, and
   `port/psp/hot_order.ld` (`ld --section-ordering-file`) puts the 171

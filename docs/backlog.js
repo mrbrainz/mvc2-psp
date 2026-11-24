@@ -106,23 +106,6 @@ window.BACKLOG = {
  ],
  "activities": [
   {
-   "id": "P111",
-   "order": 40,
-   "phase": "P4",
-   "size": "M",
-   "status": "Ready",
-   "depends": [
-    "P109"
-   ],
-   "read": [
-    "port/render/r_gu.c",
-    "port/docs/PSP.md"
-   ],
-   "title": "Hardware speed: GE main-RAM traffic in fights",
-   "description": "The GE's main-RAM reads slow the CPU's render pass (P107-P109): in fight6 about 33 texture binds a frame (~870 KB of texture size, mostly IDX8) miss the 434 KB VRAM texture cache, plus 47 CLUT loads (1 KB each) and the vertices of lit and list-memory meshes. Try: CLUTs in VRAM, a VRAM cache policy that keeps the textures with the most texel reads, and lit-mesh vertices in the P108 pool. Measure with A/B pairs in one build (code layout and struct sizes move results ~0.3-0.5 ms). Output must stay identical; lossy options are P105.",
-   "done_when": "Render pass per drawn fight step (fight6, PSP-2003, PROFILE=1 NO_FRAME_SKIP=1) down >= 1 ms from 17.9 ms, PPSSPP shots f1-f6 unchanged."
-  },
-  {
    "id": "P110",
    "order": 40,
    "phase": "P4",
@@ -137,8 +120,8 @@ window.BACKLOG = {
     "port/docs/PSP.md"
    ],
    "title": "Hardware speed: per-draw mesh work before submit (clay_draw)",
-   "description": "With zero submits fl_clay_draw is still ~4 ms per drawn fight step (P107 4.78 ms minus P83's 0.8 ms bbox gain): colour/vertex copy, three matrix products, viewport key, ADC, clip prep, mesh_vram. Split it by removal as in PSP.md (P107), then move the scalar float work to VFPU registers or skip it when the inputs are unchanged. With P111 this is what is left of P83's fl_clay_draw <= 4 ms target.",
-   "done_when": "fl_clay_draw <= 4 ms per drawn step in fight6 on PSP-2003 (PROFILE=1 NO_FRAME_SKIP=1) together with P111, PPSSPP shots f1-f6 unchanged."
+   "description": "With zero submits fl_clay_draw is still ~4 ms per drawn fight step (P107 4.78 ms minus P83's 0.8 ms bbox gain): colour/vertex copy, three matrix products, viewport key, ADC, clip prep, mesh_vram. Split it by removal as in PSP.md (P107), then move the scalar float work to VFPU registers or skip it when the inputs are unchanged. This is what is left of P83's fl_clay_draw <= 4 ms target.",
+   "done_when": "fl_clay_draw <= 4 ms per drawn step in fight6 on PSP-2003 (PROFILE=1 NO_FRAME_SKIP=1) PPSSPP shots f1-f6 unchanged."
   },
   {
    "id": "P98",

@@ -1223,6 +1223,24 @@ window.BACKLOG_ARCHIVE = [
   "note": "Premise revised: doubling the projection words or the texture binds adds only 0.04/0.07 ms, so a submit's own CPU work is small; the P107 'submit cost' is mostly the GE's main-RAM traffic slowing the CPU (33 texture binds a fight frame come from RAM). Textures and character atlas pages are now stored swizzled (MVC2_NO_SWIZZLE=1: off): render pass 18.59 -> 17.87 ms, fl_clay_draw 6.93 -> 6.89 (PSP-2003, fight6, two runs each), PPSSPP shots f1-f6 identical. RAM traffic left in P111."
  },
  {
+  "id": "P111",
+  "order": 40,
+  "phase": "P4",
+  "size": "M",
+  "status": "Won't fix",
+  "depends": [
+   "P109"
+  ],
+  "read": [
+   "port/render/r_gu.c",
+   "port/docs/PSP.md"
+  ],
+  "title": "Hardware speed: GE main-RAM traffic in fights",
+  "description": "The GE's main-RAM reads slow the CPU's render pass (P107-P109): in fight6 about 33 texture binds a frame (~870 KB of texture size, mostly IDX8) miss the 434 KB VRAM texture cache, plus 47 CLUT loads (1 KB each) and the vertices of lit and list-memory meshes. Try: CLUTs in VRAM, a VRAM cache policy that keeps the textures with the most texel reads, and lit-mesh vertices in the P108 pool. Measure with A/B pairs in one build (code layout and struct sizes move results ~0.3-0.5 ms). Output must stay identical; lossy options are P105.",
+  "done_when": "Render pass per drawn fight step (fight6, PSP-2003, PROFILE=1 NO_FRAME_SKIP=1) down >= 1 ms from 17.9 ms, PPSSPP shots f1-f6 unchanged.",
+  "note": "Measured, no lossless cut left: mesh vertices are done (105 of 107 gv draws read the VRAM pool, lit draws ~0), and character pages or CLUTs from VRAM change the pass by <= 0.05 ms. RAM textures still cost ~0.9 ms (same reads from VRAM: 18.10 -> 17.18), but every fight texture uses all 256 palette entries and the working set is ~2.5x the 434 KB cache; a binds-per-KB VRAM policy moved 21 binds a frame to VRAM yet was 0.14 ms slower, a 160 KB mesh pool gained nothing. Lossy texture options stay in P105."
+ },
+ {
   "id": "P73",
   "order": 42,
   "phase": "P6",
