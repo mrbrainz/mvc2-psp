@@ -32,4 +32,4 @@ A PSP build of the Marvel vs. Capcom 2 decompilation, as a new platform backend 
 
 ## Status (max 3 lines; replace, never append)
 - Boots and plays on a PSP-2003 (ARK-4) after the P82 hardware fixes; release pipeline done (P68-P71, P81).
-- Next: hardware speed P110 (fl_clay_draw ~6.9 ms per drawn fight step, target 4; render pass ~17.9 ms), P105 (texture reads ~0.9 ms), P98/P99; PSP-1000 support (P73-P80).
+- Next: hardware speed P112 (layout moves the render pass up to 1.2 ms), P110 (fl_clay_draw ~6.3 ms per drawn fight step, target 4; render pass ~17.3 ms), P105, P98/P99; PSP-1000 support (P73-P80).

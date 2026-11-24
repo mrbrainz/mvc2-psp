@@ -487,3 +487,237 @@ vfpu_bbox_inside:
     jr      $ra
     and     $v0, $v0, $t4
     .end vfpu_bbox_inside
+
+/* int vfpu_clipbox_inside(const float m[16], const float bb[6])  (P110)
+ * clip_bbox_inside in VFPU registers: 1 when every corner k = (c, 1) * m of
+ * the box bb has k.w - s >= 1 and |k.x|, |k.y| < 4 k.w - s, s = 5e-5 * smax
+ * (smax as vfpu_bbox_inside: >= the C path's per-corner bound); 0 when
+ * smax >= 1e30 or m is not finite.  Corners as vfpu_bbox_inside. */
+    .globl vfpu_clipbox_inside
+    .ent vfpu_clipbox_inside
+vfpu_clipbox_inside:
+    LOADM   $a0
+    lv.s    S300, 0($a1)
+    lv.s    S301, 4($a1)
+    lv.s    S302, 8($a1)
+    lv.s    S310, 12($a1)
+    lv.s    S311, 16($a1)
+    lv.s    S312, 20($a1)
+    vone.s  S303
+    vabs.q  C200, C000
+    vabs.q  C210, C010
+    vabs.q  C220, C020
+    vabs.q  C230, C030
+    vtfm4.q C400, M000, C300
+    vsub.t  C320, C310, C300
+    vzero.q C330
+    vmov.s  S330, S320
+    vtfm4.q C410, M000, C330
+    vzero.q C330
+    vmov.s  S331, S321
+    vtfm4.q C420, M000, C330
+    vzero.q C330
+    vmov.s  S332, S322
+    vtfm4.q C430, M000, C330
+    vmov.q  C500, C400
+    vadd.q  C510, C400, C410
+    vadd.q  C520, C400, C420
+    vadd.q  C530, C510, C420
+    vadd.q  C600, C500, C430
+    vadd.q  C610, C510, C430
+    vadd.q  C620, C520, C430
+    vadd.q  C630, C530, C430
+    vabs.t  C100, C300                  /* smax */
+    vabs.t  C110, C310
+    vmax.t  C100, C100, C110
+    vone.s  S103
+    vtfm4.q C110, M200, C100
+    vmax.s  S700, S110, S111
+    vmax.s  S701, S112, S113
+    vmax.s  S700, S700, S701
+    li      $t0, 0x3851B717             /* 5e-5f = 1e-5 * (GUARD + 1) */
+    mtv     $t0, S701
+    vmul.s  S701, S700, S701            /* s */
+    vfim.s  S702, 4.0
+    vone.q  C130
+    vscl.q  C130, C130, S701            /* s x4 */
+    vscl.q  C120, R503, S702            /* gw = 4w - s */
+    vsub.q  C120, C120, C130
+    vabs.q  R500, R500
+    vabs.q  R501, R501
+    vsub.q  R500, C120, R500
+    vsub.q  R501, C120, R501
+    vmin.q  C100, R500, R501            /* A: gw - |x|, gw - |y| */
+    vsub.q  C110, R503, C130            /* B: w - s */
+    vscl.q  C120, R603, S702
+    vsub.q  C120, C120, C130
+    vabs.q  R600, R600
+    vabs.q  R601, R601
+    vsub.q  R600, C120, R600
+    vsub.q  R601, C120, R601
+    vmin.q  C100, C100, R600
+    vmin.q  C100, C100, R601
+    vsub.q  R603, R603, C130
+    vmin.q  C110, C110, R603
+    vmin.s  S100, S100, S101
+    vmin.s  S102, S102, S103
+    vmin.s  S100, S100, S102
+    vmin.s  S110, S110, S111
+    vmin.s  S112, S112, S113
+    vmin.s  S110, S110, S112
+    vone.s  S111
+    vsub.s  S110, S110, S111            /* min(w - s) - 1, must be >= 0 */
+    vadd.q  C200, C000, C010            /* finite check of m */
+    vadd.q  C210, C020, C030
+    vadd.q  C200, C200, C210
+    vfad.q  S710, C200
+    mfv     $t0, S100
+    mfv     $t7, S110
+    mfv     $t1, S700
+    mfv     $t2, S710
+    li      $t3, 0x7F800000
+    slt     $v0, $zero, $t0             /* A > 0, finite */
+    slt     $t4, $t0, $t3
+    and     $v0, $v0, $t4
+    slt     $t4, $t7, $t3               /* B - 1 >= 0 (signed: sign bit clear), finite */
+    and     $v0, $v0, $t4
+    slt     $t4, $t7, $zero
+    xori    $t4, $t4, 1
+    and     $v0, $v0, $t4
+    li      $t5, 0x7149F2CA             /* 1e30f */
+    sltu    $t4, $t1, $t5
+    and     $v0, $v0, $t4
+    and     $t6, $t2, $t3
+    xor     $t6, $t6, $t3
+    sltu    $t4, $zero, $t6
+    jr      $ra
+    and     $v0, $v0, $t4
+    .end vfpu_clipbox_inside
+
+/* int vfpu_clip_any(const float m[16], const void *gvtx, int n)  (P110)
+ * 0 when no vertex k = (pos_i, 1) * m (pos at +12, stride 24) would get a
+ * vfpu_clip_codes outcode (sign of w - 1, 4w - x, 4w + x, 4w - y, 4w + y)
+ * and the sum of every k is finite; 1 otherwise (maybe: run the full codes).
+ * Registers only, no stores. */
+    .globl vfpu_clip_any
+    .ent vfpu_clip_any
+vfpu_clip_any:
+    LOADM   $a0
+    vone.s  S103
+    vone.s  S131
+    vfim.s  S130, 4.0
+    vzero.q C200                        /* sum of k */
+    li      $t0, 0x7F7FFFFF             /* FLT_MAX */
+    mtv     $t0, S701
+    vone.q  C210
+    vscl.q  C210, C210, S701            /* min accumulators */
+    vmov.p  C220, C210
+    li      $v0, 0
+    beqz    $a2, 2f
+    nop
+1:  lv.s    S100, 12($a1)
+    lv.s    S101, 16($a1)
+    lv.s    S102, 20($a1)
+    vtfm4.q C110, M000, C100
+    addiu   $a1, $a1, 24
+    addiu   $a2, $a2, -1
+    vadd.q  C200, C200, C110
+    vmul.s  S120, S113, S130            /* gw = 4w, as vfpu_clip_codes */
+    vsub.s  S121, S113, S131
+    vsub.s  S122, S120, S110
+    vadd.s  S123, S120, S110
+    vsub.s  S300, S120, S111
+    vadd.s  S301, S120, S111
+    vmin.q  C210, C210, C120
+    bnez    $a2, 1b
+    vmin.p  C220, C220, C300
+    vmin.s  S210, S210, S211
+    vmin.s  S212, S212, S213
+    vmin.s  S210, S210, S212
+    vmin.s  S220, S220, S221
+    vmin.s  S210, S210, S220
+    vfad.q  S710, C200
+    mfv     $t0, S210
+    mfv     $t2, S710
+    li      $t3, 0x7F800000
+    srl     $v0, $t0, 31                /* a negative (or -0) difference */
+    and     $t6, $t2, $t3
+    xor     $t6, $t6, $t3
+    sltiu   $t4, $t6, 1                 /* sum not finite */
+    or      $v0, $v0, $t4
+2:  jr      $ra
+    nop
+    .end vfpu_clip_any
+
+/* void vfpu_mesh_mats(const float *p[7])  (P110)
+ * p = { a, b, c, t, cl, clip_out, cm_out }: wv = a * b, clip_out =
+ * (wv * c) * t, and cm_out = wv * cl when cm_out is not NULL.  The same
+ * vtfm4 rows as chained vfpu_mat_mul calls (bit-identical); wv and wv * c
+ * stay in registers (M400, M500). */
+.macro ROWS4 src, base0, base1, base2, base3
+    lv.s    S100, 0(\src)
+    lv.s    S101, 4(\src)
+    lv.s    S102, 8(\src)
+    lv.s    S103, 12(\src)
+    vtfm4.q \base0, M000, C100
+    lv.s    S100, 16(\src)
+    lv.s    S101, 20(\src)
+    lv.s    S102, 24(\src)
+    lv.s    S103, 28(\src)
+    vtfm4.q \base1, M000, C100
+    lv.s    S100, 32(\src)
+    lv.s    S101, 36(\src)
+    lv.s    S102, 40(\src)
+    lv.s    S103, 44(\src)
+    vtfm4.q \base2, M000, C100
+    lv.s    S100, 48(\src)
+    lv.s    S101, 52(\src)
+    lv.s    S102, 56(\src)
+    lv.s    S103, 60(\src)
+    vtfm4.q \base3, M000, C100
+.endm
+.macro STROW c0, c1, c2, c3, dst, off
+    sv.s    \c0, \off(\dst)
+    sv.s    \c1, \off+4(\dst)
+    sv.s    \c2, \off+8(\dst)
+    sv.s    \c3, \off+12(\dst)
+.endm
+    .globl vfpu_mesh_mats
+    .ent vfpu_mesh_mats
+vfpu_mesh_mats:
+    lw      $t0, 0($a0)                 /* a */
+    lw      $t1, 4($a0)                 /* b */
+    LOADM   $t1
+    ROWS4   $t0, C400, C410, C420, C430 /* wv rows */
+    lw      $t1, 8($a0)                 /* c */
+    LOADM   $t1
+    vtfm4.q C500, M000, C400            /* mvp rows */
+    vtfm4.q C510, M000, C410
+    vtfm4.q C520, M000, C420
+    vtfm4.q C530, M000, C430
+    lw      $t1, 12($a0)                /* t */
+    lw      $t2, 20($a0)                /* clip_out */
+    LOADM   $t1
+    vtfm4.q C110, M000, C500
+    vtfm4.q C120, M000, C510
+    vtfm4.q C130, M000, C520
+    vtfm4.q C100, M000, C530
+    STROW   S110, S111, S112, S113, $t2, 0
+    STROW   S120, S121, S122, S123, $t2, 16
+    STROW   S130, S131, S132, S133, $t2, 32
+    STROW   S100, S101, S102, S103, $t2, 48
+    lw      $t3, 24($a0)                /* cm_out */
+    beqz    $t3, 1f
+    lw      $t1, 16($a0)                /* cl */
+    LOADM   $t1
+    vtfm4.q C110, M000, C400
+    vtfm4.q C120, M000, C410
+    vtfm4.q C130, M000, C420
+    vtfm4.q C100, M000, C430
+    STROW   S110, S111, S112, S113, $t3, 0
+    STROW   S120, S121, S122, S123, $t3, 16
+    STROW   S130, S131, S132, S133, $t3, 32
+    STROW   S100, S101, S102, S103, $t3, 48
+1:  jr      $ra
+    nop
+    .end vfpu_mesh_mats

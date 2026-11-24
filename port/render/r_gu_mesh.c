@@ -94,6 +94,9 @@ int vfpu_clip_codes(const float m[16], const void *gvtx, int n, void *out[2]);
 void vfpu_bbox_corners(const float m[16], float k[32], float *smax);
 void vfpu_bbox(const void *mvtx, int n, float out[6]);
 int vfpu_bbox_inside(const float m[16], const float bb[6]);
+int vfpu_clipbox_inside(const float m[16], const float bb[6]);
+int vfpu_clip_any(const float m[16], const void *gvtx, int n);
+void vfpu_mesh_mats(const float *p[7]);
 void vfpu_lit(const float p[26], const void *mvtx, const uint16_t *list, float *out3);
 static int use_vfpu = -1;
 static void fl_mat_mul_c(float out[16], const float a[16], const float b[16]);
@@ -555,11 +558,14 @@ int r_discarding(void);
 int fl_clay_draw(int h)
 {
     if (r_discarding()) return 1;   /* frame skip (P88): the logic ran, nothing is drawn */
-    unsigned t0 = sceKernelGetSystemTimeLow();
+    static int dl = -1;   /* P110: the DRAWLOG time costs two timer syscalls a draw */
+    unsigned t0;
     int r;
+    if (dl < 0) dl = getenv("DRAWLOG") != NULL;
     if (r_gu_mesh_check) r_gu_mesh_check();
-    r = clay_draw(h);
-    r_gu_mesh_cnt[2] += (int)(sceKernelGetSystemTimeLow() - t0);
+    t0 = dl ? sceKernelGetSystemTimeLow() : 0;
+    r = clay_draw(h);   /* one call site: clay_draw stays inlined in the P101 hot block */
+    if (dl) r_gu_mesh_cnt[2] += (int)(sceKernelGetSystemTimeLow() - t0);
     return r;
 }
 
@@ -609,6 +615,7 @@ static int bbox_corners(MMesh *me, const float cm[16], float k[8][4], float *sma
 static int clip_bbox_inside(MMesh *me, const float clip[16])
 {
     float k[8][4], smax, m;
+    if (use_vfpu > 0 && me->bbok) return vfpu_clipbox_inside(clip, me->bb);   /* P110: in VFPU registers */
     if (!bbox_corners(me, clip, k, &smax)) return 0;
     m = 1e-5f * smax * (GUARD + 1.f);
     for (int c = 0; c < 8; c++) {
@@ -899,8 +906,10 @@ static int clay_draw(int h)
     PA(30, "        clay colours + vertex copy", t_col);
     PT(t_adc);
     /* world * view * projection, then the viewport (func_003DD5D0, canvas NDC), then the screen */
-    fl_mat_mul(wv, r_matrix(0x19), r_matrix(0x16));
-    fl_mat_mul(mvp, wv, r_matrix(0x17));
+    static int adc_off = -1;
+    if (adc_off < 0) adc_off = getenv("MVC2_NO_ADC") != NULL;
+    const int adc = !adc_off && (have_clipm || clip_src) && !(me->desc == 19 || (me->desc >= 44 && me->desc <= 48));
+    float cm[16];
     r_viewport(vi, vf);
     {   /* P88: viewport * canvas -> GE depends only on these; recomputed on change */
         static float key[10], t[16];
@@ -924,7 +933,15 @@ static int clay_draw(int h)
             memcpy(key, k, sizeof k);
             ok = 1;
         }
-        fl_mat_mul(clip, mvp, t);
+        if (use_vfpu > 0) {   /* P110: the chain below in one VFPU call, intermediates in registers */
+            const float *mp[7] = { r_matrix(0x19), r_matrix(0x16), r_matrix(0x17), t, clip_src ? clip_src : clipm, clip, adc ? cm : NULL };
+            vfpu_mesh_mats(mp);
+        } else {
+            fl_mat_mul(wv, r_matrix(0x19), r_matrix(0x16));
+            fl_mat_mul(mvp, wv, r_matrix(0x17));
+            fl_mat_mul(clip, mvp, t);
+            if (adc) fl_mat_mul(cm, wv, clip_src ? clip_src : clipm);
+        }
     }
 
     /* UV matrix slot 0x1A (format 0x4000): scale and offset */
@@ -939,14 +956,10 @@ static int clay_draw(int h)
      * band) is not drawn by the GS; the GE would clip and draw it. */
     const uint16_t *idx = me->idx;
     {
-        static int off = -1;
         static uint8_t *out;
         static int out_cap;
-        if (off < 0) off = getenv("MVC2_NO_ADC") != NULL;
-        if (!off && (have_clipm || clip_src) && !(me->desc == 19 || (me->desc >= 44 && me->desc <= 48))) {
-            float cm[16];
+        if (adc) {
             int any = 0;
-            fl_mat_mul(cm, wv, clip_src ? clip_src : clipm);
             if (bbox_inside(me, cm)) {
                 if (prof) psp_prof_add(36, "        clay ADC bbox skips per frame (count)", 1000);
                 for (int r = 0; r < me->nrange; r++) adc_count[r] = me->range[r].count;
@@ -991,6 +1004,7 @@ static int clay_draw(int h)
     PT(t_sub);
     { PT(t_cp);
     clipping = (me->desc == 19 || (me->desc >= 44 && me->desc <= 46)) && !clip_bbox_inside(me, clip) &&
+               (use_vfpu <= 0 || vfpu_clip_any(clip, g, me->nverts)) &&   /* P110: registers-only pre-pass */
                clip_prepare(clip, g, me->nverts);
     PA(26, "        clay clip_prepare", t_cp);
     if (prof && (me->desc == 19 || (me->desc >= 44 && me->desc <= 46))) {

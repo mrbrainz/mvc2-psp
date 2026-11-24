@@ -534,6 +534,31 @@ GE main-RAM traffic (P111, 2026-11-24, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_S
   space) gave the same pass as 256 KB; 128 KB was 0.6 ms worse.
 - **Left:** cutting texture reads means lossy copies (P105).
 
+Per-draw mesh work (P110, 2026-11-24, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1`, two runs each; partial):
+- **Doubling each stage** (the extra cost of running it twice, `fl_clay_draw`):
+  the timer reads +0.20 ms, `r_gu_begin` +0.19, the matrix chain +0.38, the
+  ADC +0.14, clip prep +0.41. 41 of about 107 draws a frame use the clipping
+  programs, and only 5 of those need `near_clip`.
+- **The changes:** `vfpu_mesh_mats` does world * view * projection * screen
+  and the ADC matrix in one call, with intermediates in registers. It runs
+  the same `vtfm4` rows as chained `vfpu_mat_mul`, and was bit-identical
+  over 299,008 draws. `vfpu_clipbox_inside` is the clip box test in
+  registers, as P83's. `vfpu_clip_any` is a registers-only pass that skips
+  `clip_prepare` when no vertex would get an outcode. Over 186,368 draws
+  both agreed with the old code every time. `fl_clay_draw` reads the timer
+  only with `DRAWLOG`.
+- **Result against HEAD:** `fl_clay_draw` 6.89 -> 6.25-6.27 ms, render pass
+  17.88 -> 17.26-17.30 ms. In normal mode, fight display fps was 15.98,
+  14.98, 28.54, 14.98, 10.81. PPSSPP shots f1-f6 are byte-identical.
+- **Layout (P112):** giving `clay_draw` a second call site stopped it being
+  inlined and moved about 17 KB out of the P101 hot block, which cost about
+  1 ms. Moving the VFPU routines into or after the hot block cost 0.5-1.2 ms
+  of render pass, and an 8 KB align did not fix it. Within one build the
+  P110 changes were worth 0.85 ms. Check `llvm-nm -n` that the hot block's
+  end moved only by what you changed.
+- **Doubling overstates:** within one build, the summed doubling costs above
+  were about 1.3 ms, and the cuts saved 0.85 ms.
+
 Hot routines first in .text (P101, 2026-11-23, PSP-2003, `fight6`, `PROFILE=1`):
 - **How it works:** every o32 TU is built with `-ffunction-sections`, and
   `port/psp/hot_order.ld` (`ld --section-ordering-file`) puts the 171
