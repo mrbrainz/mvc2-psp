@@ -32,4 +32,4 @@ A PSP build of the Marvel vs. Capcom 2 decompilation, as a new platform backend 
 
 ## Status (max 3 lines; replace, never append)
 - Boots and plays on a PSP-2003 (ARK-4) after the P82 hardware fixes; release pipeline done (P68-P71, P81).
-- Next: P117 (ME sleep: give it back to the firmware; P115 found sleep powers off), then P104 (per-item prep on the ME; the P116 word writer is the default), P110 (fl_clay_draw 4.15 ms, render pass 15.7 ms), P105.
+- Next: P110 (fl_clay_draw 4.15 ms, render pass 15.7 ms; the P116 word writer is the default), P105. ME work parked: P117 blocked (sleep with our ME code powers off), P104 behind it.

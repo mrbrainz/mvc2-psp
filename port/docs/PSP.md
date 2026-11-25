@@ -611,6 +611,20 @@ Media Engine spike (P114, 2026-11-24, PSP-2003 ARK-4, `fight6`, `PROFILE=1 NO_FR
   `env.txt` (ME untouched) sleep, wake and the quit all work (`[plat]
   suspend`/`resume` logged). P117: give the ME back to the firmware before
   sleep.
+- **Cold give-back (P117, 2026-11-25, same setup):** while our code owns the
+  ME, `scePowerLock(0)` is held; the power switch (`[power] flags 8000xxxx`)
+  makes `r_gu_me_poll` park our code, put back the 0x800 bytes of ME RAM
+  saved at take, set the firmware's boot words (0x70C = 0x01FF01FF, 0x714 =
+  2, state 0x700 = -3) and release reset; the firmware's code reports -4
+  (started), then the power lock is dropped. Over PSPLink
+  (`MVC2_ME_GIVEBACK_AT=frame`, no sleep) the ME comes back and is taken
+  again after 3 s mid-fight. Real sleep: suspending starts (`000110e4`), then
+  the same power-off. A cold restart of the firmware's ME code is not enough;
+  its sleep needs the state it had before we took it (halt it with its own
+  sleep-save call at take, resume it from that at give-back).
+- **Power events seen:** switch `800000e4`, suspending `000100e4`, resume
+  complete `000400e4` (bit 0x1000 set on AC power). The log is kept as
+  `mvc2_psp.prev.log` at each start.
 
 Per-draw code footprint (P110, 2026-11-24, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1`, two runs each):
 - **Split by removal (after P116):** `fl_clay_draw` 4.48 ms over ~102 draws:

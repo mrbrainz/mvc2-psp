@@ -209,6 +209,7 @@ static void rt_update(void *u)
         if (skip < 0) { skip = getenv("NO_FRAME_SKIP") == NULL; plat_set_frame_skip(skip); }
         r_set_discard(skip && !plat_step_is_last());
         { extern void psp_me_spike_step(void); psp_me_spike_step(); }   /* P114 spike */
+        { extern void r_gu_me_poll(void); r_gu_me_poll(); }   /* P117: ME back to the firmware for a sleep */
         mvc2_frame();
         r_set_discard(0);
     }

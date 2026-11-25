@@ -12,6 +12,7 @@
  * the ME's buffers and stack are its own (kseg0, cached on the ME only). */
 #include <pspkernel.h>
 #include <kubridge.h>
+#include <psppower.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <malloc.h>
@@ -63,6 +64,12 @@ void psp_me_main(volatile uint32_t *sh)
 
 /* ---------------- main CPU ---------------- */
 /* kernel mode (kuKernelCall): stub and its words to the ME reset vector, ME reset pulsed */
+/* P117: the firmware's words at the ME reset vector, saved when we take the
+ * ME and put back when it is given back (they hold its boot code and state) */
+#define ME_SAVE_WORDS (0x800 / 4)
+static uint32_t me_saved[ME_SAVE_WORDS];
+static int me_saved_ok;
+
 static int me_boot_k(uint32_t entry, uint32_t sp, uint32_t arg)
 {
     volatile uint32_t *v = (volatile uint32_t *)0xBFC00000u;
@@ -70,11 +77,13 @@ static int me_boot_k(uint32_t entry, uint32_t sp, uint32_t arg)
     unsigned n = (unsigned)(psp_me_stub_end - psp_me_stub) / 4;
     volatile uint32_t *rst = (volatile uint32_t *)0xBC10004Cu;
     uint32_t r;
+    r = *rst;
+    *rst = r | 0x14u;   /* ME and VME held in reset while their memory changes */
+    __asm__ volatile("sync");
+    for (unsigned i = 0; i < ME_SAVE_WORDS; i++) me_saved[i] = v[i];
+    me_saved_ok = 1;
     for (unsigned i = 0; i < n; i++) v[i] = s[i];
     v[0x600 / 4] = entry; v[0x604 / 4] = sp; v[0x608 / 4] = arg;
-    __asm__ volatile("sync");
-    r = *rst;
-    *rst = r | 0x14u;
     __asm__ volatile("sync");
     *rst = r & ~0x14u;
     __asm__ volatile("sync");
@@ -98,14 +107,59 @@ static int me_boot(void)
                       (uint32_t)(uintptr_t)me_shared | 0xA0000000u);
 }
 
+/* P117, kernel mode: the ME back to the firmware's code, as at power-on:
+ * held in reset, its saved words put back, boot words set (0x70C, 0x714;
+ * state 0x700 = -3, starting), VME then ME released.  Returns the state
+ * word once it leaves -3 (or -3 if it never did). */
+static int me_give_k(void)
+{
+    volatile uint32_t *v = (volatile uint32_t *)0xBFC00000u;
+    volatile uint32_t *rst = (volatile uint32_t *)0xBC10004Cu;
+    uint32_t r = *rst;
+    *rst = r | 0x14u;
+    __asm__ volatile("sync");
+    for (unsigned i = 0; i < ME_SAVE_WORDS; i++) v[i] = me_saved[i];
+    v[0x70C / 4] = 0x01FF01FFu;
+    v[0x714 / 4] = 2u;
+    v[0x700 / 4] = (uint32_t)-3;
+    __asm__ volatile("sync");
+    *rst = (r | 0x14u) & ~0x10u;
+    __asm__ volatile("sync");
+    *rst = r & ~0x14u;
+    __asm__ volatile("sync");
+    for (unsigned k = 0; k < 50000000u && v[0x700 / 4] == (uint32_t)-3; k++) __asm__ volatile("nop");
+    return (int)v[0x700 / 4];
+}
+
+/* P117: the ME is ours from psp_me_boot_into until psp_me_give_back; the
+ * power lock keeps the PSP from sleeping meanwhile (its sleep waits on the
+ * firmware's ME code) */
+static int me_locked;
+int psp_me_give_back(int *state)
+{
+    KernelCallArg a = {0};
+    int ret;
+    ret = -100;
+    if (me_saved_ok) {
+        sceKernelDcacheWritebackInvalidateAll();
+        ret = kuKernelCall((void *)me_give_k, &a);
+        if (state) *state = (int)a.ret1;
+    }
+    if (me_locked) { scePowerUnlock(0); me_locked = 0; }
+    return ret;
+}
+
 /* P104: the park loop's address on the ME (inside the copied stub) */
 uint32_t psp_me_park_addr(void) { return 0xBFC00000u + (uint32_t)(psp_me_park - psp_me_stub); }
 
 /* P104: boot the ME into entry(shared), shared reached through kseg1 */
 int psp_me_boot_into(void (*entry)(volatile uint32_t *), void *stack_top, void *shared)
 {
+    int r;
     if ((unsigned)(psp_me_stub_end - psp_me_stub) > 0x600) return -2;
-    return me_boot_at(kseg0((const void *)entry), kseg0(stack_top), (uint32_t)(uintptr_t)shared | 0xA0000000u);
+    if (!me_locked) { scePowerLock(0); me_locked = 1; }
+    r = me_boot_at(kseg0((const void *)entry), kseg0(stack_top), (uint32_t)(uintptr_t)shared | 0xA0000000u);
+    return r;
 }
 
 static uint32_t me_bytes, me_beat0, me_kb0;

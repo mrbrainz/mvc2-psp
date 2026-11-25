@@ -1556,6 +1556,66 @@ static void me_wait_all(void)
     if (t) psp_prof_add(54, "  ME list build wait (list close)", psp_prof_now() - t);
 }
 
+void r_gu_me_stop(void);
+/* boot our loop on the ME (start, and after a wake, P117); falls back to
+ * the main CPU when it does not start */
+static int me_want, me_away, me_saw_suspend;   /* ME asked for; given back for a sleep; suspend seen since */
+static unsigned long long me_away_t;
+__attribute__((noinline, cold)) static int me_take(void)
+{
+    extern int psp_me_boot_into(void (*entry)(volatile uint32_t *), void *stack_top, void *shared);
+    uint32_t b;
+    int r;
+    memset(me_shared, 0, sizeof me_shared);
+    me_head = me_words0 = 0;
+    me_pend_n = 0;
+    r = psp_me_boot_into(gume_serve, me_stack + sizeof me_stack, me_shared);
+    b = me_sh()[MS_BEAT];
+    sceKernelDelayThread(2000);
+    if (me_sh()[MS_BEAT] == b) {   /* back to the firmware, which also drops the power lock */
+        extern int psp_me_give_back(int *state);
+        int st = 0, g = psp_me_give_back(&st);
+        fprintf(stderr, "[me] list build: ME did not start (%d; given back %d, state %d), main CPU\n", r, g, st);
+        me_on = (me_on & 4) | 2;
+        return 0;
+    }
+    me_on = (me_on & 4) | 1;
+    return 1;
+}
+
+/* P117, once per logic step: on a sleep request the ME goes back to the
+ * firmware (its sleep waits on the firmware's ME code) and the list build to
+ * the main CPU; after the wake (or 3 s without a suspend) it is taken again */
+void r_gu_me_poll(void)
+{
+    extern int psp_sleep_asked(void), psp_woke(void), psp_suspended(void);
+    extern int psp_me_give_back(int *state);
+    if (!me_want) return;
+    if (!me_away) {
+        int r, st = 0;
+        static long test_at = -2;   /* MVC2_ME_GIVEBACK_AT=frame: as if sleep were asked then (testing) */
+        extern volatile long mvc2_host_frame;
+        int asked = psp_sleep_asked();
+        if (test_at == -2) { const char *e = getenv("MVC2_ME_GIVEBACK_AT"); test_at = e ? atol(e) : -1; }
+        if (test_at >= 0 && mvc2_host_frame == test_at) asked = 1;
+        if (!asked || (me_on & 3) != 1) return;
+        fprintf(stderr, "[me] sleep asked: giving the ME back\n");
+        me_wait_all();
+        r_gu_me_stop();
+        r = psp_me_give_back(&st);
+        fprintf(stderr, "[me] sleep asked: ME given back to the firmware (%d, state %d)\n", r, st);
+        me_away = 1; me_saw_suspend = 0;
+        me_away_t = sceKernelGetSystemTimeWide();
+        return;
+    }
+    if (psp_suspended()) me_saw_suspend = 1;
+    if (psp_woke() || (!me_saw_suspend && sceKernelGetSystemTimeWide() - me_away_t > 3000000ull)) {
+        me_away = 0;
+        fprintf(stderr, "[me] %s: list build %s\n", me_saw_suspend ? "wake" : "no sleep came",
+                me_take() ? "on the Media Engine again" : "stays on the main CPU");
+    }
+}
+
 __attribute__((noinline, cold)) static void me_init(void)
 {
     const char *e = getenv("MVC2_ME_BUILD");
@@ -1563,16 +1623,7 @@ __attribute__((noinline, cold)) static void me_init(void)
     if (getenv("MVC2_ME_CHECK")) me_on = 2 | 4;
     if (me_on == 3) me_on = 0;
     if (me_on == 1 && getenv("ME_SPIKE")) { fprintf(stderr, "[me] ME_SPIKE set: list build stays on the main CPU\n"); me_on = 2; }
-    if (me_on == 1) {
-        extern int psp_me_boot_into(void (*entry)(volatile uint32_t *), void *stack_top, void *shared);
-        uint32_t b;
-        int r;
-        memset(me_shared, 0, sizeof me_shared);
-        r = psp_me_boot_into(gume_serve, me_stack + sizeof me_stack, me_shared);
-        b = me_sh()[MS_BEAT];
-        sceKernelDelayThread(2000);
-        if (me_sh()[MS_BEAT] == b) { fprintf(stderr, "[me] list build: ME did not start (%d), main CPU\n", r); me_on = 2; }
-    }
+    if (me_on == 1) { me_want = 1; me_take(); }
     if (me_on & 5) fprintf(stderr, "[me] list build on the %s%s\n", (me_on & 3) == 1 ? "Media Engine" : "main CPU", me_on & 4 ? ", checked against sceGu" : "");
 }
 
@@ -1589,6 +1640,7 @@ void r_gu_me_stop(void)
     for (int i = 0; i < 100 && !sh[MS_PARKED]; i++) sceKernelDelayThread(100);
     fprintf(stderr, "[me] list build: ME %s\n", sh[MS_PARKED] ? "parked" : "did not answer");
     me_on = 2;
+    memset(&me_shadow, 0, sizeof me_shadow);   /* the GE's state is not known here */
 }
 
 /* MVC2_ME_CHECK: one item's words (bind forced, shadow empty) against the
@@ -1781,7 +1833,9 @@ static void me_prof(void)
 {
     uint32_t w;
     if (!me_on || !psp_prof_on()) return;
+    static int last = -1;
     w = (me_on & 3) == 1 ? me_sh()[MS_WORDS] : me_local_words;
+    if ((me_on & 3) != last) { last = me_on & 3; me_words0 = w; }   /* the counter changed sides */
     psp_prof_add(56, "  ME list build words (count)", 1000ull * (w - me_words0));
     psp_prof_add(57, "  GE held at an ME call (count)", 1000ull * me_held);
     me_words0 = w; me_held = 0;

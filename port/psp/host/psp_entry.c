@@ -64,7 +64,7 @@ void psp_mem_report(const char *when) {
 
 /* HOME -> Exit: ask the loop to stop (plat_quit_requested), so the log is
  * closed and the module exits from main; give up after 3 s if it does not. */
-static volatile int exit_req, suspended, main_done;
+static volatile int exit_req, suspended, main_done, sleep_asked, woke;
 int psp_exit_requested(void) { return exit_req; }
 int psp_suspended(void) { return suspended; }
 
@@ -77,11 +77,25 @@ static int exit_cb(int a, int b, void *c) {
     sceKernelExitGame();
     return 0;
 }
+/* P117: sleep_asked (power switch, suspend, standby; not the switch bit
+ * that comes with a wake) and woke (resume complete), read and cleared by
+ * the ME hand-back in r_gu.c */
+int psp_sleep_asked(void) { int r = sleep_asked; sleep_asked = 0; return r; }
+int psp_woke(void) { int r = woke; woke = 0; return r; }
 static int power_cb(int unknown, int flags, void *c) {
+    {   /* P117: every power event in the log */
+        char b[48];
+        sniprintf(b, sizeof b, "[power] flags %08x\n", (unsigned)flags);
+        psp_log(b);
+    }
     if (flags & (PSP_POWER_CB_SUSPENDING | PSP_POWER_CB_STANDBY))
         suspended = 1;
     else if (flags & PSP_POWER_CB_RESUME_COMPLETE)
         suspended = 0;
+    if (flags & PSP_POWER_CB_RESUME_COMPLETE) { woke = 1; sleep_asked = 0; }
+    else if ((flags & (PSP_POWER_CB_POWER_SWITCH | PSP_POWER_CB_SUSPENDING | PSP_POWER_CB_STANDBY)) &&
+             !(flags & PSP_POWER_CB_RESUMING))
+        sleep_asked = 1;
     return 0;
 }
 static SceUID exit_cbid = -1;
@@ -199,6 +213,10 @@ int main(int argc, char **argv) {
     scePowerSetClockFrequency(333, 333, 166);   /* full speed (default 222 MHz) */
     pspDebugScreenInit();
     {
+        char prev[200];   /* the last run's log kept (a crash's log survives the next start) */
+        gpath(prev, sizeof prev, "mvc2_psp.prev.log");
+        sceIoRemove(prev);
+        sceIoRename(LOG_PATH, prev);
         SceUID fd = sceIoOpen(LOG_PATH, PSP_O_WRONLY | PSP_O_CREAT | PSP_O_TRUNC, 0777);
         if (fd >= 0) { sceIoClose(fd); log_ok = 1; }
     }

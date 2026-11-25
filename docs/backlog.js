@@ -116,7 +116,7 @@ window.BACKLOG = {
    "order": 38,
    "phase": "P4",
    "size": "M",
-   "status": "Ready",
+   "status": "Blocked",
    "depends": [
     "P115"
    ],
@@ -127,7 +127,8 @@ window.BACKLOG = {
    ],
    "title": "Media Engine: give it back to the firmware before sleep, take it again on wake",
    "description": "P115: sleep with our code on the ME powers the PSP off; without ME use it works (2026-11-25). On PSP_POWER_CB_SUSPENDING: park our ME code, put back the reset-vector words psp_me.c overwrote (saved at boot) and restart the firmware's ME code so its sleep handling runs; on resume boot ours again (the P104 path waits for or rebuilds any pending job).",
-   "done_when": "Sleep and wake from a fight with MVC2_ME_BUILD=1 work on the PSP-2003 and the fight goes on with the ME building."
+   "done_when": "Sleep and wake from a fight with MVC2_ME_BUILD=1 work on the PSP-2003 and the fight goes on with the ME building.",
+   "note": "Cold give-back built (power lock, ME RAM saved at take, firmware boot words, state -3 -> -4): works over PSPLink without sleep, but sleep still powers off (PSP.md). Needs the firmware ME halted with its sleep-save call at take and resumed from it at give-back; blocked on a decision, since the ME brings no speed now (P116)."
   },
   {
    "id": "P110",
@@ -191,7 +192,8 @@ window.BACKLOG = {
    "size": "L",
    "status": "Backlog",
    "depends": [
-    "P103"
+    "P103",
+    "P117"
    ],
    "read": [
     "port/docs/PSP.md",
