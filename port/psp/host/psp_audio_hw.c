@@ -77,9 +77,13 @@ void psp_audio_hw_unlock(void) { sceKernelSignalSema(sema, 1); }
 
 void psp_audio_hw_report(void)
 {
-    char b[128];
-    sniprintf(b, sizeof b, "[audio] fills %u, mean fill %u us, worst fill %u us, underruns %u total\n", fills,
-              fills ? total_us / fills : 0, worst_us, underruns);
+    static unsigned last;
+    char b[192];
+    unsigned t = now_us(), wall = last ? t - last : 0, per = 0;
+    if (wall) per = (unsigned)((unsigned long long)total_us * 16683u / wall);   /* us of mixing per 60 Hz frame */
+    sniprintf(b, sizeof b, "[audio] fills %u, mean fill %u us, worst fill %u us, underruns %u total; mixing %u.%02u ms per 60 Hz frame over %u ms\n",
+              fills, fills ? total_us / fills : 0, worst_us, underruns, per / 1000, (per % 1000) / 10, wall / 1000);
     psp_log(b);
     fills = worst_us = total_us = 0;
+    last = t;
 }

@@ -626,6 +626,20 @@ Media Engine spike (P114, 2026-11-24, PSP-2003 ARK-4, `fight6`, `PROFILE=1 NO_FR
   complete `000400e4` (bit 0x1000 set on AC power). The log is kept as
   `mvc2_psp.prev.log` at each start.
 
+Audio mix cost (P106, 2026-11-25, PSP-2003, `fight6`, one run each):
+- **How:** the `[audio]` line (every 300 logic frames) now also gives the
+  fill time per 60 Hz frame: the summed wall time of the audio thread's
+  fills (`device_fill`, priority 0x12, above the game thread) over the wall
+  time since the last line. Profile timers already leave this time out (P91),
+  so render pass figures never included it.
+- **Result:** 1024-sample fills at ~47 a second. Fight blocks in normal mode
+  (no PROFILE): 1.28, 1.22, 1.79, 1.63, 1.85 ms per frame (mean 1.55);
+  character select and VERSUS 1.8-2.0; menus 0.8. With `PROFILE=1
+  NO_FRAME_SKIP=1` the same within 0.1 ms (1.20-1.75).
+- **Not covered:** a fill waiting on `audio_lock` while the game thread
+  holds it counts as fill time, so this is an upper bound on what the mix
+  takes from the main CPU; no split into decode and mix.
+
 Per-draw code footprint (P110, 2026-11-24, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1`, two runs each):
 - **Split by removal (after P116):** `fl_clay_draw` 4.48 ms over ~102 draws:
   entry + `r_gu_begin` 0.76, colours/vertex copy 0.54, matrices 0.71, ADC

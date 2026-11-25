@@ -236,7 +236,8 @@ window.BACKLOG = {
    ],
    "title": "Hardware speed: audio mixing on the Media Engine",
    "description": "Ideas from gibletto/mvc2-naomi-dc ports/port/psp (AGPL-3.0: ideas only, no code copied). Once P104 owns the ME, run the frame's sound mix there after the list build, if the profile shows mixing costs the main CPU measurable time per frame. Output must stay sample-identical.",
-   "done_when": "Mix time per frame measured on hardware; if moved, WAV output identical to the main-CPU mix and frame time measured before and after."
+   "done_when": "Mix time per frame measured on hardware; if moved, WAV output identical to the main-CPU mix and frame time measured before and after.",
+   "note": "Measured 2026-11-25 (PSP.md): the mix takes 1.2-1.85 ms per 60 Hz frame in fights (mean 1.55), up to 2.0 in character select; upper bound (includes waits on audio_lock). Needs P117 before any ME use."
   },
   {
    "id": "P41",
