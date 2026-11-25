@@ -152,7 +152,7 @@ target_link_options(mvc2_psp PRIVATE -no-pie "@${GLUE}/link_extra.rsp" -Wl,--sor
   -Wl,--wrap=func_0041DF70 -Wl,--wrap=func_0041EE80
   -Wl,--wrap=func_00130040 -Wl,--wrap=func_0038B2E0 -Wl,--wrap=func_00128CA0 -Wl,--wrap=func_00149690 -Wl,--wrap=func_00149020 -Wl,--wrap=func_0016B440
   -Wl,--wrap=mkdir -Wl,--wrap=sceGeListUpdateStallAddr
-  -Wl,--wrap=func_001538B0 -Wl,--wrap=func_001537D0 -Wl,--wrap=func_00152400   # P98: psp_node_draw.c
+  -Wl,--wrap=func_001538B0 -Wl,--wrap=func_001537D0 -Wl,--wrap=func_00152400 -Wl,--wrap=func_003E0530   # P98: psp_node_draw.c, psp_packet.c
   # P91 scene-step timers (psp_prof_scene.c)
   -Wl,--wrap=func_0016D130 -Wl,--wrap=func_00153710 -Wl,--wrap=func_00153590 -Wl,--wrap=func_001536C0 -Wl,--wrap=func_00152AD0 -Wl,--wrap=func_001534D0 -Wl,--wrap=func_00153390 -Wl,--wrap=func_00153350 -Wl,--wrap=func_00153250 -Wl,--wrap=func_00153310 -Wl,--wrap=func_003ED1C0 -Wl,--wrap=func_00153A40 -Wl,--wrap=func_0016DF90 -Wl,--wrap=func_00123090 -Wl,--wrap=func_00151A20 -Wl,--wrap=func_001520E0 -Wl,--wrap=func_00122FE0 -Wl,--wrap=func_00123060 -Wl,--wrap=func_0016E080)
 # P101: each function in its own section, and the hottest ones first in

@@ -1412,6 +1412,25 @@ window.BACKLOG_ARCHIVE = [
   "note": "PSP.md 'PSP-1000 budget (P73)': a full arcade run in PPSSPP peaks at 44.8 MB (EE heap 23, image 8.9, renderer 5.7, a whole music track 4.7). The low targets add up to 26.8 MB against about 23.3 MB on the PSP-1000, so it is still short by about 3.5 MB unless the arena's live peak (not measured yet, P75) is about 13 MB or lower, or P80 is done. Booting as a PSP-1000 in PPSSPP fails at the EE heap allocation."
  },
  {
+  "id": "P98",
+  "order": 42,
+  "phase": "P4",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P91"
+  ],
+  "read": [
+   "port/docs/PSP.md",
+   "src/m3k.c",
+   "port/psp/host/psp_prof_scene.c"
+  ],
+  "title": "Hardware speed: character select object list 6 draw (func_001520E0)",
+  "description": "P91 split: in character select, func_001520E0(6) (draw each object of D_004D3690[6] through func_00152180) takes 8.3 ms a frame on the PSP-2003 without its mesh draws. Split it further (func_00152180's sprite or 2D path) and make the hot part cheaper PSP-side.",
+  "done_when": "func_001520E0(6) non-mesh time <= 3 ms in fight6's character select (PROFILE=1, hardware); rendering and game-state trace unchanged.",
+  "note": "Non-mesh 5.6 -> 2.80-2.93 ms (unlock=all, fight6 select, PSP-2003): node loop and func_00152400 PSP-side, psp_mesh_predraw cold paths out of line, ZBUF packets of func_003E0530 left out (MVC2_ZBUF_FULL=1 A/B 3.19-3.26 -> 2.80-2.93, fight render pass -0.2 ms). PPSSPP: shots and 3,057 per-frame records identical; snapshots differ only in the GS packet arena, its DMA queue ring, host memory past the EE heap and run-to-run noise."
+ },
+ {
   "id": "P113",
   "order": 44,
   "phase": "P4",

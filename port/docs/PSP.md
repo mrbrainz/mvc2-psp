@@ -837,15 +837,27 @@ Model node draw (P98, 2026-11-25, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1
   line (4.7 KB -> 356 bytes). Non-mesh 3.84-3.88 -> 3.19-3.21 ms, select
   render pass 16.8 -> 16.0-16.2, fights 13.16/13.76/12.88/15.40 ->
   12.71/13.25/12.46/14.79. PPSSPP: shots f1-f6 identical to `MVC2_NODE_GAME=1`,
-  per-frame records 3,057 frames identical; snapshots differ at 0x01D/0x01E
-  (mostly frame 600, file headers), not yet compared with same-build noise.
+  per-frame records 3,057 frames identical. Snapshots (frames 600-3000):
+  every diverging word is past the EE heap end (0x01D34380, host memory:
+  sound-bank headers at frame 600) except 0x004C2A40, which also differs
+  between two runs of the same build (checked 2026-11-25).
 - **Tried and dropped:** a two-pass node loop (matrices first: non-mesh
   -0.13, mesh draws +2.5 ms), func_00152180 merged PSP-side, renderer mode
   words read in place, the object-draw chain first in `hot_order.ld`. The
   function layout alone moves the non-mesh figure by +-0.4 ms. The timers
   cost ~1.1 us a read per mesh (~0.2 ms of the figure).
-- **Left:** 34 objects a frame set and reset state 0x6B; each builds a GS
-  ZBUF packet (`func_003E0530`) the PSP never reads.
+- **ZBUF packets (2026-11-25, `psp_packet.c`):** `func_003E0530` (states
+  0x6B/0x6C; 34 select objects a frame set and reset 0x6B) writes the game's
+  ZBUF copy `D_005BF2D0` (and `D_0062BFF0/8` for mode 2) and leaves out the
+  GS packet and its `D_0062BBA0` queue entry, as P95. `MVC2_ZBUF_FULL=1`: the
+  game's body. PSP-2003, `unlock=all`, same EBOOT, two runs each: non-mesh
+  3.19-3.26 -> 2.80-2.93 ms, select render pass 15.9-16.0 -> 15.4-15.6, fight
+  render pass 13.61 -> 13.41-13.47. That is with the `hot_order.ld` of
+  8c44ce83f; one regenerated with the host under load placed worse (3.63 ->
+  3.34-3.44 ms, same A/B gain) and was not kept. PPSSPP: shots f1-f6 and
+  3,057 per-frame records identical; snapshots differ only in the GS packet
+  arena, past the EE heap end, the two DMA queue ring halves at 0x0173C5B0
+  and 0x0173F5B0 (frame 600, entries left out) and 0x004C2A40 (run noise).
 
 Tex select upload path (P95, 2026-11-23, `psp_reslist.c` `psp_texsel`):
 - **What changed:** for lists with a texture that isn't resident, the PSP runs

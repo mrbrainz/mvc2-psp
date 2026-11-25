@@ -112,7 +112,8 @@ window.BACKLOG = {
   "P93",
   "P95",
   "P96",
-  "P97"
+  "P97",
+  "P98"
  ],
  "activities": [
   {
@@ -133,25 +134,6 @@ window.BACKLOG = {
    "description": "P115: sleep with our code on the ME powers the PSP off; without ME use it works (2026-11-25). On PSP_POWER_CB_SUSPENDING: park our ME code, put back the reset-vector words psp_me.c overwrote (saved at boot) and restart the firmware's ME code so its sleep handling runs; on resume boot ours again (the P104 path waits for or rebuilds any pending job).",
    "done_when": "Sleep and wake from a fight with MVC2_ME_BUILD=1 work on the PSP-2003 and the fight goes on with the ME building.",
    "note": "Cold give-back built (power lock, ME RAM saved at take, firmware boot words, state -3 -> -4): works over PSPLink without sleep, but sleep still powers off (PSP.md). Needs the firmware ME halted with its sleep-save call at take and resumed from it at give-back; blocked on a decision, since the ME brings no speed now (P116)."
-  },
-  {
-   "id": "P98",
-   "order": 42,
-   "phase": "P4",
-   "size": "M",
-   "status": "In progress",
-   "depends": [
-    "P91"
-   ],
-   "read": [
-    "port/docs/PSP.md",
-    "src/m3k.c",
-    "port/psp/host/psp_prof_scene.c"
-   ],
-   "title": "Hardware speed: character select object list 6 draw (func_001520E0)",
-   "description": "P91 split: in character select, func_001520E0(6) (draw each object of D_004D3690[6] through func_00152180) takes 8.3 ms a frame on the PSP-2003 without its mesh draws. Split it further (func_00152180's sprite or 2D path) and make the hot part cheaper PSP-side.",
-   "done_when": "func_001520E0(6) non-mesh time <= 3 ms in fight6's character select (PROFILE=1, hardware); rendering and game-state trace unchanged.",
-   "note": "Partial (unlock=all, fight6 select): non-mesh 5.6 -> 3.84 (node loop PSP-side, a6c0c8188) -> 3.19-3.21 ms (func_00152400 PSP-side with FPU fptoui and no-op 0x66 skipped; psp_mesh_predraw cold paths out of line), fight render pass -0.4..0.6 ms; shots and per-frame state identical to MVC2_NODE_GAME=1, snapshot diffs at 0x01D/0x01E not yet checked against same-build noise. Left: 34 objects/frame set and reset state 0x6B (GS ZBUF packets the PSP never reads); layout moves this figure +-0.4 ms."
   },
   {
    "id": "P99",

@@ -71,3 +71,28 @@ int __wrap_func_003F0500__game(int h)
     if (t) psp_prof_add(17, "    func_003F0500__game (VU1 packet build)", psp_prof_now() - t);
     return r;
 }
+
+/* P98: func_003E0530 (src/hy7_j.c), the ZBUF set behind states 0x6B and
+ * 0x6C (func_003DF850): ~68 calls a select frame from objects with flag
+ * 0x800000.  The game's ZBUF copy D_005BF2D0 (and D_0062BFF0/8 for mode 2)
+ * is written as the game does; the GS packet (func_003DD160) and its
+ * D_0062BBA0 DMA queue entry (func_003DC2F0) are left out, as P95: the PSP
+ * renderer takes Z-write from fl_set_render_state (psp_fe_sync.c).
+ * MVC2_ZBUF_FULL=1: the game's own body. */
+extern u16 D_0062BCC0[];
+extern u8 D_0062BCC3[];
+typedef unsigned long long u64;
+extern u64 D_005BF2D0[], D_0062BFF0[], D_0062BFF8[];
+s32 __real_func_003E0530(s32 flag, s32 mode);
+s32 __wrap_func_003E0530(s32 flag, s32 mode)
+{
+    static int full = -1;
+    u64 s0;
+    if (__builtin_expect(full < 0, 0)) full = getenv("MVC2_ZBUF_FULL") != NULL;
+    if (full) return __real_func_003E0530(flag, mode);
+    s0 = ((u64)D_0062BCC0[0] & 0x1FF) | (((u64)D_0062BCC3[0] & 0xF) << 24);
+    if (flag == 0) s0 |= (u64)1 << 32;
+    D_005BF2D0[0] = s0;
+    if (mode == 2) { D_0062BFF0[0] = s0; D_0062BFF8[0] = s0; }
+    return 1;
+}
