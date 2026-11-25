@@ -1218,6 +1218,22 @@ window.BACKLOG_ARCHIVE = [
   "note": "Quit to the XMB works with ME_SPIKE=3 and MVC2_ME_BUILD=1; sleep from a fight powers the PSP off in both (PSP.md). Filed P117."
  },
  {
+  "id": "P118",
+  "order": 39,
+  "phase": "P2",
+  "size": "S",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/render/r_gu.c",
+   "port/docs/PSP.md"
+  ],
+  "title": "Title screen: \"Press Start\" text drawn as solid blocks",
+  "description": "On the first MvC2 title screen after boot, the \"Press Start\" text shows as filled blocks instead of glyphs (PSP-2003). Likely a font texture upload, format/CLUT or alpha-blend/test state issue in the GU path for that draw. Compare against the desktop port's title screen and fix PSP-side.",
+  "done_when": "\"Press Start\" renders as readable text on the title screen on hardware, matching the desktop port; other title/menu text unchanged.",
+  "note": "r_flush called rec_build (P103), which resets R.cur_tex/cur_mode, before binding the pending 2D batch, so a batch after a recorded mesh drew untextured; the batch now keeps its state across rec_build. Verified on the PSP-2003 over PSPLink (title text readable, fight6 renders); PPSSPP never showed it."
+ },
+ {
   "id": "P96",
   "order": 40,
   "phase": "P4",
@@ -1312,6 +1328,22 @@ window.BACKLOG_ARCHIVE = [
   "note": "P110a: fused VFPU matrices, clip box test and pre-pass in registers (6.89 -> 6.26 ms). P110b: rare paths noinline/cold, near_clip keeps unclipped indices (4.15 ms). P110c: r_flush/canvas_bind skipped when nothing is pending, rare branches laid out after the per-draw path, ADC result memoized per mesh (~30 of ~68 ADC draws hit): fl_clay_draw 4.15 -> 3.37/3.39 ms, render pass 15.7 -> 14.7 (PSP-2003 fight6, regenerated layout, two runs); PPSSPP shots f1-f6 identical."
  },
  {
+  "id": "P119",
+  "order": 40,
+  "phase": "P2",
+  "size": "S",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/host/game_loop.c",
+   "port/psp/host/psp_main.c"
+  ],
+  "title": "Stock unlocks by default; \"unlock everything\" as a PSP setting",
+  "description": "The port starts with every character and extra unlocked (mvc2_unlock_all = 1, shared game_loop.c), unlike retail. On PSP, clear mvc2_unlock_all before boot unless settings.txt has unlock=all (default stock, written on first run). PSP-side only: game_loop.c and the desktop default stay as they are. Unlocks earned in a stock game must still save and load (psp_save.c).",
+  "done_when": "Fresh install on hardware: locked characters are locked on character select as on retail, and the cursor steps to a neighbour after each pick (P120); unlock=all in settings.txt gives everything unlocked and duplicate picks again; earned unlocks persist across a restart.",
+  "note": "psp_main.c clears mvc2_unlock_all unless settings.txt has unlock=all. Hardware (PSPLink, 2026-11-25): stock shows locked slots and the cursor moves after a pick; unlock=all gives the full roster and duplicate picks; a stock arcade run, a shop buy (No.30) and a save, then a restart, keep the bought character. Saving needed a fix: every save mode failed on hardware (0x80110388) with the SDK's 1536-byte param size; psp_save.c now passes 1480."
+ },
+ {
   "id": "P105",
   "order": 41,
   "phase": "P4",
@@ -1328,6 +1360,39 @@ window.BACKLOG_ARCHIVE = [
   "description": "Ideas from gibletto/mvc2-naomi-dc ports/port/psp (AGPL-3.0: ideas only, no code copied). The GE reads textures from main RAM over the bus the CPU uses. For 3D-scene textures drawn shrunk, keep a half-size copy (made once, a level per frame) and draw from it when recent frames are over budget; switch back with hysteresis. HUD, sprites and menus are never reduced. Measure first whether GE texture reads cost the CPU here (PROFILE=1 with mip forced on vs off) before building the automatic switch.",
   "done_when": "Measured effect on a 3v3 fight's frame time on hardware recorded in PSP.md; if worthwhile, automatic switch in place with HUD/menus unchanged in screenshots; if not, Won't fix with the numbers.",
   "note": "Ceiling measured: RAM-read mesh texture binds pointed at VRAM (wrong pixels) cut the fight6 render pass 14.55 -> 13.90 ms (two runs each, PSP-2003). A half-size copy saves at most that 0.64 ms and blurs the 3D scene; not done."
+ },
+ {
+  "id": "P120",
+  "order": 41,
+  "phase": "P2",
+  "size": "M",
+  "status": "Won't fix",
+  "depends": [],
+  "read": [
+   "port/psp/host/psp_1p.c",
+   "port/host/arcade.c"
+  ],
+  "title": "Character select: cursor steps to the adjacent character after a pick (stock); keep-in-place as a setting",
+  "description": "Retail moves the select cursor to a neighbouring character after each pick; the PSP port leaves it where it was. Find the cause first: compare the desktop port and the PS2 oracle on the same picks, then suspect the PSP P2 suppression (psp_1p.c wraps of func_00149690/func_00149020) or the arcade.c pick path. Restore the retail move by default; offer the current stay-in-place behaviour as settings.txt select_cursor=stay (default move). PSP-side; ask before touching shared code.",
+  "done_when": "On hardware with default settings the cursor moves after each of the three picks as on retail/desktop; select_cursor=stay gives the current behaviour; cause recorded in the note.",
+  "note": "Not a port change: the game itself allows duplicate picks once every character and colour is unlocked (D_00583B9D = 1 in func_00329AC0/gr28_d.c), so func_0032D660 stops removing a picked character and the cursor stays put. unlock=stock (P119) brings the move back; unlock=all is the current behaviour. Checked in source; hardware check is under P119."
+ },
+ {
+  "id": "P121",
+  "order": 41,
+  "phase": "P1",
+  "size": "S",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/psp/host/psp_save.c",
+   "port/psp/host/psp_saveui.c",
+   "port/render/r_gu.c"
+  ],
+  "title": "Saves on hardware: every save failed, save dialog clipped, placeholder save icon",
+  "description": "Found while testing P119 on the PSP-2003: saves (autosave and the SAVE dialog) failed with 0x80110388, the system save dialog was cut to the 4:3 fit area with 1-pixel lines at its edges, and the save icon showed the built-in placeholder.",
+  "done_when": "On hardware, autosaves and dialog saves succeed, the dialog draws full width without edge lines, and a save made from the XMB-launched EBOOT carries the game's XMB icon.",
+  "note": "psp_save.c passes base.size 1480 (the SDK's 1536 loads but every save mode fails). r_gu.c list_close ends each frame's list with a full scissor and an opaque black clear while a dialog is up (a separate per-frame list left a save stuck at Saving). The placeholder icon came from PSPLink runs (no EBOOT to read); the firmware rewrites ICON0 in place, so a fresh save is needed. MVC2_ICON_PBP (testing) reads ICON0 from another EBOOT; verified 2026-11-25 over PSPLink."
  },
  {
   "id": "P73",

@@ -182,6 +182,17 @@ static void list_close(void)
     me_wait_all();   /* P104: the ME's CALL blocks written, the stall released */
     me_prof();
     if (psp_prof_on()) t = psp_prof_now();
+    {   /* P119: a system dialog draws over what this list leaves.  Our (fit)
+         * scissor cut its sides off, and the game's frame edges showed through
+         * its background as 1-pixel lines: full scissor, opaque black frame.
+         * In our own list: a separate list each frame left a save at "Saving". */
+        extern int psp_saveui_active(void);
+        if (psp_saveui_active()) {
+            sceGuScissor(0, 0, SCR_W, SCR_H);
+            sceGuClearColor(0xFF000000u);
+            sceGuClear(GU_COLOR_BUFFER_BIT);
+        }
+    }
     sceGuFinish();
     me_diag();   /* P104 */
     sceGuSync(0, 0);
@@ -421,7 +432,13 @@ void r_flush(void)
 {
     GuVtx *v;
     if (!R.nverts || !R.inited || r_discard) { R.nverts = 0; return; }
-    rec_build();   /* P103: recorded mesh submits come first */
+    {   /* P103: recorded mesh submits come first.  rec_build resets the 2D
+         * texture state for the next batch; this batch keeps its own (P118:
+         * a batch after a recorded mesh drew untextured, as solid blocks) */
+        int tex = R.cur_tex, mode = R.cur_mode, pal = R.cur_pal;
+        rec_build();
+        R.cur_tex = tex; R.cur_mode = mode; R.cur_pal = pal;
+    }
     mesh_tex_ok = mesh_bd_ok = 0;   /* the 2D batch sets its own texture, blend and depth state */
     canvas_bind();
     if (sceGuCheckList() > LIST_BYTES - (int)sizeof R.verts - 4096) {   /* nearly full */

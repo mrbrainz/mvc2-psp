@@ -1,3 +1,5 @@
+#include <stdio.h>
+#include <stdlib.h>
 /* PSP system savedata (psp-gcc, EABI32), see psp_save.h.  The utility runs
  * its own state machine: InitStart, Update once per frame while it is
  * visible (2), ShutdownStart when finished (3), done at none (0).  The
@@ -30,10 +32,12 @@ static void load_icon(void)
     static int tried;
     unsigned h[10];
     SceUID fd;
-    if (tried || !psp_eboot_path) return;
+    const char *path = getenv("MVC2_ICON_PBP");   /* testing: another EBOOT's ICON0 (PSPLink runs start the PRX) */
+    if (!path) path = psp_eboot_path;
+    if (tried || !path) return;
     tried = 1;
-    fd = sceIoOpen(psp_eboot_path, PSP_O_RDONLY, 0);
-    if (fd < 0) return;
+    fd = sceIoOpen(path, PSP_O_RDONLY, 0);
+    if (fd < 0) { fprintf(stderr, "[save] icon: %s not opened (%08x), built-in\n", path, (unsigned)fd); return; }
     if (sceIoRead(fd, h, sizeof h) == sizeof h && h[0] == 0x50425000) {
         unsigned n = h[4] - h[3];               /* ICON0 runs to ICON1 */
         if (n >= 8 && n <= sizeof icon_buf && sceIoLseek32(fd, h[3], PSP_SEEK_SET) == (int)h[3]
@@ -44,13 +48,17 @@ static void load_icon(void)
         }
     }
     sceIoClose(fd);
+    fprintf(stderr, "[save] icon: %s (%u bytes)\n", icon == psp_icon0 ? "built-in" : "EBOOT ICON0", icon_size);
 }
 static int dlg_on, dlg_closing;
 
 static void setup(SceUtilitySavedataParam *p, int mode)
 {
     memset(p, 0, sizeof *p);
-    p->base.size = sizeof *p;
+    /* P119: 1480, the firmware 2.x size.  The SDK's sizeof (1536 with
+     * _PSP_FW_VERSION 600) loads, but every save mode fails on the PSP-2003
+     * with 0x80110388 (PPSSPP accepts either). */
+    p->base.size = 1480;
     sceUtilityGetSystemParamInt(PSP_SYSTEMPARAM_ID_INT_LANGUAGE, &p->base.language);
     sceUtilityGetSystemParamInt(PSP_SYSTEMPARAM_ID_INT_BUTTON_SWAP, &p->base.buttonSwap);
     p->base.graphicsThread = 0x11;

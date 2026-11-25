@@ -40,6 +40,8 @@ static uint8_t buf[BLOCK] __attribute__((aligned(64)));
 static int phase, open_;
 static int apply_loaded(void);
 
+/* r_gu.c list_close: a system dialog is up (P119) */
+int psp_saveui_active(void) { return open_; }
 /* r_gu_present: 1 while the dialog is up (it drew over the frame) */
 int psp_saveui_frame(void)
 {
