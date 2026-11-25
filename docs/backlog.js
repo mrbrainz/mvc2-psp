@@ -132,11 +132,57 @@ window.BACKLOG = {
    "note": "Cold give-back built (power lock, ME RAM saved at take, firmware boot words, state -3 -> -4): works over PSPLink without sleep, but sleep still powers off (PSP.md). Needs the firmware ME halted with its sleep-save call at take and resumed from it at give-back; blocked on a decision, since the ME brings no speed now (P116)."
   },
   {
+   "id": "P118",
+   "order": 39,
+   "phase": "P2",
+   "size": "S",
+   "status": "Ready",
+   "depends": [],
+   "read": [
+    "port/render/r_gu.c",
+    "port/docs/PSP.md"
+   ],
+   "title": "Title screen: \"Press Start\" text drawn as solid blocks",
+   "description": "On the first MvC2 title screen after boot, the \"Press Start\" text shows as filled blocks instead of glyphs (PSP-2003). Likely a font texture upload, format/CLUT or alpha-blend/test state issue in the GU path for that draw. Compare against the desktop port's title screen and fix PSP-side.",
+   "done_when": "\"Press Start\" renders as readable text on the title screen on hardware, matching the desktop port; other title/menu text unchanged."
+  },
+  {
+   "id": "P119",
+   "order": 40,
+   "phase": "P2",
+   "size": "S",
+   "status": "In progress",
+   "depends": [],
+   "read": [
+    "port/host/game_loop.c",
+    "port/psp/host/psp_main.c"
+   ],
+   "title": "Stock unlocks by default; \"unlock everything\" as a PSP setting",
+   "description": "The port starts with every character and extra unlocked (mvc2_unlock_all = 1, shared game_loop.c), unlike retail. On PSP, clear mvc2_unlock_all before boot unless settings.txt has unlock=all (default stock, written on first run). PSP-side only: game_loop.c and the desktop default stay as they are. Unlocks earned in a stock game must still save and load (psp_save.c).",
+   "done_when": "Fresh install on hardware: locked characters are locked on character select as on retail; unlock=all in settings.txt gives everything unlocked again; earned unlocks persist across a restart.",
+   "note": "psp_main.c settings_load clears mvc2_unlock_all unless settings.txt has unlock=all; the line is added to existing files. Compiles; not yet run on hardware. A save made while everything was unlocked keeps those unlocks (the game saves the bits), so test with a fresh save."
+  },
+  {
+   "id": "P120",
+   "order": 41,
+   "phase": "P2",
+   "size": "M",
+   "status": "Ready",
+   "depends": [],
+   "read": [
+    "port/psp/host/psp_1p.c",
+    "port/host/arcade.c"
+   ],
+   "title": "Character select: cursor steps to the adjacent character after a pick (stock); keep-in-place as a setting",
+   "description": "Retail moves the select cursor to a neighbouring character after each pick; the PSP port leaves it where it was. Find the cause first: compare the desktop port and the PS2 oracle on the same picks, then suspect the PSP P2 suppression (psp_1p.c wraps of func_00149690/func_00149020) or the arcade.c pick path. Restore the retail move by default; offer the current stay-in-place behaviour as settings.txt select_cursor=stay (default move). PSP-side; ask before touching shared code.",
+   "done_when": "On hardware with default settings the cursor moves after each of the three picks as on retail/desktop; select_cursor=stay gives the current behaviour; cause recorded in the note."
+  },
+  {
    "id": "P98",
    "order": 42,
    "phase": "P4",
    "size": "M",
-   "status": "Ready",
+   "status": "In progress",
    "depends": [
     "P91"
    ],
@@ -147,7 +193,8 @@ window.BACKLOG = {
    ],
    "title": "Hardware speed: character select object list 6 draw (func_001520E0)",
    "description": "P91 split: in character select, func_001520E0(6) (draw each object of D_004D3690[6] through func_00152180) takes 8.3 ms a frame on the PSP-2003 without its mesh draws. Split it further (func_00152180's sprite or 2D path) and make the hot part cheaper PSP-side.",
-   "done_when": "func_001520E0(6) non-mesh time <= 3 ms in fight6's character select (PROFILE=1, hardware); rendering and game-state trace unchanged."
+   "done_when": "func_001520E0(6) non-mesh time <= 3 ms in fight6's character select (PROFILE=1, hardware); rendering and game-state trace unchanged.",
+    "note": "Partial: psp_node_draw.c (node loop and func_001537D0 PSP-side: no-op blend sets skipped, matrix sets without the setter) cut func_001520E0(6) non-mesh 5.6 -> 4.0 ms per select frame with every character unlocked (2.6 with unlock=stock), fight render pass -0.7 ms; PPSSPP shots and oracle state identical. Left: the cache misses around each node's mesh draw (~2 ms)."
   },
   {
    "id": "P99",

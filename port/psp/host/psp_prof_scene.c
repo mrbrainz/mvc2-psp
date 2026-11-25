@@ -41,6 +41,8 @@ extern unsigned long long psp_prof_mesh_total(void);
         T0;                                                           \
         r = __real_##fn(a, b);                                        \
         psp_prof_add(slot + k, k < (int)(sizeof keys / sizeof *keys) ? lab[k] : lab[4], T1);   \
+        if (slot == 96 && k == 1)   /* P98: select frames in the block (1.00 = all 300) */ \
+            psp_prof_add(104, "  select: frames drawn (count / 300)", 1000);   \
         return r;                                                     \
     }
 

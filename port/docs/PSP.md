@@ -807,6 +807,28 @@ Non-mesh rendering split (P91, 2026-11-23, PSP-2003, `fight6`, `PROFILE=1`):
   - draw, `func_001520E0(6)`: 8.3 ms (P98)
   - walk, `func_00151A20(6)` -> `func_00151A90`: 5.5 ms (P99)
 
+Model node draw (P98, 2026-11-25, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1`, `hot_order.ld` regenerated, one build, two runs each against `MVC2_NODE_GAME=1`):
+- **Split by removal:** per node (~168 a select frame with every character
+  unlocked) `func_001538B0` multiplies the node matrix, sets state 0x19,
+  then `func_001537D0` (blend states 0xD/0x5D through `func_00153A40`, and
+  the UV matrix 0x1A, which the game clears after each mesh) and the mesh.
+  Skipping `func_001537D0` saved 2.3 of 5.3 ms, the matrix product 0.35,
+  the 0x19 set 0.37; skipping the mesh call also cut 2.2 ms of non-mesh
+  time (cache misses around the mesh draw).
+- **Change (`psp_node_draw.c`, wraps):** the node loop with `func_001537D0`
+  inlined; blend states skipped when the game's mode word holds them and the
+  renderer is in sync (~94% of nodes); matrix sets are the game's copy and set
+  bit, plus the renderer's copy only when it does not read the game's (P96);
+  the zero-angle UV rotation made once; 64-byte copies inline.
+- **Result, `func_001520E0(6)` non-mesh per select frame:** all characters
+  unlocked 5.58-5.62 -> 3.93-4.06 ms (render pass 19.1 -> 17.6); `unlock=stock`
+  (fewer models, ~96 meshes) 3.32 -> 2.55-2.59. Fights: render pass
+  14.47-14.51 -> 13.81. PPSSPP: shots f1-f6 and select-screen shots identical
+  to `MVC2_NODE_GAME=1`; oracle state dump 3,057 frames, 0 words diverge.
+- **Measuring:** `PROFILE=1` blocks are 300 frames; how much of the select
+  screen falls in them depends on load timing and the unlock setting. The
+  new `select: frames drawn` line (1.00 = every frame) marks full blocks.
+
 Tex select upload path (P95, 2026-11-23, `psp_reslist.c` `psp_texsel`):
 - **What changed:** for lists with a texture that isn't resident, the PSP runs
   the game's residency bookkeeping call for call (lookup, GS block allocation

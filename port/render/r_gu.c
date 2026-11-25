@@ -1204,6 +1204,8 @@ void r_gu_mesh_bind(const float *view, const float *proj, const float *world, co
     mesh_light[0] = (uintptr_t)l0; mesh_light[1] = (uintptr_t)l1; mesh_light[2] = (uintptr_t)l2;
     r_gu_mesh_bind_clip(clip);
 }
+/* P98: where the renderer reads matrix state `id` from when bound (else NULL) */
+const float *r_gu_bound_matrix(int id) { return id == 0x19 ? mesh_mtx[2] : id == 0x1A ? mesh_mtx[3] : NULL; }
 /* lit draws: copy (and normalize) the lights as the per-draw hand-off did */
 void r_gu_mesh_lights(void)
 {
