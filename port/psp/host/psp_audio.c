@@ -15,7 +15,12 @@ static uint8_t *afs_loader(void *ctx, int ptid, int fid, size_t *size)
     return disc_load(d, ptid, fid, size);
 }
 
-static int ops_start_afs(int ptid, int fid) { return padx_start_afs(ptid, fid); }
+static int ops_start_afs(int ptid, int fid)
+{
+    int r = padx_start_afs(ptid, fid);
+    host_log("audio: music %d/%d %s (stat %d, vol %d)", ptid, fid, r ? "failed" : "started", padx_get_stat(), padx_get_out_vol());   /* rare: once a track */
+    return r;
+}
 static void ops_stop(void) { padx_stop(); }
 static int ops_get_stat(void) { return padx_get_stat(); }
 static void ops_set_out_vol(int vol) { padx_set_out_vol(vol); }
