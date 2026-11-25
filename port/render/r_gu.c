@@ -104,6 +104,7 @@ static int mem_tex, mem_ntex;   /* texture pixel bytes held, count */
 static int present_stretch, present_c16;
 void r_gu_set_present(int stretch, int color16) { present_stretch = stretch != 0; present_c16 = color16 != 0; }
 
+unsigned r_gu_vp_gen = 1;   /* P110: bumped when the viewport or canvas mapping may have changed (r_gu_mesh.c) */
 static void set_mapping(void)
 {
     int dw = R.disp_w > 0 ? R.disp_w : FL_SCREEN_W, dh = R.disp_h > 0 ? R.disp_h : FL_SCREEN_H;
@@ -112,6 +113,7 @@ static void set_mapping(void)
     if (present_stretch) { R.sx = (float)SCR_W / dw; R.sy = (float)SCR_H / dh; }
     R.ox = (SCR_W - dw * R.sx) * 0.5f;
     R.oy = (SCR_H - dh * R.sy) * 0.5f;
+    r_gu_vp_gen++;
 }
 
 /* switch FIT/STRETCH while running (the next frame's clear covers the bars) */
@@ -193,6 +195,7 @@ int r_init(void)
     memset(&R, 0, sizeof R);
     R.cur_tex = R.cur_pal = -1;
     R.vp_i[2] = FL_SCREEN_W; R.vp_i[3] = FL_SCREEN_H; R.vp_f[1] = 1.f;
+    r_gu_vp_gen++;
     for (int i = 0x16; i < 0x39; i++)
         for (int k = 0; k < 16; k++) R.matrices[i][k] = (k % 5) == 0 ? 1.f : 0.f;
     R.global_mod = 0xFFFFFFFFu;
@@ -707,6 +710,7 @@ int fl_set_render_state(int id, uintptr_t val)
     case 0x18:
         if (val) {
             const int32_t *q = (const int32_t *)val;
+            if (memcmp(R.vp_i, q, 16) || memcmp(R.vp_f, q + 4, 8)) r_gu_vp_gen++;
             memcpy(R.vp_i, q, 16);
             memcpy(R.vp_f, q + 4, 8);
             fl_set_scissor(R.vp_i[0], R.vp_i[1], R.vp_i[2], R.vp_i[3]);
@@ -1233,7 +1237,21 @@ int r_gu_vram_ok(void) { return !vr_pause && !vr_drop; }
 
 /* before a mesh draw: 2D batches out, list open with room for `bytes` of
  * sceGuGetMemory (a restart later would overwrite it) */
+/* P110: nothing pending (no 2D batch, list open, clear done): r_flush and
+ * canvas_bind would only set the drawn flags; skipped with their prologues */
+#define R_READY() (!R.nverts && R.list_open && !R.clear_pending)
+static void __attribute__((noinline, cold)) r_gu_begin_slow(unsigned bytes);
 void r_gu_begin(unsigned bytes)
+{
+    if (R_READY() && sceGuCheckList() <= LIST_BYTES - (int)bytes - 65536) {
+        R.drawn = 1;
+        R.drawn_since_swap = 1;
+        return;
+    }
+    r_gu_begin_slow(bytes);
+}
+
+static void r_gu_begin_slow(unsigned bytes)
 {
     unsigned long long t = 0;
     if (psp_prof_fine()) {
@@ -1887,8 +1905,11 @@ int r_gu_mesh_draw(const float clip[16], uint32_t tex, const void *verts, const 
     if (rec_mode < 0) rec_mode = getenv("MVC2_REC_OFF") ? 0 : getenv("MVC2_REC_CHECK") ? 2 : 1;
     if (!rec_mode) return mesh_emit(clip, tex, verts, ge_verts, idx, ge_idx, count, su, sv, ou, ov, 0);
     if (me_pend_n) me_release();   /* P104: a CALL the ME finished lets the GE on */
-    r_flush();       /* a pending 2D batch (and the items before it) first */
-    canvas_bind();   /* the frame's clear first */
+    if (R_READY()) { R.drawn = 1; R.drawn_since_swap = 1; }
+    else {
+        r_flush();       /* a pending 2D batch (and the items before it) first */
+        canvas_bind();   /* the frame's clear first */
+    }
     if (rec_n == REC_MAX) { if (psp_prof_on()) psp_prof_add(61, "  rec_build at REC_MAX (count)", 1000); rec_build(); }
     it = &rec[rec_n++];
     memcpy(it->clip, clip, sizeof it->clip);

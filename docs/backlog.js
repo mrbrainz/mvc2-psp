@@ -51,6 +51,7 @@ window.BACKLOG = {
   "P108",
   "P109",
   "P11",
+  "P110",
   "P112",
   "P113",
   "P114",
@@ -129,25 +130,6 @@ window.BACKLOG = {
    "description": "P115: sleep with our code on the ME powers the PSP off; without ME use it works (2026-11-25). On PSP_POWER_CB_SUSPENDING: park our ME code, put back the reset-vector words psp_me.c overwrote (saved at boot) and restart the firmware's ME code so its sleep handling runs; on resume boot ours again (the P104 path waits for or rebuilds any pending job).",
    "done_when": "Sleep and wake from a fight with MVC2_ME_BUILD=1 work on the PSP-2003 and the fight goes on with the ME building.",
    "note": "Cold give-back built (power lock, ME RAM saved at take, firmware boot words, state -3 -> -4): works over PSPLink without sleep, but sleep still powers off (PSP.md). Needs the firmware ME halted with its sleep-save call at take and resumed from it at give-back; blocked on a decision, since the ME brings no speed now (P116)."
-  },
-  {
-   "id": "P110",
-   "order": 40,
-   "phase": "P4",
-   "size": "M",
-   "status": "In progress",
-   "depends": [
-    "P83"
-   ],
-   "read": [
-    "port/render/r_gu.c",
-    "port/render/r_gu_mesh.c",
-    "port/docs/PSP.md"
-   ],
-   "title": "Hardware speed: per-draw mesh work before submit (clay_draw)",
-   "description": "With zero submits fl_clay_draw is still ~4 ms per drawn fight step (P107 4.78 ms minus P83's 0.8 ms bbox gain): colour/vertex copy, three matrix products, viewport key, ADC, clip prep, mesh_vram. Split it by removal as in PSP.md (P107), then move the scalar float work to VFPU registers or skip it when the inputs are unchanged. This is what is left of P83's fl_clay_draw <= 4 ms target.",
-   "done_when": "fl_clay_draw <= 4 ms per drawn step in fight6 on PSP-2003 (PROFILE=1 NO_FRAME_SKIP=1) PPSSPP shots f1-f6 unchanged.",
-   "note": "Partial. P110a: fused VFPU matrices, clip box test and pre-pass in registers (6.89 -> 6.26 ms). P110b: rarely run paths moved out of the per-draw code (noinline/cold: fl_clay_draw 14.7 -> 5.5 KB), near_clip keeps unclipped triangles' indices: fl_clay_draw 4.40-4.64 -> 3.87 ms in one layout, 4.15 in the final one (two runs each, PSP-2003 fight6), render pass 16.2 -> 15.3-15.7; PPSSPP shots identical. Target met only in one layout (P112 effect, ~0.3 ms)."
   },
   {
    "id": "P98",

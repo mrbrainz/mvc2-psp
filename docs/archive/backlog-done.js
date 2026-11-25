@@ -1293,6 +1293,25 @@ window.BACKLOG_ARCHIVE = [
   "note": "hot_order.ld regenerated with every called function (2127, 685 KB) by calls, libpspgu/libc mem*/psp_vfpu.o placed after the first 96 KB, and .rodata/.data/.bss pinned to fixed 8 KB-period offsets (+24 KB). An unused 2 KB function now moves the fight render pass by 0.04 ms (was 0.19-1.0), a 2 KB shift after the hot core by ~0.1 (was 0.5-1.0); render pass 17.35-17.40 ms (0.1 above the old lucky layout), PPSSPP shots identical."
  },
  {
+  "id": "P110",
+  "order": 40,
+  "phase": "P4",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P83"
+  ],
+  "read": [
+   "port/render/r_gu.c",
+   "port/render/r_gu_mesh.c",
+   "port/docs/PSP.md"
+  ],
+  "title": "Hardware speed: per-draw mesh work before submit (clay_draw)",
+  "description": "With zero submits fl_clay_draw is still ~4 ms per drawn fight step (P107 4.78 ms minus P83's 0.8 ms bbox gain): colour/vertex copy, three matrix products, viewport key, ADC, clip prep, mesh_vram. Split it by removal as in PSP.md (P107), then move the scalar float work to VFPU registers or skip it when the inputs are unchanged. This is what is left of P83's fl_clay_draw <= 4 ms target.",
+  "done_when": "fl_clay_draw <= 4 ms per drawn step in fight6 on PSP-2003 (PROFILE=1 NO_FRAME_SKIP=1) PPSSPP shots f1-f6 unchanged.",
+  "note": "P110a: fused VFPU matrices, clip box test and pre-pass in registers (6.89 -> 6.26 ms). P110b: rare paths noinline/cold, near_clip keeps unclipped indices (4.15 ms). P110c: r_flush/canvas_bind skipped when nothing is pending, rare branches laid out after the per-draw path, ADC result memoized per mesh (~30 of ~68 ADC draws hit): fl_clay_draw 4.15 -> 3.37/3.39 ms, render pass 15.7 -> 14.7 (PSP-2003 fight6, regenerated layout, two runs); PPSSPP shots f1-f6 identical."
+ },
+ {
   "id": "P73",
   "order": 42,
   "phase": "P6",

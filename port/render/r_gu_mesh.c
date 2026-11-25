@@ -72,6 +72,11 @@ typedef struct MMesh {
     long used;               /* host frame gv was last handed to the GE (+1) */
     int bbok;                /* bb holds the cpu positions' bounding box */
     float bb[6];             /* min xyz, max xyz */
+    float acm[16];           /* P110: the ADC matrix the memo below was made for */
+    int avalid, ahave;       /* memo valid; triangles rejected (aidx/acount hold what is drawn) */
+    uint16_t *aidx;          /* the kept triangles' indices (cached RAM, written back), then acount */
+    int *acount;             /* kept indices per range */
+    long aused;              /* host frame aidx was last handed to the GE (+1) */
 } MMesh;
 
 #define MAX_CLAY 0x402
@@ -341,6 +346,7 @@ static void clay_free(int h)
     free(me->gv);
     free(me->idx);
     free(me->range);
+    free(me->aidx);
     memset(me, 0, sizeof *me);
     me->desc = -1;
 }
@@ -381,7 +387,7 @@ FlMeshVtx *fl_clay_vertices(int h, int *nv)
 
 void fl_clay_vertices_changed(int h)
 {
-    if (CLAY && h > 0 && h < MAX_CLAY) { CLAY[h].dirty = 1; CLAY[h].bbok = 0; }
+    if (CLAY && h > 0 && h < MAX_CLAY) { CLAY[h].dirty = 1; CLAY[h].bbok = 0; CLAY[h].avalid = 0; }
 }
 
 void fl_clay_release(int h)
@@ -412,6 +418,15 @@ static inline float fmn(float a, float b) { return b < a ? b : (a == a ? a : b);
 static uint8_t unorm_lut[1024];
 static int unorm_ok;
 #define COLD __attribute__((noinline, cold))   /* P110: off the per-draw path (I-cache) */
+#define RARE(x) __builtin_expect(!!(x), 0)      /* P110: the branch laid out after the per-draw path */
+/* P110: n words differ (inline: libc memcmp is outside the hot block) */
+static inline int words_differ(const void *a, const void *b, int n)
+{
+    const uint32_t *x = (const uint32_t *)a, *y = (const uint32_t *)b;
+    uint32_t d = 0;
+    for (int i = 0; i < n; i++) d |= x[i] ^ y[i];
+    return d != 0;
+}
 COLD static void unorm_init(void)
 {
     for (unsigned k = 0; k < 1024; k++) unorm_lut[k] = r_gs_to_unorm(k);
@@ -562,11 +577,11 @@ int fl_clay_draw(int h)
     static int dl = -1;   /* P110: the DRAWLOG time costs two timer syscalls a draw */
     unsigned t0;
     int r;
-    if (dl < 0) dl = getenv("DRAWLOG") != NULL;
-    if (r_gu_mesh_check) r_gu_mesh_check();
+    if (RARE(dl < 0)) dl = getenv("DRAWLOG") != NULL;
+    if (RARE(r_gu_mesh_check != NULL)) r_gu_mesh_check();
     t0 = dl ? sceKernelGetSystemTimeLow() : 0;
     r = clay_draw(h);   /* one call site: clay_draw stays inlined in the P101 hot block */
-    if (dl) r_gu_mesh_cnt[2] += (int)(sceKernelGetSystemTimeLow() - t0);
+    if (RARE(dl)) r_gu_mesh_cnt[2] += (int)(sceKernelGetSystemTimeLow() - t0);
     return r;
 }
 
@@ -613,10 +628,9 @@ COLD static int bbox_corners(MMesh *me, const float cm[16], float k[8][4], float
 
 /* P83: no outcode can be set when every bounding-box corner is inside the
  * near plane and the guard band with a rounding margin (convex, linear) */
-static int clip_bbox_inside(MMesh *me, const float clip[16])
+COLD static int clip_bbox_inside_c(MMesh *me, const float clip[16])
 {
     float k[8][4], smax, m;
-    if (use_vfpu > 0 && me->bbok) return vfpu_clipbox_inside(clip, me->bb);   /* P110: in VFPU registers */
     if (!bbox_corners(me, clip, k, &smax)) return 0;
     m = 1e-5f * smax * (GUARD + 1.f);
     for (int c = 0; c < 8; c++) {
@@ -625,8 +639,13 @@ static int clip_bbox_inside(MMesh *me, const float clip[16])
     }
     return 1;
 }
+static int clip_bbox_inside(MMesh *me, const float clip[16])
+{
+    if (use_vfpu > 0 && me->bbok) return vfpu_clipbox_inside(clip, me->bb);   /* P110: in VFPU registers */
+    return clip_bbox_inside_c(me, clip);
+}
 
-static int clip_prepare(const float clip[16], const GVtx *g, int nverts)
+COLD static int clip_prepare(const float clip[16], const GVtx *g, int nverts)
 {
     int any = 0;
     if (cl_cap < nverts) {
@@ -754,10 +773,9 @@ COLD static int bbox_corners(MMesh *me, const float cm[16], float k[8][4], float
     return smax < 1e30f;
 }
 
-static int bbox_inside(MMesh *me, const float cm[16])
+COLD static int bbox_inside_c(MMesh *me, const float cm[16])
 {
     float k[8][4], smax;
-    if (use_vfpu > 0 && me->bbok) return vfpu_bbox_inside(cm, me->bb);   /* P83: in VFPU registers, about 5x faster */
     if (!bbox_corners(me, cm, k, &smax)) return 0;
     {
         float m = 1e-5f * smax;
@@ -768,13 +786,18 @@ static int bbox_inside(MMesh *me, const float cm[16])
     }
     return 1;
 }
+static int bbox_inside(MMesh *me, const float cm[16])
+{
+    if (use_vfpu > 0 && me->bbok) return vfpu_bbox_inside(cm, me->bb);   /* P83: in VFPU registers, about 5x faster */
+    return bbox_inside_c(me, cm);
+}
 
 /* PROFILE=1 split of fl_clay_draw (psp_prof.c slots 30-35) */
 int psp_prof_fine(void);
 unsigned long long psp_prof_now(void);
 void psp_prof_add(int slot, const char *label, unsigned long long us);
-#define PT(v) unsigned long long v = prof ? psp_prof_now() : 0
-#define PA(slot, label, v) do { if (prof) psp_prof_add(slot, label, psp_prof_now() - v); } while (0)
+#define PT(v) unsigned long long v = RARE(prof) ? psp_prof_now() : 0
+#define PA(slot, label, v) do { if (RARE(prof)) psp_prof_add(slot, label, psp_prof_now() - v); } while (0)
 
 /* P108: mesh vertices for the GE in VRAM.  The GE fetches one vertex per
  * index from main RAM, and in fights that bus traffic slowed the CPU about
@@ -927,6 +950,65 @@ COLD static void mesh_dump(const MMesh *me, int h, int r, const MRange *rg, int 
     fprintf(stderr, "[mesh]   vi %d %d %d %d w %.2f..%.2f\n", vi[0], vi[1], vi[2], vi[3], w0, w1);
 }
 
+/* The ADC reject for a matrix the memo does not hold: the kept triangles'
+ * indices go in the mesh's own buffer (memo) unless an earlier draw this
+ * frame handed that buffer to the GE, then in list memory (no memo). */
+extern volatile long mvc2_host_frame;
+static __attribute__((noinline)) const uint16_t *adc_build(MMesh *me, const float cm[16], int *adc_count, int prof)
+{
+    static uint8_t *out;
+    static int out_cap;
+    int any = 0, keep = me->aused != mvc2_host_frame + 1;
+    uint16_t *f;
+    if (bbox_inside(me, cm)) {
+        if (RARE(prof)) psp_prof_add(36, "        clay ADC bbox skips per frame (count)", 1000);
+    } else {
+        if (RARE(out_cap < me->nverts)) {
+            free(out);
+            out_cap = me->nverts;
+            out = (uint8_t *)malloc((size_t)out_cap);
+        }
+        if (out && use_vfpu > 0) any = vfpu_adc_codes(cm, me->cpu, me->nverts, out);   /* P93 */
+        else if (out) any = adc_c(me, cm, out);
+    }
+    if (!any) {
+        for (int r = 0; r < me->nrange; r++) adc_count[r] = me->range[r].count;
+        memcpy(me->acm, cm, 64);
+        me->avalid = 1;
+        me->ahave = 0;
+        return me->idx;
+    }
+    if (keep && RARE(!me->aidx)) {
+        size_t ib = ((size_t)me->nidx * 2 + 63) & ~(size_t)63;
+        me->aidx = (uint16_t *)memalign(64, ib + (size_t)me->nrange * sizeof(int));
+        if (me->aidx) me->acount = (int *)((uint8_t *)me->aidx + ib);
+        else keep = 0;
+    }
+    f = keep ? me->aidx : (uint16_t *)sceGuGetMemory(((unsigned)me->nidx * 2 + 15) & ~15u);
+    for (int r = 0; r < me->nrange; r++) {
+        MRange *rg = &me->range[r];
+        int n = 0;
+        for (int k = 0; k < rg->count; k += 3) {
+            const uint16_t *t = me->idx + rg->first + k;
+            if (out[t[0]] || out[t[1]] || out[t[2]]) continue;
+            f[rg->first + n] = t[0]; f[rg->first + n + 1] = t[1]; f[rg->first + n + 2] = t[2];
+            n += 3;
+        }
+        adc_count[r] = n;
+    }
+    if (keep) {
+        wb(f, (size_t)me->nidx * 2);
+        memcpy(me->acount, adc_count, (size_t)me->nrange * sizeof *adc_count);
+        memcpy(me->acm, cm, 64);
+        me->avalid = 1;
+        me->ahave = 1;
+        me->aused = mvc2_host_frame + 1;
+    } else {
+        me->avalid = 0;
+    }
+    return f;
+}
+
 static int clay_draw(int h)
 {
     static int *adc_count, adc_cap;
@@ -941,15 +1023,15 @@ static int clay_draw(int h)
     const void *gge = NULL;   /* P108: where the GE reads g, NULL = g */
     if (!CLAY || h <= 0 || h >= MAX_CLAY) return 0;
     me = &CLAY[h];
-    if (!unorm_ok) unorm_init();
+    if (RARE(!unorm_ok)) unorm_init();
     if (me->desc < 0 || !me->nidx) return 0;
     {
         static long at = -2;
         extern volatile long mvc2_host_frame;
-        if (at == -2) { const char *e = getenv("MESH_DUMP"); at = e ? atol(e) : -1; }
+        if (RARE(at == -2)) { const char *e = getenv("MESH_DUMP"); at = e ? atol(e) : -1; }
         dump = at == mvc2_host_frame;
     }
-    if (adc_cap < me->nrange && !grow_int(&adc_count, &adc_cap, me->nrange)) return 0;
+    if (RARE(adc_cap < me->nrange) && !grow_int(&adc_count, &adc_cap, me->nrange)) return 0;
     fmt = me->fmt;
     cscale = (me->desc == 2 || me->desc == 4 || me->desc == 8 || me->desc == 10 || me->desc == 12 || me->desc == 14 ||
               me->desc == 16 || me->desc == 18) ? 255.f : 128.f;
@@ -957,7 +1039,7 @@ static int clay_draw(int h)
     gm = r_global_mod();
     if (mod) { modv[0] = gsf(gm, 16) / 255.f; modv[1] = gsf(gm, 8) / 255.f; modv[2] = gsf(gm, 0) / 255.f; modv[3] = gsf(gm, 24) / 255.f; }
 
-    if (prof) {
+    if (RARE(prof)) {
         psp_prof_add(33, "        clay draws per frame (count)", 1000);
         psp_prof_add(34, "        clay verts per frame (count)", 1000ull * (unsigned)me->nverts);
         psp_prof_add(35, "        clay lit draws per frame (count)", lit ? 1000 : 0);
@@ -970,15 +1052,15 @@ static int clay_draw(int h)
     } else {
         extern volatile long mvc2_host_frame;
         uint32_t key[3] = { mod ? gm : 0xFFFFFFFFu, fmt, (uint32_t)matcol };
-        int stale = me->dirty || !me->cvalid || memcmp(key, me->ckey, sizeof key);
-        if (stale && me->used == mvc2_host_frame + 1) {
+        int stale = me->dirty || !me->cvalid || words_differ(key, me->ckey, 3);
+        if (RARE(stale && me->used == mvc2_host_frame + 1)) {
             /* gv is already in this frame's display list: rewriting it would
              * change that earlier draw too (grey water, flickering edges), so
              * build this draw's copy in list memory */
             g = colours_list(me, 0, matcol, modv, cscale);
         } else {
-            if (me->dirty) { positions(me, me->gv); me->dirty = 0; me->cvalid = 0; me->gvwb = me->vstale = 1; }
-            if (!me->cvalid || memcmp(key, me->ckey, sizeof key)) {
+            if (RARE(me->dirty)) { positions(me, me->gv); me->dirty = 0; me->cvalid = 0; me->gvwb = me->vstale = 1; }
+            if (!me->cvalid || words_differ(key, me->ckey, 3)) {
                 colours_unlit(me, me->gv, matcol, modv, cscale);
                 memcpy(me->ckey, key, sizeof key);
                 me->cvalid = 1;
@@ -994,19 +1076,25 @@ static int clay_draw(int h)
     PT(t_adc);
     /* world * view * projection, then the viewport (func_003DD5D0, canvas NDC), then the screen */
     static int adc_off = -1;
-    if (adc_off < 0) adc_off = getenv("MVC2_NO_ADC") != NULL;
+    if (RARE(adc_off < 0)) adc_off = getenv("MVC2_NO_ADC") != NULL;
     const int adc = !adc_off && (have_clipm || clip_src) && !(me->desc == 19 || (me->desc >= 44 && me->desc <= 48));
     float cm[16];
-    r_viewport(vi, vf);
-    {   /* P88: viewport * canvas -> GE depends only on these; recomputed on change */
+    {   /* P88: viewport * canvas -> GE depends only on these; recomputed on change
+         * (P110: looked at only when r_gu.c says one may have changed) */
         static float key[10], t[16];
         static int ok;
-        float k[10];
-        memcpy(k, vi, 16); memcpy(k + 4, vf, 8); r_gu_canvas_key(k + 6);
-        if (!ok || memcmp(k, key, sizeof k)) {
-            vp_build(vi, vf, t);
-            memcpy(key, k, sizeof k);
-            ok = 1;
+        static unsigned gen;
+        extern unsigned r_gu_vp_gen;
+        if (RARE(gen != r_gu_vp_gen)) {
+            float k[10];
+            gen = r_gu_vp_gen;
+            r_viewport(vi, vf);
+            memcpy(k, vi, 16); memcpy(k + 4, vf, 8); r_gu_canvas_key(k + 6);
+            if (!ok || memcmp(k, key, sizeof k)) {
+                vp_build(vi, vf, t);
+                memcpy(key, k, sizeof k);
+                ok = 1;
+            }
         }
         if (use_vfpu > 0) {   /* P110: the chain below in one VFPU call, intermediates in registers */
             const float *mp[7] = { r_matrix(0x19), r_matrix(0x16), r_matrix(0x17), t, clip_src ? clip_src : clipm, clip, adc ? cm : NULL };
@@ -1028,37 +1116,19 @@ static int clay_draw(int h)
      * band) is not drawn by the GS; the GE would clip and draw it. */
     const uint16_t *idx = me->idx;
     {
-        static uint8_t *out;
-        static int out_cap;
         if (adc) {
-            int any = 0;
-            if (bbox_inside(me, cm)) {
-                if (prof) psp_prof_add(36, "        clay ADC bbox skips per frame (count)", 1000);
-                for (int r = 0; r < me->nrange; r++) adc_count[r] = me->range[r].count;
-            } else {
-            if (out_cap < me->nverts) {
-                free(out);
-                out_cap = me->nverts;
-                out = (uint8_t *)malloc((size_t)out_cap);
-            }
-            if (out && use_vfpu > 0) any = vfpu_adc_codes(cm, me->cpu, me->nverts, out);   /* P93 */
-            else if (out) any = adc_c(me, cm, out);
-            if (any) {
-                uint16_t *f = (uint16_t *)sceGuGetMemory(((unsigned)me->nidx * 2 + 15) & ~15u);
-                for (int r = 0; r < me->nrange; r++) {
-                    MRange *rg = &me->range[r];
-                    int n = 0;
-                    for (int k = 0; k < rg->count; k += 3) {
-                        const uint16_t *t = me->idx + rg->first + k;
-                        if (out[t[0]] || out[t[1]] || out[t[2]]) continue;
-                        f[rg->first + n] = t[0]; f[rg->first + n + 1] = t[1]; f[rg->first + n + 2] = t[2];
-                        n += 3;
-                    }
-                    adc_count[r] = n;
+            if (me->avalid && !words_differ(cm, me->acm, 16)) {   /* P110: same matrix and vertices as the last ADC */
+                if (RARE(prof)) psp_prof_add(62, "        clay ADC memo hits (count)", 1000);
+                if (me->ahave) {
+                    memcpy(adc_count, me->acount, (size_t)me->nrange * sizeof *adc_count);
+                    idx = me->aidx;
+                    me->aused = mvc2_host_frame + 1;
+                } else {
+                    for (int r = 0; r < me->nrange; r++) adc_count[r] = me->range[r].count;
                 }
-                idx = f;
-            }
-            if (!any) for (int r = 0; r < me->nrange; r++) adc_count[r] = me->range[r].count;
+            } else {
+                if (RARE(prof)) psp_prof_add(63, "        clay ADC memo misses (count)", 1000);
+                idx = adc_build(me, cm, adc_count, prof);
             }
         } else {
             for (int r = 0; r < me->nrange; r++) adc_count[r] = me->range[r].count;
@@ -1072,13 +1142,13 @@ static int clay_draw(int h)
                (use_vfpu <= 0 || vfpu_clip_any(clip, g, me->nverts)) &&   /* P110: registers-only pre-pass */
                clip_prepare(clip, g, me->nverts);
     PA(26, "        clay clip_prepare", t_cp);
-    if (prof && (me->desc == 19 || (me->desc >= 44 && me->desc <= 46))) {
+    if (RARE(prof) && (me->desc == 19 || (me->desc >= 44 && me->desc <= 46))) {
         psp_prof_add(27, "        clay clipping-program draws (count)", 1000);
         psp_prof_add(28, "        clay clipping-program verts (count)", 1000ull * (unsigned)me->nverts);
         if (clipping) psp_prof_add(29, "        clay draws needing near_clip (count)", 1000);
     } }
     NcBuf nb = { NULL, 0, 0 };
-    if (clipping)   /* room for the clipped polygons: at most 8 vertices each */
+    if (RARE(clipping))   /* room for the clipped polygons: at most 8 vertices each */
         for (int r = 0; r < me->nrange; r++)
             for (int k = 0; k + 2 < adc_count[r]; k += 3) {
                 const uint16_t *t3 = idx + me->range[r].first + k;
@@ -1086,12 +1156,12 @@ static int clay_draw(int h)
                 if ((c0 | c1 | c2) && !(c0 & c1 & c2)) nb.room += 8;
             }
     static int merge = -1;   /* MVC2_MESH_NOMERGE=1: one submit per range (A/B) */
-    if (merge < 0) merge = getenv("MVC2_MESH_NOMERGE") == NULL;
+    if (RARE(merge < 0)) merge = getenv("MVC2_MESH_NOMERGE") == NULL;
     for (int r = 0; r < me->nrange; r++) {
         const MRange *rg = &me->range[r];
         int n = adc_count[r];
         if (!n) continue;
-        if (clipping) {
+        if (RARE(clipping)) {
             uint16_t *ci;
             PT(t_nc);
             int n = near_clip(&nb, g, me->nverts, idx + rg->first, adc_count[r], &ci);
@@ -1109,7 +1179,7 @@ static int clay_draw(int h)
         r_gu_mesh_draw(clip, me->textured ? rg->tex : 0, g, gge, idx + rg->first,
                        gge && idx == me->idx && me->ioff ? (const uint16_t *)(uintptr_t)(0x04000000u + me->ioff) + rg->first : NULL,
                        n, su, sv, ou, ov);
-        if (dump) mesh_dump(me, h, r, rg, adc_count[r], fmt, g, idx, clip, vi);
+        if (RARE(dump)) r_viewport(vi, vf), mesh_dump(me, h, r, rg, adc_count[r], fmt, g, idx, clip, vi);
         r_gu_mesh_cnt[0]++;
         r_gu_mesh_cnt[1] += adc_count[r] / 3;
     }

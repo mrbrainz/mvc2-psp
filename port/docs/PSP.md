@@ -658,6 +658,21 @@ Per-draw code footprint (P110, 2026-11-24, PSP-2003, `fight6`, `PROFILE=1 NO_FRA
   fight fps 19.98 19.98 29.00 14.98 13.76. PPSSPP shots f1-f6 identical.
   Removing the dead switch moved the layout by ~0.3 ms (P112).
 
+Per-draw path trimmed (P110, 2026-11-25, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1`, `hot_order.ld` regenerated, two runs):
+- **Change:** `r_gu_begin` and `r_gu_mesh_draw` skip `r_flush` + `canvas_bind`
+  when nothing is pending (`R_READY`); rare branches in `clay_draw` marked
+  `RARE` (`__builtin_expect`, laid out after the per-draw path) and the
+  scalar box tests and `clip_prepare` made `COLD` (`fl_clay_draw` 8.5 ->
+  5.1 KB); the viewport/canvas key is read only when `r_gu_vp_gen` changes;
+  small `memcmp`s inline.
+- **ADC memo:** when the ADC matrix and the vertices are bit-identical to the
+  mesh's last ADC, its result (kept indices in a per-mesh cached buffer,
+  written back, or "keep all") is reused; ~30 of ~68 ADC draws a frame hit
+  (PPSSPP, `PROFILE=2` slots 62/63). The buffer is not rewritten after the GE
+  was handed it in the same frame (list memory then, as before).
+- **Result:** `fl_clay_draw` 4.15 -> 3.37 / 3.39 ms, render pass 15.67-15.70
+  -> 14.72 / 14.70 ms. PPSSPP shots f1-f6 identical; hardware shots not compared.
+
 Mesh words on the Media Engine (P104 design (a), 2026-11-24, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1`, one build, one run each):
 - **How:** `rec_build` resolves per item what needs main-CPU state (texture
   key, `tex_addr` VRAM copies, in-use gens, depth zoom) into a `MeItem`;
