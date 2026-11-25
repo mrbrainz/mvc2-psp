@@ -54,6 +54,7 @@ window.BACKLOG = {
   "P112",
   "P113",
   "P114",
+  "P115",
   "P116",
   "P12",
   "P13",
@@ -111,19 +112,22 @@ window.BACKLOG = {
  ],
  "activities": [
   {
-   "id": "P115",
-   "order": 39,
+   "id": "P117",
+   "order": 38,
    "phase": "P4",
-   "size": "XS",
+   "size": "M",
    "status": "Ready",
-   "depends": [],
+   "depends": [
+    "P115"
+   ],
    "read": [
     "port/psp/host/psp_me.c",
+    "port/psp/host/psp_entry.c",
     "port/docs/PSP.md"
    ],
-   "title": "Media Engine: sleep/resume and quitting to the XMB (EBOOT, ME_SPIKE=3)",
-   "description": "From the memory stick (PSPLink's USB drops on sleep): EBOOT with env.txt ME_SPIKE=3, into a fight, sleep and wake, then quit to the XMB and use music/video there. The [me] after resume line says whether our ME code survived sleep or was booted again. Needed before P104 is the default.",
-   "done_when": "Behaviour after resume and after quitting to the XMB recorded in PSP.md; anything broken filed as a ticket under P104."
+   "title": "Media Engine: give it back to the firmware before sleep, take it again on wake",
+   "description": "P115: sleep with our code on the ME powers the PSP off; without ME use it works (2026-11-25). On PSP_POWER_CB_SUSPENDING: park our ME code, put back the reset-vector words psp_me.c overwrote (saved at boot) and restart the firmware's ME code so its sleep handling runs; on resume boot ours again (the P104 path waits for or rebuilds any pending job).",
+   "done_when": "Sleep and wake from a fight with MVC2_ME_BUILD=1 work on the PSP-2003 and the fight goes on with the ME building."
   },
   {
    "id": "P110",

@@ -1202,6 +1202,22 @@ window.BACKLOG_ARCHIVE = [
   "note": "Go for P103/P104: our code runs on the ME (psp_me.c, ME_SPIKE=1..3); ME copying 512 KB per logic step costs the main CPU +0.25 ms render pass (17.63 -> 17.88), flat-out copying +2.25 (PSP.md). Sleep/resume and XMB exit moved to P115."
  },
  {
+  "id": "P115",
+  "order": 39,
+  "phase": "P4",
+  "size": "XS",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/psp/host/psp_me.c",
+   "port/docs/PSP.md"
+  ],
+  "title": "Media Engine: sleep/resume and quitting to the XMB (EBOOT, ME_SPIKE=3)",
+  "description": "From the memory stick (PSPLink's USB drops on sleep): EBOOT with env.txt ME_SPIKE=3, into a fight, sleep and wake, then quit to the XMB and use music/video there. The [me] after resume line says whether our ME code survived sleep or was booted again. Needed before P104 is the default.",
+  "done_when": "Behaviour after resume and after quitting to the XMB recorded in PSP.md; anything broken filed as a ticket under P104.",
+  "note": "Quit to the XMB works with ME_SPIKE=3 and MVC2_ME_BUILD=1; sleep from a fight powers the PSP off in both (PSP.md). Filed P117."
+ },
+ {
   "id": "P96",
   "order": 40,
   "phase": "P4",

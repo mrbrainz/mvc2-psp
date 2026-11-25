@@ -603,8 +603,14 @@ Media Engine spike (P114, 2026-11-24, PSP-2003 ARK-4, `fight6`, `PROFILE=1 NO_FR
   ME idle 17.63 / 6.38 ms; 512 KB copied per logic step (~30 MB/s, a
   list-build stand-in, always finished in the step) 17.88 / 6.63 (+0.25);
   copying flat out (~100-150 MB/s) 19.88 / 7.61 (+2.25).
-- **Not yet checked:** sleep/resume and quitting to the XMB with our code
-  on the ME.
+- **Sleep and the XMB (P115, 2026-11-25, PSP-2003 ARK-4, packed EBOOT from
+  the memory stick, `ME_SPIKE=3` and `MVC2_ME_BUILD=1`):** HOME -> Exit to
+  the XMB works in both (spike: ME still copying at exit; build path: ME
+  parked). Sleep from a fight crashes in both: screen off, green light stays
+  on, then the PSP powers off; nothing reaches the log. With an empty
+  `env.txt` (ME untouched) sleep, wake and the quit all work (`[plat]
+  suspend`/`resume` logged). P117: give the ME back to the firmware before
+  sleep.
 
 Per-draw code footprint (P110, 2026-11-24, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1`, two runs each):
 - **Split by removal (after P116):** `fl_clay_draw` 4.48 ms over ~102 draws:
