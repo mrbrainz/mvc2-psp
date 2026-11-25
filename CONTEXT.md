@@ -32,4 +32,4 @@ A PSP build of the Marvel vs. Capcom 2 decompilation, as a new platform backend 
 
 ## Status (max 3 lines; replace, never append)
 - Boots and plays on a PSP-2003 (ARK-4) after the P82 hardware fixes; release pipeline done (P68-P71, P81).
-- Next: P105 (P110 done: fl_clay_draw 3.4 ms, render pass 14.7 ms). Next main-CPU cost: the audio mix, 1.2-1.85 ms (P91/P106). ME work parked: P117 blocked (sleep with our ME code powers off), P104 behind it.
+- Next: P98/P99 (character select draw/walk). Fights: render pass 14.7 ms after P110; P105 closed (texture reads cost at most 0.64 ms). Audio mix 1.2-1.85 ms (P91/P106). ME work parked: P117 blocked, P104 behind it.

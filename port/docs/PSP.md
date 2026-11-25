@@ -534,6 +534,13 @@ GE main-RAM traffic (P111, 2026-11-24, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_S
   space) gave the same pass as 256 KB; 128 KB was 0.6 ms worse.
 - **Left:** cutting texture reads means lossy copies (P105).
 
+Half-size texture copies (P105, 2026-11-25, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1`, one build, two runs each; closed, not worth it):
+- **Ceiling:** a temporary switch pointed every mesh texture bind that reads
+  RAM (cache full) at VRAM (same sizes, wrong pixels): render pass
+  14.57 / 14.54 -> 13.91 / 13.90 ms, `fl_clay_draw` 3.33 / 3.36 -> 3.19 ms.
+  Any reduced copy saves at most these 0.64 ms (4%), less the cost of making
+  the copies, and blurs the 3D scene; not done.
+
 Per-draw mesh work (P110, 2026-11-24, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1`, two runs each; partial):
 - **Doubling each stage** (the extra cost of running it twice, `fl_clay_draw`):
   the timer reads +0.20 ms, `r_gu_begin` +0.19, the matrix chain +0.38, the

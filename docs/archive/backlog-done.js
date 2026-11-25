@@ -1312,6 +1312,24 @@ window.BACKLOG_ARCHIVE = [
   "note": "P110a: fused VFPU matrices, clip box test and pre-pass in registers (6.89 -> 6.26 ms). P110b: rare paths noinline/cold, near_clip keeps unclipped indices (4.15 ms). P110c: r_flush/canvas_bind skipped when nothing is pending, rare branches laid out after the per-draw path, ADC result memoized per mesh (~30 of ~68 ADC draws hit): fl_clay_draw 4.15 -> 3.37/3.39 ms, render pass 15.7 -> 14.7 (PSP-2003 fight6, regenerated layout, two runs); PPSSPP shots f1-f6 identical."
  },
  {
+  "id": "P105",
+  "order": 41,
+  "phase": "P4",
+  "size": "M",
+  "status": "Won't fix",
+  "depends": [
+   "P88"
+  ],
+  "read": [
+   "port/docs/PSP.md",
+   "port/render/r_gu.c"
+  ],
+  "title": "Hardware speed: half-size texture copies when the GE's reads slow the frame",
+  "description": "Ideas from gibletto/mvc2-naomi-dc ports/port/psp (AGPL-3.0: ideas only, no code copied). The GE reads textures from main RAM over the bus the CPU uses. For 3D-scene textures drawn shrunk, keep a half-size copy (made once, a level per frame) and draw from it when recent frames are over budget; switch back with hysteresis. HUD, sprites and menus are never reduced. Measure first whether GE texture reads cost the CPU here (PROFILE=1 with mip forced on vs off) before building the automatic switch.",
+  "done_when": "Measured effect on a 3v3 fight's frame time on hardware recorded in PSP.md; if worthwhile, automatic switch in place with HUD/menus unchanged in screenshots; if not, Won't fix with the numbers.",
+  "note": "Ceiling measured: RAM-read mesh texture binds pointed at VRAM (wrong pixels) cut the fight6 render pass 14.55 -> 13.90 ms (two runs each, PSP-2003). A half-size copy saves at most that 0.64 ms and blurs the 3D scene; not done."
+ },
+ {
   "id": "P73",
   "order": 42,
   "phase": "P6",

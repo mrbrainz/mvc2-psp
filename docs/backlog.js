@@ -187,23 +187,6 @@ window.BACKLOG = {
    "note": "Design (a) built (MVC2_ME_BUILD=1, PSP.md): the ME building the words measured no better than the main-CPU writer (P116), 16.24 vs 16.12-16.18 ms render pass. Next try: move the per-item prep (texture key, depth zoom) to the ME, after P115."
   },
   {
-   "id": "P105",
-   "order": 41,
-   "phase": "P4",
-   "size": "M",
-   "status": "Ready",
-   "depends": [
-    "P88"
-   ],
-   "read": [
-    "port/docs/PSP.md",
-    "port/render/r_gu.c"
-   ],
-   "title": "Hardware speed: half-size texture copies when the GE's reads slow the frame",
-   "description": "Ideas from gibletto/mvc2-naomi-dc ports/port/psp (AGPL-3.0: ideas only, no code copied). The GE reads textures from main RAM over the bus the CPU uses. For 3D-scene textures drawn shrunk, keep a half-size copy (made once, a level per frame) and draw from it when recent frames are over budget; switch back with hysteresis. HUD, sprites and menus are never reduced. Measure first whether GE texture reads cost the CPU here (PROFILE=1 with mip forced on vs off) before building the automatic switch.",
-   "done_when": "Measured effect on a 3v3 fight's frame time on hardware recorded in PSP.md; if worthwhile, automatic switch in place with HUD/menus unchanged in screenshots; if not, Won't fix with the numbers."
-  },
-  {
    "id": "P106",
    "order": 46,
    "phase": "P4",
