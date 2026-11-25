@@ -128,3 +128,41 @@ void __wrap_func_001538B0(u8 *o, u8 *n, u8 *q)
         }
     }
 }
+
+/* func_00152400 (src/w1813_v.c), the object's colour (state 0x66) before its
+ * node tree: the same products, with fptoui (func_00119098, the game's
+ * soft-float conversion through four libgcc helpers) done by the FPU for the
+ * values where they agree (1 <= x < 2^32 truncates, below 1 is 0); anything
+ * else (NaN, inf, 2^32 and up) goes to the game's.  The set is skipped when
+ * the game's value, the renderer's and the mode words already hold it. */
+extern s32 func_00119098(f32);
+extern f32 D_004F1D0C, D_004F1D10, D_004F1D14;
+uint32_t r_global_mod(void);
+static inline u32 fptoui(f32 x)
+{
+    if (x < 1.0f) return 0;
+    if (x < 4294967296.0f) return (u32)x;
+    return (u32)func_00119098(x);
+}
+
+void __real_func_00152400(u8 *p);
+void __wrap_func_00152400(u8 *p)
+{
+    f32 sc = 1.0f, r, g, b;
+    u32 fl = *(u32 *)(p + 0xD0), c;
+    if (game < 0) game = getenv("MVC2_NODE_GAME") != NULL;
+    if (game) { __real_func_00152400(p); return; }
+    if (fl & 0x20) sc = *(f32 *)(p + 0x74);
+    if (fl & 0x400) {
+        r = *(f32 *)(p + 0x78); g = *(f32 *)(p + 0x7C); b = *(f32 *)(p + 0x80);
+        if (fl & 0x800) { r = r * D_004F1D0C; g = g * D_004F1D10; b = b * D_004F1D14; }
+    } else if (fl & 0x800) {
+        r = D_004F1D0C; g = D_004F1D10; b = D_004F1D14;
+    } else {
+        r = g = b = 1.0f;
+    }
+    c = (fptoui(255.0f * sc) & 0xFF) << 24 | (fptoui(255.0f * r) & 0xFF) << 16 |
+        (fptoui(255.0f * g) & 0xFF) << 8 | (fptoui(255.0f * b) & 0xFF);
+    if (D_004C2ABC == c && r_global_mod() == c && synced()) return;   /* func_003DF850(0x66, c) would change nothing */
+    func_003DF850(0x66, (int)c);
+}

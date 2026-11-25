@@ -48,12 +48,15 @@ static void check_draw(void)
         fprintf(stderr, "mesh check: %ld draws, %ld changed\n", checks, bad);
 }
 
-static void psp_mesh_handoff(void)
+#define COLD __attribute__((noinline, cold))   /* P98: off the per-draw path (I-cache) */
+#define RARE(x) __builtin_expect(!!(x), 0)
+
+static int handoff_mode = -1;   /* 0 bound, 1 upstream hand-off */
+COLD static void handoff_init(void)
 {
-    static int mode = -1;   /* 0 bound, 1 upstream hand-off */
-    if (mode < 0) {
-        mode = getenv("MVC2_MESH_HANDOFF") != NULL;
-        if (!mode)
+    {
+        handoff_mode = getenv("MVC2_MESH_HANDOFF") != NULL;
+        if (!handoff_mode)
             r_gu_mesh_bind((const float *)EE_BSS_PTR(0x0061C720), (const float *)EE_BSS_PTR(0x0061C6E0),
                            (const float *)EE_BSS_PTR(0x0061BEE0), (const float *)EE_BSS_PTR(0x0061BF20),
                            (const float *)EE_BSS_PTR(0x0061BDE0), EE_BSS_PTR(0x0061B2F0),
@@ -61,11 +64,17 @@ static void psp_mesh_handoff(void)
         if (getenv("MVC2_MESH_CHECK"))
             r_gu_mesh_check = check_draw;
     }
-    if (r_gu_mesh_check)
-        for (int k = 0; k < 8; k++)
-            memcpy(snap[k], EE_BSS_PTR(src[k].ee), src[k].n);
-    if (!mode)
-        return;
+}
+
+COLD static void handoff_snap(void)
+{
+    for (int k = 0; k < 8; k++)
+        memcpy(snap[k], EE_BSS_PTR(src[k].ee), src[k].n);
+}
+
+/* MVC2_MESH_HANDOFF=1: the upstream per-draw hand-off */
+COLD static void handoff_upstream(void)
+{
     fl_set_render_state(0x16, (uintptr_t)EE_BSS_PTR(0x0061C720));
     fl_set_render_state(0x17, (uintptr_t)EE_BSS_PTR(0x0061C6E0));
     fl_set_render_state(0x19, (uintptr_t)EE_BSS_PTR(0x0061BEE0));
@@ -76,21 +85,21 @@ static void psp_mesh_handoff(void)
     fl_set_render_state(0x5B, (uintptr_t)EE_BSS_PTR(0x0061B3B8));
 }
 
+static inline void psp_mesh_handoff(void)
+{
+    if (RARE(handoff_mode < 0)) handoff_init();
+    if (RARE(r_gu_mesh_check != NULL)) handoff_snap();
+    if (RARE(handoff_mode)) handoff_upstream();
+}
+
 /* fe_mesh.c func_003F0500 from fe_sync_state() to fl_clay_draw, as upstream:
  * fe_sync_state (fe_render.c sync_origin), the clay's textures through
  * fe_sync_handle, the hand-off, MVC2_MESH_DUMP and VERBOSE>1 logs */
 void fe_sync_handle(u32 hnd);
-void psp_mesh_predraw(int h, u32 fmt)
+static long dump_at = -2;
+
+COLD static void predraw_dump(int h, u32 fmt)
 {
-    static long dump_at = -2;
-    uint32_t tx[64];
-    int n;
-    fl_set_origin(EE_BSS(s32, 0x0062BF8C), EE_BSS(s32, 0x0062BF90));
-    fl_sync_mode_words(EE_BSS(u32, 0x004C2AD0), EE_BSS(u32, 0x004C2AD4));
-    n = fl_clay_textures(h, tx, 64);
-    for (int k = 0; k < n; k++)
-        fe_sync_handle(tx[k]);
-    psp_mesh_handoff();
     if (dump_at == -2) {
         const char *e = getenv("MVC2_MESH_DUMP");
         dump_at = e ? atol(e) : -1;
@@ -104,17 +113,33 @@ void psp_mesh_predraw(int h, u32 fmt)
                      h, (unsigned)fmt, w[0], w[1], w[2], w[4], w[5], w[6], w[8], w[9], w[10], w[12], w[13], w[14]);
         }
     }
-    if (host_verbose > 1) {
-        static long last = -1;
-        if (mvc2_host_frame % 60 == 0 && last != mvc2_host_frame) {
-            const float *v = (const float *)EE_BSS_PTR(0x0061C720), *pj = (const float *)EE_BSS_PTR(0x0061C6E0),
-                        *w = (const float *)EE_BSS_PTR(0x0061BEE0);
-            last = mvc2_host_frame;
-            host_log("mesh %d frame %ld fmt %08X", h, (long)mvc2_host_frame, (unsigned)fmt);
-            for (int k = 0; k < 4; k++)
-                host_log("  view %8.3f %8.3f %8.3f %8.3f | proj %8.3f %8.3f %8.3f %8.3f | world %8.3f %8.3f %8.3f %8.3f",
-                         v[4 * k], v[4 * k + 1], v[4 * k + 2], v[4 * k + 3], pj[4 * k], pj[4 * k + 1], pj[4 * k + 2],
-                         pj[4 * k + 3], w[4 * k], w[4 * k + 1], w[4 * k + 2], w[4 * k + 3]);
-        }
+}
+
+COLD static void predraw_verbose(int h, u32 fmt)
+{
+    static long last = -1;
+    if (mvc2_host_frame % 60 == 0 && last != mvc2_host_frame) {
+        const float *v = (const float *)EE_BSS_PTR(0x0061C720), *pj = (const float *)EE_BSS_PTR(0x0061C6E0),
+                    *w = (const float *)EE_BSS_PTR(0x0061BEE0);
+        last = mvc2_host_frame;
+        host_log("mesh %d frame %ld fmt %08X", h, (long)mvc2_host_frame, (unsigned)fmt);
+        for (int k = 0; k < 4; k++)
+            host_log("  view %8.3f %8.3f %8.3f %8.3f | proj %8.3f %8.3f %8.3f %8.3f | world %8.3f %8.3f %8.3f %8.3f",
+                     v[4 * k], v[4 * k + 1], v[4 * k + 2], v[4 * k + 3], pj[4 * k], pj[4 * k + 1], pj[4 * k + 2],
+                     pj[4 * k + 3], w[4 * k], w[4 * k + 1], w[4 * k + 2], w[4 * k + 3]);
     }
+}
+
+void psp_mesh_predraw(int h, u32 fmt)
+{
+    uint32_t tx[64];
+    int n;
+    fl_set_origin(EE_BSS(s32, 0x0062BF8C), EE_BSS(s32, 0x0062BF90));
+    fl_sync_mode_words(EE_BSS(u32, 0x004C2AD0), EE_BSS(u32, 0x004C2AD4));
+    n = fl_clay_textures(h, tx, 64);
+    for (int k = 0; k < n; k++)
+        fe_sync_handle(tx[k]);
+    psp_mesh_handoff();
+    if (RARE(dump_at != -1)) predraw_dump(h, fmt);
+    if (RARE(host_verbose > 1)) predraw_verbose(h, fmt);
 }

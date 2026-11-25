@@ -151,7 +151,7 @@ window.BACKLOG = {
    "title": "Hardware speed: character select object list 6 draw (func_001520E0)",
    "description": "P91 split: in character select, func_001520E0(6) (draw each object of D_004D3690[6] through func_00152180) takes 8.3 ms a frame on the PSP-2003 without its mesh draws. Split it further (func_00152180's sprite or 2D path) and make the hot part cheaper PSP-side.",
    "done_when": "func_001520E0(6) non-mesh time <= 3 ms in fight6's character select (PROFILE=1, hardware); rendering and game-state trace unchanged.",
-   "note": "Partial: psp_node_draw.c (node loop and func_001537D0 PSP-side: no-op blend sets skipped, matrix sets without the setter) cut func_001520E0(6) non-mesh 5.6 -> 4.0 ms per select frame with every character unlocked (2.6 with unlock=stock), fight render pass -0.7 ms; PPSSPP shots and oracle state identical. Left: the cache misses around each node's mesh draw (~2 ms)."
+   "note": "Partial (unlock=all, fight6 select): non-mesh 5.6 -> 3.84 (node loop PSP-side, a6c0c8188) -> 3.19-3.21 ms (func_00152400 PSP-side with FPU fptoui and no-op 0x66 skipped; psp_mesh_predraw cold paths out of line), fight render pass -0.4..0.6 ms; shots and per-frame state identical to MVC2_NODE_GAME=1, snapshot diffs at 0x01D/0x01E not yet checked against same-build noise. Left: 34 objects/frame set and reset state 0x6B (GS ZBUF packets the PSP never reads); layout moves this figure +-0.4 ms."
   },
   {
    "id": "P99",

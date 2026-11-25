@@ -828,6 +828,24 @@ Model node draw (P98, 2026-11-25, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1
 - **Measuring:** `PROFILE=1` blocks are 300 frames; how much of the select
   screen falls in them depends on load timing and the unlock setting. The
   new `select: frames drawn` line (1.00 = every frame) marks full blocks.
+- **Second pass (2026-11-25, `unlock=all`, `hot_order.ld` regenerated each
+  time, two runs):** each select object draws one node and one mesh (~165 a
+  frame), so the cost is per object. `func_00152400` (object colour) is
+  PSP-side: its four soft-float `fptoui` calls become FPU truncations (the
+  game's for NaN, inf, >= 2^32) and the 0x66 set is skipped when it changes
+  nothing (97%). `psp_mesh_predraw`'s dump, log and set-up paths are out of
+  line (4.7 KB -> 356 bytes). Non-mesh 3.84-3.88 -> 3.19-3.21 ms, select
+  render pass 16.8 -> 16.0-16.2, fights 13.16/13.76/12.88/15.40 ->
+  12.71/13.25/12.46/14.79. PPSSPP: shots f1-f6 identical to `MVC2_NODE_GAME=1`,
+  per-frame records 3,057 frames identical; snapshots differ at 0x01D/0x01E
+  (mostly frame 600, file headers), not yet compared with same-build noise.
+- **Tried and dropped:** a two-pass node loop (matrices first: non-mesh
+  -0.13, mesh draws +2.5 ms), func_00152180 merged PSP-side, renderer mode
+  words read in place, the object-draw chain first in `hot_order.ld`. The
+  function layout alone moves the non-mesh figure by +-0.4 ms. The timers
+  cost ~1.1 us a read per mesh (~0.2 ms of the figure).
+- **Left:** 34 objects a frame set and reset state 0x6B; each builds a GS
+  ZBUF packet (`func_003E0530`) the PSP never reads.
 
 Tex select upload path (P95, 2026-11-23, `psp_reslist.c` `psp_texsel`):
 - **What changed:** for lists with a texture that isn't resident, the PSP runs
