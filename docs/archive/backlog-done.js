@@ -1554,5 +1554,22 @@ window.BACKLOG_ARCHIVE = [
   "description": "The platform runs up to 8 logic steps per display frame when behind, but the PSP renderer drew every step (upstream r_gl.c discards all but the last). Discard the undisplayed steps in r_gu.c.",
   "done_when": "Fights and character select run their logic at full speed on the PSP-2003 or show more frames a second; the shown picture is unchanged.",
   "note": "r_gu.c r_set_discard plus psp_main.c: steps that won't be shown skip the GE; NO_FRAME_SKIP=1 restores the old behaviour. PSP-2003 fight6: fight logic 33-37 -> 59.94 steps/s, display 4.1-4.6 -> 9.8-12 fps; character select 28-31 -> 53-60 logic, display 3.5-3.9 -> 6.7-7.5. Screenshots render correctly; the game state is untouched (renderer only)."
+ },
+ {
+  "id": "P122",
+  "order": 57,
+  "phase": "P4",
+  "size": "M",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/docs/PSP.md",
+   "port/cmake/ps2fp-cc.pl",
+   "port/cmake/psp-clang.cmake"
+  ],
+  "title": "Game float expressions folded at build time on the PSP",
+  "description": "clang -O2 folds float expressions whose operands it can prove constant (store-to-load forwarding included) to nearest; the EE computes them at run time toward zero, as the other ports do (ps2fp-cc.pl: IR at -O0). Example func_00186900 (src/w182_m.c): (20.0f * f6C) / 2.0f becomes a constant, so a tag-in's vertical speed is 0x41136DB7 instead of 0x41136DB5. -frounding-math and -ffp-model=strict change nothing for this target (plain fmul in the -O2 IR). Likely fix: a PSP compile launcher for game code (IR at -O0, float ops as constrained intrinsics with dynamic rounding, then -O2 and the usual FPU instructions); measure the hardware cost.",
+  "done_when": "func_00186900 multiplies at run time; P42 seeds 1, 17, 40, 240 match the reference frame for frame (port/psp/ref); fight frame times within noise on the PSP-2003.",
+  "note": "port/psp/cmake/psp-fp-cc.pl (launcher on mvc2_game_code and psp_host_core): front-end IR, float ops as constrained intrinsics with dynamic rounding, then -O2; -frounding-math alone also deferred literal conversions (newlib cosf's coefficients) to run time. Seeds 1 and 240 match (240: one word at frame 4755), seed 40's cosf difference gone; 17 and 40 still split from a non-float cause (P123). PSP-2003 fight6: fights within 0.15 ms, select windows +0.2-0.5 ms."
  }
 ];

@@ -181,6 +181,30 @@ seed and game RNG included. Then:
   (player 0 +0x510 differed); the P101 hot build stops at frame ~2100 of these
   scripts on both PPSSPP and hardware.
 
+Build-time float folding (P122, 2026-11-26):
+- **Change:** `port/psp/cmake/psp-fp-cc.pl`, the compiler launcher of
+  `mvc2_game_code` and `psp_host_core` (`MVC2_PSP_STRICT_FP`, on;
+  `MVC2_NO_PSPFP=1` in the build environment skips it). It emits the front
+  end's IR (`-Xclang -disable-llvm-passes`, `-ffp-contract=off`), turns float
+  fadd/fsub/fmul/fdiv, int->float, double->float and sqrt into constrained
+  intrinsics with dynamic rounding, makes the module strictfp, then compiles
+  the IR at -O2. `func_00186900` now multiplies at run time.
+- **Not `-frounding-math` alone** (forced with `-Xclang
+  -fexperimental-strict-floating-point`): it also leaves the front end's
+  conversions of literals to run time, so `(float)4.1666667908e-02` in
+  newlib's `cosf` went through `__truncdfsf2` toward zero (one ulp low, six
+  libcalls per call; seed 40's first difference, frame 2357).
+- **Seeds (PPSSPP, `unlock=all`):** 1 matches (0 words); 240 matches but for
+  one word (frame 4755, 0x004F2D18, 1 ulp); 17 and 40 still split at frames
+  3889 / 2400. Seed 40 has EE BSS identical through 2399 (GS packet words
+  aside), then a character takes `jtbl_00458680[4]` (`func_002A5D10`, a
+  15-particle effect) on the PSP only, also with every PSP-side replacement
+  set to the game's body: an input outside EE BSS (P123).
+- **PSP-2003 (`fight6`, `unlock=all`, `PROFILE=1 NO_FRAME_SKIP=1`, two runs
+  each against a build with the launcher off):** fight windows (frames
+  1800-3000) 12.8-19.4 ms on both, every window within 0.15 ms; character
+  select windows (900, 1200) +0.2-0.5 ms. Shots not compared.
+
 ## Reference build (wasm, under node)
 
 `brew install emscripten`; the port's tools expect an emsdk layout, so point

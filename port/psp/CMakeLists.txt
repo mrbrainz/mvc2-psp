@@ -60,6 +60,14 @@ target_include_directories(psp_host_core PRIVATE "${MVC2_ROOT}/port/stubs" "${MV
   "${MVC2_ROOT}/port/platform" "${GLUE}")
 target_include_directories(psp_host_core SYSTEM PRIVATE ${PSP_INC})
 target_compile_options(psp_host_core PRIVATE -fno-common -Wall -Wno-unused-function)
+# P122: game and host-core float arithmetic at run time, in the FPU's rounding
+# mode (FCSR: toward zero, as the EE), never folded to nearest by the
+# optimiser (cmake/psp-fp-cc.pl; the other ports: port/cmake/ps2fp-cc.pl).
+option(MVC2_PSP_STRICT_FP "game float ops at run time (P122)" ON)
+if(MVC2_PSP_STRICT_FP)
+  set_target_properties(mvc2_game_code psp_host_core PROPERTIES
+    C_COMPILER_LAUNCHER "${PSP_DIR}/cmake/psp-fp-cc.pl")
+endif()
 set_source_files_properties(${HOST_CORE_SRCS} PROPERTIES OBJECT_DEPENDS "${GLUE}/mvc2_host_protos.h")
 # ---- psp-gcc (EABI32) objects: module entry, sceGu shims; the rest is o32 --
 # XMB art (ICON0 + PIC1) from the user's ISO, dev builds only; the ELF never
