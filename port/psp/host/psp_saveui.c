@@ -17,6 +17,7 @@
  * dialog is drawn from r_gu_present (psp_saveui_frame). */
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "mvc2_stubs.h"
 #include "host.h"
@@ -115,7 +116,8 @@ void __wrap_func_00130040(void)   /* boot memory-card screen (1/8) */
 {
     uint8_t *g = EE_BSS(uint8_t *, G_MENU);
     unsigned n = 0;
-    int r = psp_save_load(buf, BLOCK, &n);
+    /* MVC2_NO_SAVEDATA=1 (testing, P42): boot as with no savedata */
+    int r = getenv("MVC2_NO_SAVEDATA") ? 1 : psp_save_load(buf, BLOCK, &n);
     if (r == 0 && n == BLOCK) r = apply_loaded();
     EE_BSS(uint8_t, D_AUTOSAVE) = r == 0;   /* as 1/8: autosave on after a good autoload */
     fprintf(stderr, "[save] boot autoload: %s (%d, %u bytes)\n", r == 0 ? "loaded" : r == 1 ? "no data" : "failed", r, n);

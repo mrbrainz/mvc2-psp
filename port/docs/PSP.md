@@ -142,6 +142,45 @@ pointers, 31 as host pointers with the EE uncached segment bits the game ORs
 on for DMA (`0x20000000`/`0x30000000`), and 3 ignore-listed words that vary
 between any two runs (boot clock, timer, one malloc chunk size).
 
+## Determinism check (P42, 2026-11-26)
+
+Reference: `port/psp/ref` links the wasm port's objects (`build/port-em`,
+`ninja mvc2_host`) with the PSP's game-flow changes: its script runner and
+frame step, `psp_1p.c`, `psp_credits.c`, the boot card screen as with no
+savedata, and the renderer on swgl. Fuzz scenarios (`fuzz.py show SEED`) run
+on both; the dumps are aligned on the resync record (state 1/1/0) and
+compared with `compare_ports.py`.
+
+    port/psp/ref/build.sh            # -> build/port-em/mvc2_psp_ref.js
+    MVC2_P1_TEAM=.. MVC2_CPU_TEAM=.. MVC2_PAD_DELAY=0 MVC2_RESYNC=1/1/0 MVC2_STATE_DUMP=ref.bin \
+        node build/port-em/mvc2_psp_ref.js --iso <ISO> --frames N --script script.txt
+    # PSP: the same MVC2_* lines in env.txt, plus SCRIPT=, QUIT_AFTER=N,
+    # NO_FRAME_SKIP=1, MVC2_NO_SAVEDATA=1 (boot as with no savedata)
+
+Results (PPSSPP, `unlock=all`, seeds 1, 17, 40, 240; seed 1 also PSP-2003):
+boot, menus, character select and the first fight frames match, pads, rand
+seed and game RNG included. Then:
+- **1, 240:** 1-2 ulp float drift in players' +0x38/+0x60/+0xF4 from a
+  tag-in (frame 2898 in seed 1), no split: 17 / 14 words.
+- **17, 40:** the same kind of drift (seed 17 frame 2682, player 1 +0x5C),
+  then a split (game RNG differs from frames 3889 / 2400).
+- **Cause found (seed 1):** clang -O2 folds float expressions it can prove
+  constant to nearest; the EE computes them at run time toward zero
+  (func_00186900, `(20.0f * f6C) / 2.0f`; modelled exactly). `-frounding-math`
+  and `-ffp-model=strict` do not stop it for this target (P122).
+- **Fixed on the way:** libgcc's `__truncdfsf2` rounds to nearest whatever
+  FCSR says; it now follows FCSR (`psp_fpu.c`), as `dptofp` does for the
+  game; this removed the drift of the matrix at D_004F6CD0+0x40. newlib's
+  `cosf` differs from musl's (the wasm libc) by an ulp: `psp_libm.c` has
+  musl's `sinf`/`cosf` (round to nearest for the call). Neither alone fixes
+  the drift above.
+- **Checked:** the Allegrex FPU (PPSSPP and PSP-2003) rounds `add.s`,
+  `mul.s`, `div.s`, `sqrt.s`, `cvt.s.w` toward zero under FCSR RM 1; libgcc's
+  double arithmetic rounds to nearest, as wasm's.
+- **Limits:** on hardware the real pad's analog nub reaches the game
+  (player 0 +0x510 differed); the P101 hot build stops at frame ~2100 of these
+  scripts on both PPSSPP and hardware.
+
 ## Reference build (wasm, under node)
 
 `brew install emscripten`; the port's tools expect an emsdk layout, so point

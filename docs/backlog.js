@@ -209,16 +209,34 @@ window.BACKLOG = {
    "order": 48,
    "phase": "P4",
    "size": "S",
-   "status": "Ready",
+   "status": "Blocked",
    "depends": [
-    "P06"
+    "P06",
+    "P122"
    ],
    "read": [
     "port/docs/ORACLE_FUZZ.md"
    ],
    "title": "Determinism check on PSP",
    "description": "Run fuzz seeds on PSP build and compare hashes with native.",
-   "done_when": "Selected seeds match frame for frame."
+   "done_when": "Selected seeds match frame for frame.",
+   "note": "Reference: port/psp/ref (wasm runner with the PSP's game-flow wraps), PSP.md 'Determinism check (P42)'. Seeds 1, 17, 40, 240 (PPSSPP; seed 1 also PSP-2003): boot, menus, select and RNG identical to the fight; then float drift from build-time folding (P122), seeds 17 and 40 split. Fixed on the way: libgcc double->float rounding (psp_fpu.c), newlib cosf (psp_libm.c, musl)."
+  },
+  {
+   "id": "P122",
+   "order": 57,
+   "phase": "P4",
+   "size": "M",
+   "status": "Ready",
+   "depends": [],
+   "read": [
+    "port/docs/PSP.md",
+    "port/cmake/ps2fp-cc.pl",
+    "port/cmake/psp-clang.cmake"
+   ],
+   "title": "Game float expressions folded at build time on the PSP",
+   "description": "clang -O2 folds float expressions whose operands it can prove constant (store-to-load forwarding included) to nearest; the EE computes them at run time toward zero, as the other ports do (ps2fp-cc.pl: IR at -O0). Example func_00186900 (src/w182_m.c): (20.0f * f6C) / 2.0f becomes a constant, so a tag-in's vertical speed is 0x41136DB7 instead of 0x41136DB5. -frounding-math and -ffp-model=strict change nothing for this target (plain fmul in the -O2 IR). Likely fix: a PSP compile launcher for game code (IR at -O0, float ops as constrained intrinsics with dynamic rounding, then -O2 and the usual FPU instructions); measure the hardware cost.",
+   "done_when": "func_00186900 multiplies at run time; P42 seeds 1, 17, 40, 240 match the reference frame for frame (port/psp/ref); fight frame times within noise on the PSP-2003."
   },
   {
    "id": "P74",
