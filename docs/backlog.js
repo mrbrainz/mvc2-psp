@@ -97,6 +97,7 @@ window.BACKLOG = {
   "P70",
   "P71",
   "P73",
+  "P74",
   "P77",
   "P81",
   "P82",
@@ -237,24 +238,6 @@ window.BACKLOG = {
    "title": "Fuzz seeds 17 and 40 split from the reference with identical game memory",
    "description": "Seed 40 (PPSSPP, after P122): EE BSS identical to the reference through frame 2399 (GS packet words aside); at frame 2400 a character's sub-state p[0x20D] selects func_002A5D10 (jtbl_00458680) on the PSP only, which spawns func_0015D010's 15 particles (60 libc rand calls), while the reference advances the game RNG instead. Same with every PSP-side replacement set to the game's body. The deciding input is outside EE BSS: heap, sound status (PSP mixes on a real-time thread, the reference 1/60 s per frame) or pad data. Seed 17 splits at frame 3889, probably the same; seed 240 has one word 1 ulp off at frame 4755 (0x004F2D18).",
    "done_when": "The input that differs is named and made to match; P42 seeds 1, 17, 40, 240 match the reference frame for frame."
-  },
-  {
-   "id": "P74",
-   "order": 49,
-   "phase": "P6",
-   "size": "S",
-   "status": "Ready",
-   "depends": [
-    "P73"
-   ],
-   "read": [
-    "port/psp/host/psp_ee_heap.c",
-    "port/psp/host/psp_entry.c",
-    "port/docs/PSP.md"
-   ],
-   "title": "Boot-time memory profile (full / low)",
-   "description": "At boot, choose a memory profile from the user memory actually available (MEMSIZE=1 is granted on PSP-2000+, not on the PSP-1000): full = today's sizes, low = the P73 budgets. Log the profile and free memory. Sizes read from the profile instead of constants. PSP-side only (new code under port/psp/ or --wrap).",
-   "done_when": "PPSSPP with the PSP-2000+ model logs 'full' and behaves byte-for-byte as before (same logic hashes over a scripted run); with the PSP-1000 model it logs 'low'."
   },
   {
    "id": "P75",

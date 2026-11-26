@@ -1521,6 +1521,25 @@ window.BACKLOG_ARCHIVE = [
   "note": "Image 8.97 → 7.31 MB: the oracle buffer is now allocated on first use (a build-time patch of a copy, port/psp/patches), and the r_gu tables are sized to 384/256. A state-dump compare against the previous build found 0 diverging words over 21,498 frames, and frame times were unchanged in PPSSPP. Logic hashes can't be compared across builds because they include host pointers; not run on hardware."
  },
  {
+  "id": "P74",
+  "order": 49,
+  "phase": "P6",
+  "size": "S",
+  "status": "Done",
+  "depends": [
+   "P73"
+  ],
+  "read": [
+   "port/psp/host/psp_ee_heap.c",
+   "port/psp/host/psp_entry.c",
+   "port/docs/PSP.md"
+  ],
+  "title": "Boot-time memory profile (full / low)",
+  "description": "At boot, choose a memory profile from the user memory actually available (MEMSIZE=1 is granted on PSP-2000+, not on the PSP-1000): full = today's sizes, low = the P73 budgets. Log the profile and free memory. Sizes read from the profile instead of constants. PSP-side only (new code under port/psp/ or --wrap).",
+  "done_when": "PPSSPP with the PSP-2000+ model logs 'full' and behaves byte-for-byte as before (same logic hashes over a scripted run); with the PSP-1000 model it logs 'low'.",
+  "note": "psp_memprofile.c: profile from the largest malloc block before the boot (<32 MB: low), logged; EE heap size from it (psp_ee_heap.c). PPSSPP PSP-2000 model: 48.5 MB, full, fight6 dump identical to before (3,057 frames); PSP-1000 hardware: 15.7 MB, low, boot still stops at the 16.5 MB EE heap (P75)."
+ },
+ {
   "id": "P97",
   "order": 52,
   "phase": "P4",

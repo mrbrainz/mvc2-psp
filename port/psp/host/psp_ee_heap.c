@@ -1,13 +1,15 @@
 /* PSP EE heap (P55): boot.c's sbrk (func_001044E0) and its base/top
- * accessors, linked over with --wrap, over a 23 MB heap instead of 28 MB.
+ * accessors, linked over with --wrap, over a 23 MB heap instead of 28 MB
+ * (the memory profile's size, psp_memprofile.c, P74).
  * The game's malloc takes its 22 MB arena first and breaks only ~22.5 MB in
  * a full arcade run (P54); the margin is 0.5 MB.  A refused growth is
  * logged, since the game's malloc then returns NULL. */
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "psp_memprofile.h"
 
-#define PSP_EE_HEAP (23u << 20)
+#define PSP_EE_HEAP (psp_mem_profile()->ee_heap)
 static uint8_t *ee_heap, *ee_brk, *ee_peak;
 
 static uint8_t *base(void) { return (uint8_t *)(((uintptr_t)ee_heap + 63) & ~(uintptr_t)63); }

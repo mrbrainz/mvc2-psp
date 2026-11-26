@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "psp_memprofile.h"
 #include "mvc2_stubs.h"
 #include "../../host/host_loop.h"
 #include "../../host/runahead.h"
@@ -288,6 +289,7 @@ int mvc2_psp_run(int frames)
     fcsr = psp_fpu_init();
     fprintf(stderr, "[host] FCSR %08x (RM %u)\n", fcsr, fcsr & 3);
     selftest();
+    psp_mem_profile();   /* P74: full or low, from the user memory there is */
     psp_mem_report("before boot");
     psp_log("[host] boot\n");
     if (psp_disc_open() != 0)

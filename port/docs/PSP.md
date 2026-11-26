@@ -279,6 +279,22 @@ target is the pages it has ever written, not its peak live use, which is not
 measured yet (P75 has to measure it). It fits only if the arena's live peak
 is about 13 MB or lower, or if game data is loaded on demand (P80).
 
+### Memory profile (P74)
+
+2026-11-26. `psp_memprofile.c` picks the profile before the boot from the
+largest block `malloc` gets (the PSPSDK heap is all user memory but 1 MB,
+minus the program image): under 32 MB is `low` (P73 targets), otherwise
+`full` (today's sizes). `[mem] profile ...` in the log. Only the EE heap
+size comes from it so far (23 MB full, 16.5 MB low); P75-P78 add theirs.
+- **PSP-2000 model (PPSSPP):** 48,512 KB, `full`; `fight6` state dump
+  identical to the build before (3,057 frames, 0 words).
+- **PSP-1000 (hardware, PSPLink):** 15,744 KB, `low`. That is the room left
+  for every heap allocation at boot (24 MB partition less the 7.3 MB image
+  and the 1 MB kernel reserve); the 16.5 MB EE heap does not fit, so the
+  boot still stops there (P75).
+- The probe keeps its pointer `volatile`: clang otherwise removes an unused
+  `malloc`/`free` pair and takes the allocation as successful.
+
 ### Program image (P77)
 
 2026-11-23, `llvm-readelf -S` on the PRX: 8.97 → 7.31 MB (`.text` 3.49,
