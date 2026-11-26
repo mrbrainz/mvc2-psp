@@ -859,6 +859,23 @@ Model node draw (P98, 2026-11-25, PSP-2003, `fight6`, `PROFILE=1 NO_FRAME_SKIP=1
   arena, past the EE heap end, the two DMA queue ring halves at 0x0173C5B0
   and 0x0173F5B0 (frame 600, entries left out) and 0x004C2A40 (run noise).
 
+Object matrix walk (P99, 2026-11-26, `psp_walk.c`, PSP-2003, `fight6`, `unlock=all`, `PROFILE=1 NO_FRAME_SKIP=1`, same EBOOT A/B against `MVC2_WALK_GAME=1`, two runs each):
+- **Change:** `func_00151A90` (each object's matrix, ~165 a select frame;
+  most take the rotation path, many the scale and 0xC8 matrix) is PSP-side
+  with the game's float expressions. The three rotation angles (four fp-bit
+  double calls each) and their sin and cos (`func_003DE720`) come from a
+  memo keyed by the u16 and the FPU rounding mode, filled by the game's own
+  calls; 4x4 products, identities, translations and the three rotations are
+  inline. `MVC2_WALK_CHECK=1` runs both bodies per call and counts
+  differences.
+- **Result, `func_00151A20(6)` per select frame:** 5.25-5.35 -> 1.21-1.32 ms
+  (angle memo alone 2.31-2.36, plus inline matrices 2.05-2.09); select
+  render pass 15.7 -> 11.6-11.8, fights 13.57 -> 13.19-13.27. In this layout
+  P98's draw figure is 2.98-2.99 ms (3.07-3.08 with the game's walk).
+- **PPSSPP:** check mode 245,760 calls, 0 differ (`unlock=all`); shots f1-f6
+  and 3,057 per-frame records identical; snapshots differ only past the EE
+  heap end and at 0x004C2A40 (run noise).
+
 Tex select upload path (P95, 2026-11-23, `psp_reslist.c` `psp_texsel`):
 - **What changed:** for lists with a texture that isn't resident, the PSP runs
   the game's residency bookkeeping call for call (lookup, GS block allocation

@@ -46,3 +46,9 @@ void __wrap_ps2_float_set_nearest(int on)
     nearest = on || (e && *e && *e != '0');
     fcsr_apply();
 }
+
+/* rounding mode in effect (psp_walk.c keys its angle memo on it) */
+int psp_fpu_nearest(void)
+{
+    return nearest;
+}

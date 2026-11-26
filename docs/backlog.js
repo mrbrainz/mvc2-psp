@@ -113,7 +113,8 @@ window.BACKLOG = {
   "P95",
   "P96",
   "P97",
-  "P98"
+  "P98",
+  "P99"
  ],
  "activities": [
   {
@@ -134,24 +135,6 @@ window.BACKLOG = {
    "description": "P115: sleep with our code on the ME powers the PSP off; without ME use it works (2026-11-25). On PSP_POWER_CB_SUSPENDING: park our ME code, put back the reset-vector words psp_me.c overwrote (saved at boot) and restart the firmware's ME code so its sleep handling runs; on resume boot ours again (the P104 path waits for or rebuilds any pending job).",
    "done_when": "Sleep and wake from a fight with MVC2_ME_BUILD=1 work on the PSP-2003 and the fight goes on with the ME building.",
    "note": "Cold give-back built (power lock, ME RAM saved at take, firmware boot words, state -3 -> -4): works over PSPLink without sleep, but sleep still powers off (PSP.md). Needs the firmware ME halted with its sleep-save call at take and resumed from it at give-back; blocked on a decision, since the ME brings no speed now (P116)."
-  },
-  {
-   "id": "P99",
-   "order": 43,
-   "phase": "P4",
-   "size": "M",
-   "status": "Ready",
-   "depends": [
-    "P91"
-   ],
-   "read": [
-    "port/docs/PSP.md",
-    "src/n9d.c",
-    "port/psp/host/psp_prof_scene.c"
-   ],
-   "title": "Hardware speed: character select object list 6 walk (func_00151A20)",
-   "description": "P91 split: in character select, func_00151A20(6) (func_00151A90 on each object of D_004D3690[6]) takes 5.5 ms a frame on the PSP-2003 without mesh draws. Find what func_00151A90 spends it on (matrix or animation work, host overrides) and make it cheaper PSP-side.",
-   "done_when": "func_00151A20(6) <= 2 ms in fight6's character select (PROFILE=1, hardware); game-state trace unchanged."
   },
   {
    "id": "P104",

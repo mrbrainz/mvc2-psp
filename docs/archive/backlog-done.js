@@ -1431,6 +1431,25 @@ window.BACKLOG_ARCHIVE = [
   "note": "Non-mesh 5.6 -> 2.80-2.93 ms (unlock=all, fight6 select, PSP-2003): node loop and func_00152400 PSP-side, psp_mesh_predraw cold paths out of line, ZBUF packets of func_003E0530 left out (MVC2_ZBUF_FULL=1 A/B 3.19-3.26 -> 2.80-2.93, fight render pass -0.2 ms). PPSSPP: shots and 3,057 per-frame records identical; snapshots differ only in the GS packet arena, its DMA queue ring, host memory past the EE heap and run-to-run noise."
  },
  {
+  "id": "P99",
+  "order": 43,
+  "phase": "P4",
+  "size": "M",
+  "status": "Done",
+  "depends": [
+   "P91"
+  ],
+  "read": [
+   "port/docs/PSP.md",
+   "src/n9d.c",
+   "port/psp/host/psp_prof_scene.c"
+  ],
+  "title": "Hardware speed: character select object list 6 walk (func_00151A20)",
+  "description": "P91 split: in character select, func_00151A20(6) (func_00151A90 on each object of D_004D3690[6]) takes 5.5 ms a frame on the PSP-2003 without mesh draws. Find what func_00151A90 spends it on (matrix or animation work, host overrides) and make it cheaper PSP-side.",
+  "done_when": "func_00151A20(6) <= 2 ms in fight6's character select (PROFILE=1, hardware); game-state trace unchanged.",
+  "note": "func_00151A90 PSP-side (psp_walk.c): angles and their sin/cos memoized through the game's own calls, matrix ops inline. Walk 5.25-5.35 -> 1.21-1.32 ms (unlock=all, PSP-2003, MVC2_WALK_GAME=1 A/B), select render pass -4 ms, fights -0.3 ms; PPSSPP check mode 0 differ over 245,760 calls, shots and per-frame records identical."
+ },
+ {
   "id": "P113",
   "order": 44,
   "phase": "P4",
