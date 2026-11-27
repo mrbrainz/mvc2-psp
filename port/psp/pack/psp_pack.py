@@ -7,12 +7,21 @@ Only /SLUS_204.86 (the EE data the port fills from the executable) and
 as a minimal ISO9660 image so the port's disc reader is unchanged. The result
 holds copyrighted data: it is for the player's own use, never for git.
 
-    psp_pack.py [--icon0 PNG] [--pic1 PNG] <your MvC2 PS2 .iso> <EBOOT.PBP in> <EBOOT.PBP out>
+    psp_pack.py [--icon0 PNG] [--pic1 PNG] <your MvC2 PS2 disc image> <EBOOT.PBP in> <EBOOT.PBP out>
 
+The disc image may be an .iso, a raw .bin (2352-byte sectors), a .cue, a
+CSO/ZSO, or a .zip holding one of these (same as the builder, port/psp/builder).
 --icon0/--pic1 replace those sections (XMB art from tools/xmb_art.py).
 """
+import atexit
+import os
+import posixpath
+import shutil
 import struct
 import sys
+import tempfile
+import zipfile
+import zlib
 
 SECTOR = 2048
 KEEP = ["/SLUS_204.86", "/PS2/AFS00.AFS", "/PS2/AFS01.AFS", "/PS2/AFS02.AFS", "/PS2/AFS03.AFS"]
@@ -126,7 +135,7 @@ def main():
         art[1 if args[0] == "--icon0" else 4] = open(args[1], "rb").read()
         args = args[2:]
     if len(args) != 3:
-        die("usage: psp_pack.py [--icon0 PNG] [--pic1 PNG] <your MvC2 PS2 .iso> <EBOOT.PBP in> <EBOOT.PBP out>")
+        die("usage: psp_pack.py [--icon0 PNG] [--pic1 PNG] <your MvC2 PS2 disc image> <EBOOT.PBP in> <EBOOT.PBP out>")
     iso_path, pbp_in, pbp_out = args
     with open(pbp_in, "rb") as f:
         pbp = f.read()
@@ -148,7 +157,7 @@ def main():
     offs[7] = len(pbp)
     pbp = pbp[:8] + struct.pack("<8I", *offs) + pbp[40:]
 
-    with open(iso_path, "rb") as iso:
+    with open_image(iso_path) as iso:
         found = iso_files(iso)
         if "/SLUS_204.86" not in found:
             die(iso_path + " is not Marvel vs. Capcom 2 for PS2 (SLUS-20486)")
@@ -178,6 +187,216 @@ class _Lazy:
         b = self.f.read(n)
         self.pos += len(b)
         return b
+
+
+# ---- disc image containers, read as a 2048-byte-sector view ----
+
+class _View:
+    """seek/read over read_at(off, n)."""
+    pos = 0
+
+    def seek(self, p):
+        self.pos = p
+
+    def read(self, n):
+        b = self.read_at(self.pos, n)
+        self.pos += len(b)
+        return b
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        self.close()
+
+
+class _File(_View):
+    def __init__(self, f, base=0, size=None, cleanup=None):
+        self.f, self.base, self.cleanup = f, base, cleanup
+        self.size = size if size is not None else os.fstat(f.fileno()).st_size - base
+
+    def read_at(self, off, n):
+        n = max(0, min(n, self.size - off))
+        self.f.seek(self.base + off)
+        return self.f.read(n)
+
+    def close(self):
+        self.f.close()
+        if self.cleanup:
+            self.cleanup()
+
+
+class _Raw(_View):
+    """2352-byte sectors, user data at +hdr."""
+    def __init__(self, src, hdr):
+        self.src, self.hdr = src, hdr
+
+    def read_at(self, off, n):
+        out = []
+        while n > 0:
+            lba, inn = divmod(off, SECTOR)
+            k = min(n, SECTOR - inn)
+            b = self.src.read_at(lba * 2352 + self.hdr + inn, k)
+            out.append(b)
+            if len(b) < k:
+                break
+            off, n = off + k, n - k
+        return b"".join(out)
+
+    def close(self):
+        self.src.close()
+
+
+def _lz4_block(src, size):
+    out, si = bytearray(), 0
+
+    def length(n):
+        nonlocal si
+        if n == 15:
+            while True:
+                b = src[si]
+                si += 1
+                n += b
+                if b != 255:
+                    break
+        return n
+
+    while si < len(src):
+        tok = src[si]
+        si += 1
+        lit = length(tok >> 4)
+        out += src[si:si + lit]
+        si += lit
+        if len(out) >= size or si >= len(src):
+            break
+        off = src[si] | src[si + 1] << 8
+        si += 2
+        ml = length(tok & 15) + 4
+        if not off or off > len(out):
+            die("damaged ZSO block")
+        start = len(out) - off
+        if ml <= off:
+            out += out[start:start + ml]
+        else:
+            for i in range(ml):
+                out.append(out[start + i])
+    return bytes(out[:size])
+
+
+class _Cso(_View):
+    """CISO v1 (deflate), v2 (deflate/LZ4), ZISO (LZ4)."""
+    def __init__(self, src):
+        h = src.read_at(0, 24)
+        self.src, self.zso = src, h[:4] == b"ZISO"
+        self.total, self.block = struct.unpack_from("<QI", h, 8)
+        self.ver, self.align = h[20], h[21]
+        if not 0 < self.block <= 1 << 20:
+            die("damaged CSO/ZSO header")
+        n = (self.total + self.block - 1) // self.block + 1
+        self.index = struct.unpack("<%dI" % n, src.read_at(24, 4 * n))
+        self.cached, self.buf = -1, b""
+
+    def load(self, b):
+        if b == self.cached:
+            return
+        e0, e1 = self.index[b], self.index[b + 1]
+        pos, end = (e0 & 0x7fffffff) << self.align, (e1 & 0x7fffffff) << self.align
+        out = min(self.block, self.total - b * self.block)
+        flag = bool(e0 & 0x80000000)
+        plain, lz4 = flag, self.zso
+        if not self.zso and self.ver >= 2:
+            plain, lz4 = end - pos >= self.block, flag
+        data = self.src.read_at(pos, out if plain else end - pos)
+        if plain:
+            self.buf = data
+        elif lz4:
+            self.buf = _lz4_block(data, out)
+        else:
+            self.buf = zlib.decompressobj(-15).decompress(data, out)
+        if len(self.buf) != out:
+            die("damaged CSO/ZSO block %d" % b)
+        self.cached = b
+
+    def read_at(self, off, n):
+        out = []
+        while n > 0 and off < self.total:
+            b, inn = divmod(off, self.block)
+            self.load(b)
+            piece = self.buf[inn:inn + n]
+            out.append(piece)
+            off, n = off + len(piece), n - len(piece)
+        return b"".join(out)
+
+    def close(self):
+        self.src.close()
+
+
+def _cue_data_file(text):
+    name = None
+    for line in text.splitlines():
+        f = line.split()
+        if len(f) >= 2 and f[0].upper() == "FILE":
+            rest = line.strip()[4:].strip()
+            name = rest[1:rest.index('"', 1)] if rest.startswith('"') and '"' in rest[1:] else f[1]
+        elif len(f) >= 3 and f[0].upper() == "TRACK" and f[2].upper().startswith("MODE") and name:
+            return name
+    die("the .cue sheet names no data track")
+
+
+def _from_zip(path):
+    z = zipfile.ZipFile(path)
+    names = {n.lower(): n for n in z.namelist()}
+    pick = None
+    for n in z.namelist():
+        if n.lower().endswith(".cue"):
+            want = posixpath.join(posixpath.dirname(n), _cue_data_file(z.read(n).decode("latin-1")).replace("\\", "/"))
+            pick = names.get(want.lower()) or die("the zip has no %s (named by %s)" % (want, n))
+            break
+    if not pick:
+        imgs = [i for i in z.infolist() if os.path.splitext(i.filename)[1].lower() in (".iso", ".bin", ".img", ".cso", ".zso")]
+        if not imgs:
+            die("the zip holds no disc image (.iso, .bin/.cue, .cso, .zso)")
+        pick = max(imgs, key=lambda i: i.file_size).filename
+    info = z.getinfo(pick)
+    if info.compress_type == zipfile.ZIP_STORED:
+        f = open(path, "rb")
+        f.seek(info.header_offset)
+        lh = f.read(30)
+        base = info.header_offset + 30 + struct.unpack_from("<H", lh, 26)[0] + struct.unpack_from("<H", lh, 28)[0]
+        return _framed(_File(f, base, info.file_size))
+    d = tempfile.mkdtemp(prefix="mvc2-disc-")
+    atexit.register(shutil.rmtree, d, True)
+    print("psp_pack: extracting %s from the zip..." % os.path.basename(pick))
+    t = os.path.join(d, "disc")
+    with z.open(info) as src, open(t, "wb") as dst:
+        shutil.copyfileobj(src, dst, 1 << 20)
+    return _framed(_File(open(t, "rb"), cleanup=lambda: shutil.rmtree(d, True)))
+
+
+def _framed(src):
+    head = src.read_at(0, 16)
+    if head[:4] in (b"CISO", b"ZISO"):
+        return _Cso(src)
+    if head[:8] == b"MComprHD":
+        die("that's a CHD image; convert it to an .iso first (chdman extractcd)")
+    if head[:4] in (b"7z\xbc\xaf", b"Rar!"):
+        die("that's a 7z/RAR archive; extract the disc image from it (or zip it) first")
+    if src.read_at(16 * SECTOR + 1, 5) == b"CD001":
+        return src
+    for hdr in (16, 24):
+        if src.read_at(16 * 2352 + hdr + 1, 5) == b"CD001":
+            return _Raw(src, hdr)
+    return src
+
+
+def open_image(path):
+    """Any supported disc image, as a seek/read 2048-byte-sector view."""
+    if path.lower().endswith(".cue"):
+        with open(path, encoding="latin-1") as f:
+            path = os.path.join(os.path.dirname(path), _cue_data_file(f.read()))
+    with open(path, "rb") as f:
+        zipped = f.read(4) == b"PK\x03\x04"
+    return _from_zip(path) if zipped else _framed(_File(open(path, "rb")))
 
 
 if __name__ == "__main__":

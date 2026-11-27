@@ -7,7 +7,7 @@
 # shots and settings are written there too (psp_game_dir, psp_entry.c).
 set -e
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
-PSPDEV=${PSPDEV:-$(cd "$ROOT/../pspdev" 2>/dev/null && pwd)}
+PSPDEV=${PSPDEV:-$(cd "$ROOT/private/toolchains/pspdev" 2>/dev/null && pwd)}
 H="$ROOT/private/psplink/host"
 mkdir -p "$H"
 ln -sf "$ROOT/build/port-psp/mvc2_psp.prx" "$H/mvc2_psp.prx"   # PSPLink cannot start the PBP (0x80020148)

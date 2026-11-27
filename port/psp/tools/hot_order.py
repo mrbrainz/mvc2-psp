@@ -24,7 +24,7 @@ PHASES = [(".rodata", 0x1810), (".data", 0x1A00), (".bss", 0x1880)]
 
 
 def symbols(elf):
-    nm = os.path.join(os.environ.get("PSPDEV", os.path.expanduser("~/Sites/pspdev")), "bin", "psp-nm")
+    nm = os.path.join(os.environ.get("PSPDEV", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "private", "toolchains", "pspdev")), "bin", "psp-nm")
     out = subprocess.run([nm, "-S", "--defined-only", elf], capture_output=True, text=True, check=True).stdout
     by_addr = {}
     for line in out.splitlines():

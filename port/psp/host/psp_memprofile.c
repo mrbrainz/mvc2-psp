@@ -13,7 +13,7 @@
 #define STEP (64u << 10)
 
 static const PspMemProfile full = { "full", 23 * MB };
-static const PspMemProfile low = { "low", 33 * MB / 2 };   /* EE heap target 16.5 MB (P73; arena cut in P75) */
+static const PspMemProfile low = { "low", 33 * MB / 2 };   /* EE heap target 16.5 MB (P73); the arena needs ~20.9 MB live (P75) */
 static const PspMemProfile *cur;
 static unsigned avail_kb;
 
@@ -32,7 +32,9 @@ const PspMemProfile *psp_mem_profile(void)
 {
     if (!cur) {
         avail_kb = probe_kb();
-        cur = avail_kb < 32 * 1024 ? &low : &full;
+        const char *e = getenv("MVC2_MEM_PROFILE");   /* testing: low or full, whatever the memory */
+        if (e && (e[0] == 'l' || e[0] == 'f')) cur = e[0] == 'l' ? &low : &full;
+        else cur = avail_kb < 32 * 1024 ? &low : &full;
         fprintf(stderr, "[mem] profile %s: largest malloc block %u KB at boot; EE heap %u KB\n",
                 cur->name, avail_kb, cur->ee_heap >> 10);
     }

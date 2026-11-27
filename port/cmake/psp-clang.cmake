@@ -2,14 +2,14 @@
 # The game code needs clang (MVC2_HOST_OPTIONS, the EE float rewrite in
 # ps2fp-cc.pl works on LLVM IR), so it is compiled with LLVM's mipsel backend;
 # the PSP SDK side (platform shell, link, EBOOT) uses pspdev's psp-gcc.
-#   EMSDK=~/Sites/emsdk-brew cmake -S port/psp -B build/port-psp -G Ninja \
+#   EMSDK=$PWD/private/toolchains/emsdk-brew cmake -S port/psp -B build/port-psp -G Ninja \
 #         -DCMAKE_TOOLCHAIN_FILE=$PWD/port/cmake/psp-clang.cmake
-#   EMSDK=~/Sites/emsdk-brew ninja -C build/port-psp mvc2_eboot
+#   EMSDK=$PWD/private/toolchains/emsdk-brew ninja -C build/port-psp mvc2_eboot
 # Needs: Homebrew llvm (clang with the Mips target), PSPDEV (port/docs/PSP.md).
 set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_SYSTEM_PROCESSOR mipsel)
 if(NOT DEFINED ENV{PSPDEV})
-  set(ENV{PSPDEV} "$ENV{HOME}/Sites/pspdev")
+  set(ENV{PSPDEV} "${CMAKE_CURRENT_LIST_DIR}/../../private/toolchains/pspdev")   # port/docs/PSP.md
 endif()
 set(PSPDEV "$ENV{PSPDEV}")
 find_program(MVC2_PSP_CLANG clang PATHS /opt/homebrew/opt/llvm/bin /usr/local/opt/llvm/bin NO_DEFAULT_PATH)

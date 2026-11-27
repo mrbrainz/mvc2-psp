@@ -2,15 +2,16 @@
 
 ## Toolchain (macOS, Apple Silicon)
 
-The toolchain lives outside the repo and is never committed.
+The toolchains live in `private/toolchains/` (ignored by git), never committed.
 
 1. Download `pspdev-macos-latest-arm64.tar.gz` from
    <https://github.com/pspdev/pspdev/releases> (tested: v20261101, GCC 15.2.0)
-   and unpack it to `~/Sites/pspdev`.
+   and unpack it to `private/toolchains/pspdev` (the default `PSPDEV` of
+   `psp-clang.cmake`, `psplink.sh` and the tools).
 2. Install the Homebrew libraries it links against:
    `brew install libmpc gmp mpfr libusb readline gpgme libarchive openssl`
 3. Environment (add to your shell profile):
-   `export PSPDEV=~/Sites/pspdev PATH=$PSPDEV/bin:$PATH`
+   `export PSPDEV=$PWD/private/toolchains/pspdev PATH=$PSPDEV/bin:$PATH` (from the checkout)
 4. Emulator: `brew install --cask ppsspp-emulator` (PPSSPP 1.20.4, installs
    `/Applications/PPSSPPSDL.app`).
 
@@ -31,7 +32,7 @@ rewrite works on LLVM IR), so they build with Homebrew LLVM's mipsel backend
 (`brew install llvm`). `EMSDK` must point at the Emscripten layout below (the
 signature pass takes its wasm path when emcc is installed):
 
-    export EMSDK=~/Sites/emsdk-brew
+    export EMSDK=$PWD/private/toolchains/emsdk-brew
     cmake -S port/psp -B build/port-psp -G Ninja -DCMAKE_TOOLCHAIN_FILE=$PWD/port/cmake/psp-clang.cmake
     ninja -C build/port-psp mvc2_eboot
 
@@ -92,7 +93,7 @@ packed into the EBOOT, else `ms0:/PSP/GAME/mvc2/mvc2.iso`, else
 `ms0:/ISO/mvc2.iso`. To pack it (Python 3; only `/PS2/AFS00-03.AFS`, 193 MB,
 the PSP build reads nothing else, as a minimal ISO in DATA.PSAR):
 
-    port/psp/pack/pack_eboot.sh [your .iso] [EBOOT.PBP in] [out]
+    port/psp/pack/pack_eboot.sh [your disc image] [EBOOT.PBP in] [out]
     # defaults: "Marvel vs. Capcom 2 - New Age of Heroes (USA).iso" in the
     # project root, build/port-psp/EBOOT.PBP -> build/port-psp/packed/EBOOT.PBP
     # (any OS: python3 port/psp/pack/psp_pack.py <iso> <in> <out>)
@@ -105,6 +106,12 @@ base EBOOT with the disc's XMB art and game data, checking the AFS SHA-1s.
 
     cd port/psp/builder && go build -o mvc2-eboot-builder .
     ./mvc2-eboot-builder [-base EBOOT.PBP] [-o OUTDIR] [-q] [game.iso]   # -> OUTDIR/MVC2/EBOOT.PBP
+
+The builder, `psp_pack.py` and `xmb_art.py` take the disc as .iso, raw .bin
+(2352-byte sectors, mode 1 or 2), .cue, CSO v1/v2 or ZSO, or a .zip of one of
+these (`builder/image.go`, `open_image()` in `psp_pack.py`); a deflated zip
+member is extracted to a temporary file first. CHD and 7z/RAR are refused with
+how to convert. Checked 2026-11-27: every format packs a byte-identical EBOOT.
 
 Release packages: `port/psp/release/package.sh VERSION BASE_EBOOT OUTDIR`
 (macOS: needs go, lipo, codesign, ditto). CI (`.github/workflows/psp-release.yml`)
@@ -210,7 +217,7 @@ Build-time float folding (P122, 2026-11-26):
 `brew install emscripten`; the port's tools expect an emsdk layout, so point
 `EMSDK` at a folder of symlinks:
 
-    E=~/Sites/emsdk-brew; L=/opt/homebrew/opt/emscripten/libexec
+    E=$PWD/private/toolchains/emsdk-brew; L=/opt/homebrew/opt/emscripten/libexec
     mkdir -p $E/upstream; ln -sfn $L/llvm/bin $E/upstream/bin; ln -sfn $L $E/upstream/emscripten
     EMSDK=$E emcmake cmake -S port -B build/port-em -G Ninja -DMVC2_APP=OFF
     EMSDK=$E ninja -C build/port-em mvc2_host
@@ -255,6 +262,42 @@ never drops below 8 MB.
 `-DMVC2_PSP_HEAPMAP=ON` logs free gaps and live bytes by caller with
 `DRAWLOG=1`.
 
+### Distorted sound on hardware (P124)
+
+2026-11-27, PSP-2003 over PSPLink. `MVC2_PCM_CAPTURE=S` in `env.txt` writes S
+seconds of the final output (after the first 5 s) to `pcm.raw` in the game
+folder: s16 stereo, 48 kHz. Attract mode, 15 s:
+
+| | RMS | Clipped |
+|---|---:|---:|
+| PPSSPP, before | 2,780 | 0 |
+| PSP-2003, before (about half the runs) | 18,433 | 31.3% |
+| PSP-2003, after (4 of 4 runs) | 2,103 | 0 |
+
+Cause: newlib's `powf` returns NaN on the PSP (`powf(10, -0.355)` =
+`7FC00001`; `expf` is right). The music gain (`db10_to_gain`, the game's ADXT
+volume, here -7.1 dB) was NaN, which came out as 1.0 or as an infinite gain
+depending on the run. It now uses `expf`. Buffer count, cache writeback and
+the FPU rounding mode were each ruled out by A/B captures. The music was
+7.1 dB too loud in every earlier build, PPSSPP included. `fight6`: 0.67% of
+samples clip on hardware and in PPSSPP alike (P125).
+
+P125 (2026-11-27): P32's trims were set by ear against that too-loud music.
+`audio_psp.c` keeps P32's balance against the music, 3.1 dB lower overall
+(music x1.0, SFX x0.556; PS2 samples +1.9 dB with `vag_psp.c`'s +7 dB), and
+bends samples above -2.5 dBFS with a soft knee instead of hard-clipping them
+(`device_fill`). `MVC2_PCM_CAPTURE_AT=S` starts the capture at second S.
+
+| Capture | Clipped | Peak | In the knee |
+|---|---:|---:|---:|
+| `fight6`, PPSSPP, trims only | 0.07% | 32,767 | 0.52% |
+| `fight6`, PPSSPP, trims + knee | 0 | 31,441 | 0.53% |
+| `fight6`, PSP-2003, trims + knee | 0 | 31,451 | 0.50% |
+| `arcade_psp.txt` 90-120 s, PPSSPP | 0 | 31,499 | 0.30% |
+
+Mix time per buffer on hardware is unchanged. Not checked: the balance
+by ear against the desktop port.
+
 ### PSP-1000 budget (P73)
 
 2026-11-22, PPSSPP 1.20.4, `arcade_psp.txt` full run (28,380 frames),
@@ -294,6 +337,53 @@ size comes from it so far (23 MB full, 16.5 MB low); P75-P78 add theirs.
   boot still stops there (P75).
 - The probe keeps its pointer `volatile`: clang otherwise removes an unused
   `malloc`/`free` pair and takes the allocation as successful.
+- `MVC2_MEM_PROFILE=low` or `full` in `env.txt` forces a profile (testing).
+
+### Game arena live peak (P75)
+
+2026-11-26, PPSSPP 1.20.4, PSP-2000 model, full profile, `arcade_psp.txt`
+full run (28,380 frames). `psp_ee_arena.c` wraps the arena's bump allocator
+(`func_003F09C0`) and the handle pool's allocator (`func_003F0C60`), read-only,
+and adds a `[hwm] arena ...` line:
+
+| Region | Peak (KB) | Size (KB) |
+|---|---:|---:|
+| Arena below the handle pool (bump, only grows: peak = live) | 15,480 | 16,384 |
+| Handle pool, live bytes | 5,349 | 6,144 |
+| Handle pool, extent | 5,396 | 6,144 |
+| Game malloc break (arena + other) | 22,530 | 23,552 |
+
+No pool allocation failed. The arena needs about 20.9 MB live, so the EE heap
+needs at least ~21.5 MB; the PSP-1000 has 15.7 MB for every heap allocation.
+Shrinking the arena cannot fit it: the bump region is game data loaded from
+the disc, which has to leave memory (P80). P54's "16.3 MB written" understated
+the bump region (pages that stay all zero count as unwritten).
+Not checked: other teams and stages (one arcade run), and hardware.
+- **Full profile unchanged:** `fight6` state dump of this build against the
+  one before, `compare_ports.py`: 0 words diverge, 0 differ as host pointers.
+
+### Game heaps in the arena (P80)
+
+2026-11-26, same run and setup as P75. 15,232 KB of the 15,480 KB bump peak is
+the seven fixed heaps `func_00414CB0` (`src/hk11_a.c`) carves at game init;
+they stay for the whole run. `[hwm] heap ...` lines (`psp_ee_arena.c`), pages
+ever written:
+
+| Heap | Size (KB) | Written (KB) | Highest (KB) | Use (ENGINE_MAP, ASSET_LOADING) |
+|---|---:|---:|---:|---|
+| `D_004C28BC` | 8,064 | 7,728 | 8,060 | character PAKs, big buffers |
+| `D_004C28B8` | 2,048 | 1,808 | 2,012 | load destinations |
+| `D_004C28B4` | 384 | 292 | 300 | load destinations |
+| `D_004C28B0` | 1,344 | 828 | 836 | LZ16 TEX of meshes |
+| `D_004C28AC` | 1,536 | 744 | 744 | load destinations |
+| `D_004C2878` | 1,024 | 0 | 0 | not used in an arcade run |
+| `D_004C287C` | 832 | 576 | 576 | |
+| **Total** | **15,232** | **11,976** | | |
+
+The game reads this data through pointers, so it cannot be paged in from the
+memory stick as needed. Trimming every heap to its high-water point would
+save about 3 MB at most, with no margin for other characters, stages or modes.
+Not checked: other modes and teams.
 
 ### Program image (P77)
 
@@ -1024,7 +1114,7 @@ Speed (PPSSPP 1.20.4, JIT, cycle-estimated time, attract mode, `-O2`):
 
 Budget is 16.7 ms. Not yet profiled or measured on hardware.
 
-Builds now need `EMSDK=~/Sites/emsdk-brew` in the environment: with emcc on
+Builds now need `EMSDK=$PWD/private/toolchains/emsdk-brew` in the environment: with emcc on
 PATH, the signature pass takes its wasm path.
 
 ## Logic frame profile (P09)

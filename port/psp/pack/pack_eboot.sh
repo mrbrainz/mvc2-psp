@@ -2,7 +2,7 @@
 # Pack the game data from your own MvC2 PS2 disc image into the PSP EBOOT.PBP
 # (psp_pack.py; needs Python 3). Defaults: the ISO in the project root,
 # build/port-psp/EBOOT.PBP in, build/port-psp/packed/EBOOT.PBP out.
-#   usage: pack_eboot.sh [your .iso] [EBOOT.PBP in] [EBOOT.PBP out]
+#   usage: pack_eboot.sh [your disc image: .iso .bin .cue .cso .zso .zip] [EBOOT.PBP in] [EBOOT.PBP out]
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)

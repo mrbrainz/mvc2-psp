@@ -124,6 +124,23 @@ Buttons can be reassigned in the game's own *Button Config*.
 | `screen` | `fit` (4:3, default) or `stretch` (full 480x272). L+R+Select in game switches it. |
 | `color` | `32` (default) or `16` (16-bit colour, less VRAM and bandwidth) |
 
+### Saves
+
+The game saves to the PSP's own savedata (`PSP/SAVEDATA/MVC2PSP000000/`), shown
+in the XMB's *Saved Data Utility*. *Save* / *Load* in the main menu open the
+system save dialogs; the game's autosaves need no dialog.
+
+### Troubleshooting
+
+| Problem | What to do |
+| --- | --- |
+| The builder says the disc is another region, or not MvC2 | Only the USA PS2 disc (SLUS-20486) works. |
+| "does not match the USA retail release" | The dump is bad or modified: make a new `.iso` from your disc. |
+| "convert ... to an .iso first" | BIN/CUE, CSO/ZSO and CHD images must be converted to a plain `.iso` (for CHD: `chdman extractdvd`). |
+| macOS or Windows will not open the builder | It is not signed: see *Making your EBOOT* above for the first-launch steps. |
+| The game is not listed on the PSP | The path must be `PSP/GAME/MVC2/EBOOT.PBP`, not `PSP/GAME/MVC2/MVC2/...`. Custom firmware is needed. |
+| It stops at boot on a PSP-1000 | Not supported: it needs the memory of a PSP-2000 or later. |
+
 ## Building from source
 
 The PSP build needs the [pspdev](https://github.com/pspdev/pspdev) toolchain,
@@ -139,7 +156,10 @@ ninja -C build/port-psp mvc2_eboot
 Add `-DMVC2_RELEASE=ON` for a release base EBOOT (no art, no game data). The
 EBOOT builder is in [port/psp/builder](port/psp/builder) (Go), and release
 packages come from [port/psp/release/package.sh](port/psp/release/package.sh).
-Pushing a `v*` tag builds them in CI as a draft GitHub release.
+Pushing a `v*` tag builds them in CI as a draft GitHub release. To test the
+builder before tagging, [port/psp/release/draft.sh](port/psp/release/draft.sh)
+builds the same packages into `private/release-drafts/` (replaced on each
+run) and unpacks the one for your computer there.
 
 ## Repository layout
 

@@ -62,6 +62,9 @@ window.BACKLOG = {
   "P12",
   "P121",
   "P122",
+  "P124",
+  "P125",
+  "P126",
   "P13",
   "P14",
   "P21",
@@ -77,6 +80,7 @@ window.BACKLOG = {
   "P33",
   "P34",
   "P35",
+  "P51",
   "P53",
   "P54",
   "P55",
@@ -96,6 +100,7 @@ window.BACKLOG = {
   "P69",
   "P70",
   "P71",
+  "P72",
   "P73",
   "P74",
   "P77",
@@ -240,24 +245,6 @@ window.BACKLOG = {
    "done_when": "The input that differs is named and made to match; P42 seeds 1, 17, 40, 240 match the reference frame for frame."
   },
   {
-   "id": "P75",
-   "order": 50,
-   "phase": "P6",
-   "size": "M",
-   "status": "Backlog",
-   "depends": [
-    "P74"
-   ],
-   "read": [
-    "port/psp/host/psp_ee_heap.c",
-    "port/psp/host/psp_ee_hwm.c",
-    "port/host/boot.c"
-   ],
-   "title": "Low profile: smaller EE heap and game arena",
-   "description": "In the low profile, size the EE heap and the game's arena/handle pool to the P54 high-water (arena 16.3 MB written of 22 MB, pool 4.6 of 6 MB) plus a measured margin, from the PSP side (no upstream change). Full profile unchanged.",
-   "done_when": "Low profile: full arcade run in PPSSPP completes with the smaller heap, [hwm] shows the margin kept; full profile logic hashes unchanged."
-  },
-  {
    "id": "P76",
    "order": 51,
    "phase": "P6",
@@ -296,75 +283,38 @@ window.BACKLOG = {
   },
   {
    "id": "P79",
-   "order": 53,
+   "order": 54,
    "phase": "P6",
    "size": "M",
    "status": "Backlog",
    "depends": [
-    "P75",
     "P76",
     "P77",
-    "P78"
+    "P78",
+    "P80"
    ],
    "read": [
     "port/docs/PSP.md",
     "port/psp/scripts/arcade_psp.txt"
    ],
    "title": "PSP-1000 full arcade run",
-   "description": "Full scripted arcade run in PPSSPP with the PSP-1000 model and the low profile, game data loaded as today (no memory-stick streaming). Record memory headroom and frame times.",
+   "description": "Full scripted arcade run in PPSSPP with the PSP-1000 model and the low profile and P80's on-demand loading. Record memory headroom and frame times.",
    "done_when": "Arcade run completes on the PSP-1000 model with headroom recorded in PSP.md; README minimum model updated."
   },
   {
    "id": "P80",
-   "order": 54,
+   "order": 53,
    "phase": "P6",
    "size": "L",
    "status": "Backlog",
-   "depends": [
-    "P79"
-   ],
+   "depends": [],
    "read": [
-    "port/psp/host/psp_disc.c",
-    "port/psp/host/psp_disc_io.c"
+    "port/psp/host/psp_ee_arena.c",
+    "port/docs/PSP.md"
    ],
-   "title": "Last resort: load game data from the memory stick on demand (low profile)",
-   "description": "Only if P75-P78 cannot reach the PSP-1000 budget: in the low profile, read rarely used data from the EBOOT's DATA.PSAR when needed instead of keeping it resident. Full profile unchanged. Close as Won't fix if P79 passes without it.",
-   "done_when": "Either closed as not needed after P79, or the low profile fits with on-demand loading and no load stalls during fights."
-  },
-  {
-   "id": "P72",
-   "order": 55,
-   "phase": "P5",
-   "size": "XS",
-   "status": "Ready",
-   "depends": [
-    "P71"
-   ],
-   "read": [
-    "README.md"
-   ],
-   "title": "User README and unsigned-binary guidance",
-   "description": "Five-step README.txt (drop ISO, get MVC2 folder, copy to PSP/GAME, play, do not share the built EBOOT) plus Gatekeeper/SmartScreen first-launch steps; sign binaries if certificates are available.",
-   "done_when": "README.txt is in every package; a new user can build and install from it alone."
-  },
-  {
-   "id": "P51",
-   "order": 56,
-   "phase": "P5",
-   "size": "S",
-   "status": "Backlog",
-   "depends": [
-    "P41",
-    "P70",
-    "P71",
-    "P72"
-   ],
-   "read": [
-    "README.md"
-   ],
-   "title": "Release packaging",
-   "description": "EBOOT icon/title, user guide for supplying own disc data.",
-   "done_when": "Installable EBOOT + PSP section in USER_GUIDE.md."
+   "title": "Low profile: fit the PSP-1000 (future goal, parked)",
+   "description": "On-demand loading does not work: the arena is seven fixed game heaps (15.2 MB, 12.0 MB ever written) read through pointers (PSP.md \"Game heaps in the arena (P80)\"). The PSP-1000 is ~19.4 MB short; candidates: the 4 MB volatile partition, music streaming (P78), trimming the heaps to their high-water plus margin, renderer budgets (P76), and PSP-1000-only visual cuts (16-bit textures, simpler stage background). First measure the stage's share of renderer memory and whether D_004C2878 is used outside arcade mode.",
+   "done_when": "The low profile fits the PSP-1000's 15.7 MB (plus the volatile partition) in a full arcade run; full profile state dump unchanged."
   }
  ]
 };

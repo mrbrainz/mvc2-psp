@@ -24,14 +24,30 @@ W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 
 gob() { (cd "$ROOT/port/psp/builder" && CGO_ENABLED=0 GOOS=$1 GOARCH=$2 go build -trimpath -ldflags "-s -w" -o "$3" .); }
 dist() { d=$W/$1/$NAME; mkdir -p "$d"; cp "$REL/README.txt" "$W/LICENSE.txt" "$d/"; echo "$d"; }
+# README.txt's "Opening the builder" section for one package (the builders are not signed)
+how() { printf '\nOpening the builder\n-------------------\n\n' >> "$1/README.txt"; cat >> "$1/README.txt"; }
 
 d=$(dist win); mkdir "$d/base"; cp "$BASE" "$d/base/EBOOT.PBP"
 gob windows amd64 "$d/MvC2 EBOOT Builder.exe"
+how "$d" <<'TXT'
+Unzip first. Drag the disc image onto "MvC2 EBOOT Builder.exe". The builder is not
+signed, so the first time Windows may show "Windows protected your PC"
+(SmartScreen): click More info, then Run anyway.
+
+Command line: "MvC2 EBOOT Builder.exe" "C:\path\to\game.iso"
+TXT
 (cd "$W/win" && rm -f "$OUT/$NAME-windows.zip" && zip -qr -X "$OUT/$NAME-windows.zip" "$NAME")
 
 for a in x64:amd64 arm64:arm64; do
   d=$(dist "linux-${a%%:*}"); mkdir "$d/base"; cp "$BASE" "$d/base/EBOOT.PBP"
   gob linux "${a#*:}" "$d/mvc2-eboot-builder"
+  how "$d" <<'TXT'
+Double-click mvc2-eboot-builder (or drop the disc image on it); it opens in a
+terminal window, and the file picker needs zenity. If it will not start, make
+it executable: chmod +x mvc2-eboot-builder
+
+Command line: ./mvc2-eboot-builder ~/path/to/game.iso
+TXT
   tar -C "$W/linux-${a%%:*}" -czf "$OUT/$NAME-linux-${a%%:*}.tar.gz" "$NAME"
 done
 
@@ -53,6 +69,16 @@ cat > "$app/Contents/Info.plist" <<PLIST
 </dict></plist>
 PLIST
 codesign --force --deep -s - "$app"   # ad-hoc: arm64 refuses unsigned code
+how "$d" <<'TXT'
+Unzip first, then open "MvC2 EBOOT Builder.app" and choose the disc image. The app
+is not signed by an Apple developer, so the first time macOS may say it
+cannot be opened: right-click the app, choose Open, then Open again. On
+macOS 15 and later, open it once, then click Open Anyway in System Settings >
+Privacy & Security.
+
+Command line:
+  "MvC2 EBOOT Builder.app/Contents/MacOS/mvc2-eboot-builder" ~/path/to/game.iso
+TXT
 (cd "$W/mac" && rm -f "$OUT/$NAME-macos.zip" && ditto -c -k --keepParent "$NAME" "$OUT/$NAME-macos.zip")
 
 d=$(dist py); mkdir -p "$d/base" "$d/port/psp/pack" "$d/port/psp/tools" "$d/port/tools/convert"
@@ -61,13 +87,14 @@ cp "$ROOT/port/psp/pack/psp_pack.py" "$d/port/psp/pack/"
 cp "$ROOT/port/psp/tools/xmb_art.py" "$d/port/psp/tools/"
 cp "$ROOT/port/tools/mvc2_lz16.py" "$d/port/tools/"
 for f in iso afs png tim2 textures; do cp "$ROOT/port/tools/convert/$f.py" "$d/port/tools/convert/"; done
-cat >> "$d/README.txt" <<'TXT'
-
-Python 3 instead of the builder (any OS):
+how "$d" <<'TXT'
+This package has no builder: use Python 3 (any OS), in this folder:
 
   python3 port/psp/tools/xmb_art.py game.iso art
   mkdir MVC2
   python3 port/psp/pack/psp_pack.py --icon0 art/ICON0.PNG --pic1 art/PIC1.PNG game.iso base/EBOOT.PBP MVC2/EBOOT.PBP
+
+Then continue from step 3.
 TXT
 (cd "$W/py" && rm -f "$OUT/$NAME-pypack.zip" && zip -qr -X "$OUT/$NAME-pypack.zip" "$NAME")
 

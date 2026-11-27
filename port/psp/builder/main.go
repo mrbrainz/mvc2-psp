@@ -1,7 +1,7 @@
 // mvc2-eboot-builder: makes a ready-to-play MVC2/EBOOT.PBP from the player's
 // own Marvel vs. Capcom 2 (USA) PS2 disc image and the release's base EBOOT.
 //
-//	mvc2-eboot-builder [-base EBOOT.PBP] [-o OUTDIR] [game.iso]
+//	mvc2-eboot-builder [-base EBOOT.PBP] [-o OUTDIR] [disc image: .iso .bin .cue .cso .zso .zip]
 //
 // With no ISO argument (double-click, or a macOS .app) it asks with the
 // system file picker and reports the result in a dialog.
@@ -9,7 +9,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"flag"
 	"fmt"
 	"os"
@@ -58,13 +57,10 @@ func main() {
 		fail(err.Error())
 	}
 	done(fmt.Sprintf("Done: %s\n\nCopy the MVC2 folder into PSP/GAME/ on your memory stick. "+
-		"The ISO is not needed on the PSP.\n\nThis EBOOT contains game data: do not share it.", out))
+		"The disc image is not needed on the PSP.\n\nThis EBOOT contains game data: do not share it.", out))
 }
 
 func run(isoPath, basePath, outDir string) (string, error) {
-	if err := checkImage(isoPath); err != nil {
-		return "", err
-	}
 	if basePath == "" {
 		basePath = findBase()
 	}
@@ -110,32 +106,6 @@ func run(isoPath, basePath, outDir string) (string, error) {
 		return "", err
 	}
 	return out, nil
-}
-
-// checkImage catches the common wrong inputs before parsing.
-func checkImage(path string) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	head := make([]byte, 16)
-	f.Read(head)
-	raw := make([]byte, 6)
-	f.ReadAt(raw, 16*2352+16)
-	switch {
-	case strings.EqualFold(filepath.Ext(path), ".cue"):
-		return fmt.Errorf("that's a .cue sheet; convert the BIN/CUE to an .iso first")
-	case bytes.HasPrefix(head, []byte("CISO")) || bytes.HasPrefix(head, []byte("ZISO")):
-		return fmt.Errorf("that's a compressed CSO/ZSO image; decompress it to an .iso first")
-	case bytes.HasPrefix(head, []byte("MComprHD")):
-		return fmt.Errorf("that's a CHD image; convert it to an .iso first (chdman extractdvd)")
-	case bytes.HasPrefix(head, []byte("PK\x03\x04")) || bytes.HasPrefix(head, []byte("7z\xbc\xaf")) || bytes.HasPrefix(head, []byte("Rar!")):
-		return fmt.Errorf("that's an archive; extract the .iso from it first")
-	case string(raw[1:6]) == "CD001":
-		return fmt.Errorf("that's a raw BIN (2352-byte sectors); convert the BIN/CUE to an .iso first")
-	}
-	return nil
 }
 
 func region(serial string) string {
@@ -200,7 +170,7 @@ func relaunchInTerminal() bool {
 	return false
 }
 
-const prompt = "Choose your Marvel vs. Capcom 2 (USA) PS2 disc image (.iso)"
+const prompt = "Choose your Marvel vs. Capcom 2 (USA) PS2 disc image (.iso, .bin/.cue, .cso, .zso or .zip)"
 
 func pickFile() (string, error) {
 	var cmd *exec.Cmd
@@ -210,7 +180,7 @@ func pickFile() (string, error) {
 	case "windows":
 		cmd = exec.Command("powershell", "-NoProfile", "-STA", "-Command",
 			`Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.OpenFileDialog; `+
-				`$d.Title = '`+prompt+`'; $d.Filter = 'PS2 disc image (*.iso)|*.iso|All files (*.*)|*.*'; `+
+				`$d.Title = '`+prompt+`'; $d.Filter = 'PS2 disc image|*.iso;*.bin;*.img;*.cue;*.cso;*.zso;*.zip|All files (*.*)|*.*'; `+
 				`if ($d.ShowDialog() -eq 'OK') { $d.FileName }`)
 	default:
 		if _, err := exec.LookPath("zenity"); err == nil {

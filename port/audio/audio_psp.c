@@ -5,9 +5,13 @@
 #include "psp_audio_hw.h"
 #include "audio.h"
 #include "adx.h"
-/* P32 PSP bus trims: music -4 dB, SFX -2 dB (SFX +2 dB against music, headroom before the clip). */
-#define PSP_MUSIC_TRIM 0.6310f
-#define PSP_SFX_TRIM 0.7943f
+/* PSP bus trims (P32, rebalanced in P125).  P32 set music -4 dB, SFX -2 dB by
+ * ear while the music gain was stuck at 1.0, 7.1 dB above the game's volume
+ * (P124).  The same balance against the music, 3.1 dB lower overall: music
+ * at the desktop port's level, SFX -5.1 dB (PS2 samples +1.9 dB with
+ * vag_psp.c's +7 dB). */
+#define PSP_MUSIC_TRIM 1.0f
+#define PSP_SFX_TRIM 0.5559f
 #include "dcse.h"
 #include "resample.h"
 #include "tsd.h"
@@ -87,7 +91,10 @@ int audio_dcse_refresh(void)
 }
 
 /* ---- BGM ---- */
-static float db10_to_gain(int v) { return v <= -999 ? 0.0f : powf(10.0f, v / 200.0f); }
+/* 10^(v/200) as expf: newlib's powf returns NaN on the PSP (powf(10, -0.355)
+ * = 7FC00001 on a PSP-2003), which made the music gain NaN or 1.0 depending
+ * on the run, loud and clipped when NaN; expf is right there (0x3EE21586) */
+static float db10_to_gain(int v) { return v <= -999 ? 0.0f : expf((float)v * (2.302585093f / 200.0f)); }
 
 /* decoded frames up to need_upto (or the buffer's end), keeping q[qpi..] */
 static void bgm_refill(Bgm *b, int need_upto)
@@ -267,9 +274,20 @@ static void device_fill(short *dst, int frames)
     audio_lock();
     render_raw(buf, frames);
     audio_unlock();
-    for (int i = 0; i < 2 * frames; i++) {   /* clamp + s16 in one pass */
-        int x = buf[i];
-        dst[i] = (short)(x > 32767 ? 32767 : x < -32767 ? -32767 : x);
+    /* P125: soft knee + s16 in one pass.  Below KNEE (-2.5 dBFS) samples pass
+     * as they are; above it y = K + R d / (d + R), d = |x| - K, R = 32767 - K:
+     * slope 1 at the knee, approaching full scale without reaching it, so
+     * stacked hits bend instead of hard-clipping. */
+    enum { KNEE = 24576, ROOM = 32767 - KNEE };
+    for (int i = 0; i < 2 * frames; i++) {
+        int x = buf[i], a = x < 0 ? -x : x;
+        if (a > KNEE) {
+            int d = a - KNEE;
+            if (d > 262143) d = 262143;   /* ROOM * d stays in 31 bits */
+            a = KNEE + ROOM * d / (d + ROOM);
+            x = x < 0 ? -a : a;
+        }
+        dst[i] = (short)x;
     }
 }
 

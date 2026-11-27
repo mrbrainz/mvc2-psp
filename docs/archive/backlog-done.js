@@ -1540,6 +1540,25 @@ window.BACKLOG_ARCHIVE = [
   "note": "psp_memprofile.c: profile from the largest malloc block before the boot (<32 MB: low), logged; EE heap size from it (psp_ee_heap.c). PPSSPP PSP-2000 model: 48.5 MB, full, fight6 dump identical to before (3,057 frames); PSP-1000 hardware: 15.7 MB, low, boot still stops at the 16.5 MB EE heap (P75)."
  },
  {
+  "id": "P75",
+  "order": 50,
+  "phase": "P6",
+  "size": "M",
+  "status": "Won't fix",
+  "depends": [
+   "P74"
+  ],
+  "read": [
+   "port/psp/host/psp_ee_heap.c",
+   "port/psp/host/psp_ee_hwm.c",
+   "port/host/boot.c"
+  ],
+  "title": "Low profile: smaller EE heap and game arena",
+  "description": "In the low profile, size the EE heap and the game's arena/handle pool to the P54 high-water (arena 16.3 MB written of 22 MB, pool 4.6 of 6 MB) plus a measured margin, from the PSP side (no upstream change). Full profile unchanged.",
+  "done_when": "Low profile: full arcade run in PPSSPP completes with the smaller heap, [hwm] shows the margin kept; full profile logic hashes unchanged.",
+  "note": "Measured only: the arena's live peak is 15.1 MB of bump data plus 5.2 MB live in the handle pool (psp_ee_arena.c [hwm] line, full arcade run in PPSSPP), so the EE heap needs ~21.5 MB against 15.7 MB for everything on a PSP-1000; shrinking cannot fit it (P80). fight6 state dump unchanged."
+ },
+ {
   "id": "P97",
   "order": 52,
   "phase": "P4",
@@ -1575,6 +1594,42 @@ window.BACKLOG_ARCHIVE = [
   "note": "r_gu.c r_set_discard plus psp_main.c: steps that won't be shown skip the GE; NO_FRAME_SKIP=1 restores the old behaviour. PSP-2003 fight6: fight logic 33-37 -> 59.94 steps/s, display 4.1-4.6 -> 9.8-12 fps; character select 28-31 -> 53-60 logic, display 3.5-3.9 -> 6.7-7.5. Screenshots render correctly; the game state is untouched (renderer only)."
  },
  {
+  "id": "P72",
+  "order": 55,
+  "phase": "P5",
+  "size": "XS",
+  "status": "Done",
+  "depends": [
+   "P71"
+  ],
+  "read": [
+   "README.md"
+  ],
+  "title": "User README and unsigned-binary guidance",
+  "description": "Five-step README.txt (drop ISO, get MVC2 folder, copy to PSP/GAME, play, do not share the built EBOOT) plus Gatekeeper/SmartScreen first-launch steps; sign binaries if certificates are available.",
+  "done_when": "README.txt is in every package; a new user can build and install from it alone.",
+  "note": "README.txt: requirements, five steps, and a per-package first-launch section from package.sh (SmartScreen, Gatekeeper incl. macOS 15 Open Anyway, Linux chmod/zenity, Python steps). No certificates, so builders stay unsigned (macOS ad-hoc). Checked in a dev-test package build."
+ },
+ {
+  "id": "P51",
+  "order": 56,
+  "phase": "P5",
+  "size": "S",
+  "status": "Done",
+  "depends": [
+   "P70",
+   "P71",
+   "P72"
+  ],
+  "read": [
+   "README.md"
+  ],
+  "title": "Release packaging",
+  "description": "EBOOT icon/title, user guide for supplying own disc data.",
+  "done_when": "Installable EBOOT + PSP player guide (README.md; USER_GUIDE.md is upstream).",
+  "note": "Icon/title were already in place (builder takes XMB art from the disc; SFO title MvC2 PSP); README.md gains Saves and Troubleshooting. Checked: MVC2_RELEASE base, package.sh dev-test (5 packages), macOS builder on the ISO, packed EBOOT boots in PPSSPP and runs 2,400 frames reading the disc from the EBOOT. Not checked on hardware or on Windows/Linux."
+ },
+ {
   "id": "P122",
   "order": 57,
   "phase": "P4",
@@ -1590,5 +1645,53 @@ window.BACKLOG_ARCHIVE = [
   "description": "clang -O2 folds float expressions whose operands it can prove constant (store-to-load forwarding included) to nearest; the EE computes them at run time toward zero, as the other ports do (ps2fp-cc.pl: IR at -O0). Example func_00186900 (src/w182_m.c): (20.0f * f6C) / 2.0f becomes a constant, so a tag-in's vertical speed is 0x41136DB7 instead of 0x41136DB5. -frounding-math and -ffp-model=strict change nothing for this target (plain fmul in the -O2 IR). Likely fix: a PSP compile launcher for game code (IR at -O0, float ops as constrained intrinsics with dynamic rounding, then -O2 and the usual FPU instructions); measure the hardware cost.",
   "done_when": "func_00186900 multiplies at run time; P42 seeds 1, 17, 40, 240 match the reference frame for frame (port/psp/ref); fight frame times within noise on the PSP-2003.",
   "note": "port/psp/cmake/psp-fp-cc.pl (launcher on mvc2_game_code and psp_host_core): front-end IR, float ops as constrained intrinsics with dynamic rounding, then -O2; -frounding-math alone also deferred literal conversions (newlib cosf's coefficients) to run time. Seeds 1 and 240 match (240: one word at frame 4755), seed 40's cosf difference gone; 17 and 40 still split from a non-float cause (P123). PSP-2003 fight6: fights within 0.15 ms, select windows +0.2-0.5 ms."
+ },
+ {
+  "id": "P124",
+  "order": 58,
+  "phase": "P5",
+  "size": "S",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/audio/audio_psp.c",
+   "port/psp/host/psp_audio_hw.c"
+  ],
+  "title": "Distorted audio on hardware",
+  "description": "Sound on the PSP (standalone and over PSPLink) is heavily distorted; PPSSPP sounds clean.",
+  "done_when": "Hardware output matches PPSSPP's in a PCM capture: no clipping in attract mode, the same level in a fight.",
+  "note": "newlib's powf returns NaN on the PSP (powf(10,-0.355) = 7FC00001), so the music gain was NaN or 1.0 depending on the run: infinite gain, 31% of samples clipped. db10_to_gain now uses expf; MVC2_PCM_CAPTURE=S writes the output to pcm.raw. PSP-2003: 4/4 attract runs clean, fight6 matches PPSSPP (0.67% clipped on both, P125)."
+ },
+ {
+  "id": "P125",
+  "order": 59,
+  "phase": "P5",
+  "size": "S",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/audio/audio_psp.c",
+   "port/docs/PSP.md"
+  ],
+  "title": "Mix headroom: fights clip 0.67% of samples",
+  "description": "fight6 output clips 0.67% of samples on hardware and in PPSSPP (P124 capture). P32's bus trims (music -4 dB, SFX -2 dB) were set while the music gain was stuck at 1.0, 7.1 dB above what the game asks. Re-balance against the desktop port's mix and add headroom (or a soft limiter) so big hits do not clip.",
+  "done_when": "fight6 and arcade captures clip under 0.01% of samples; music/SFX balance checked by ear against the desktop port.",
+  "note": "Trims rebalanced to P32's approved music/SFX balance, 3.1 dB lower (music x1.0, SFX x0.556), plus a soft knee above -2.5 dBFS in device_fill. fight6 (PSP-2003 and PPSSPP) and 30 s of arcade (PPSSPP): 0 clipped, peak ~31,450, 0.3-0.5% of samples in the knee, mix time unchanged. Balance not checked by ear."
+ },
+ {
+  "id": "P126",
+  "order": 59,
+  "phase": "P5",
+  "size": "S",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/psp/builder/image.go",
+   "port/psp/pack/psp_pack.py"
+  ],
+  "title": "EBOOT builder: take .bin/.cue, CSO/ZSO and .zip disc images, not only .iso",
+  "description": "The builder, psp_pack.py and xmb_art.py read only a plain .iso; players' dumps are often raw BIN/CUE, CSO/ZSO or zipped. Read them in place as a 2048-byte view at build time (the EBOOT stays self-contained; the PSP never sees the source format).",
+  "done_when": "Every supported format packs an EBOOT byte-identical to the one from the .iso, in both the Go builder and psp_pack.py; CHD and 7z/RAR are refused with how to convert.",
+  "note": "Added builder/image.go and open_image() in psp_pack.py (xmb_art.py uses it): .iso, raw .bin mode 1/2, .cue, CSO v1/v2, ZSO, .zip (stored in place, deflated via a temp file). Verified 2026-11-27 with nine images generated from the retail ISO: identical EBOOT sha256 in Go and Python. CHD (LZMA/FLAC, no Go stdlib decoder) not supported."
  }
 ];

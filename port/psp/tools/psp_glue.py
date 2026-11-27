@@ -16,7 +16,7 @@ TOOLS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "to
 sys.path.insert(0, os.path.abspath(TOOLS))
 import link_catalog  # noqa: E402
 
-psp = os.environ.get("PSPDEV", os.path.expanduser("~/Sites/pspdev"))
+psp = os.path.abspath(os.environ.get("PSPDEV", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "private", "toolchains", "pspdev")))
 link_catalog.HOST_LIBS += [f"{psp}/psp/lib/libc.a", f"{psp}/psp/lib/libm.a"]
 link_catalog.HOST_LIBS += glob.glob(f"{psp}/lib/gcc/psp/*/libgcc.a")
 # P101: the -DMVC2_PSP_HOTPROF=ON build's hooks (port/psp/host/psp_hot.c)

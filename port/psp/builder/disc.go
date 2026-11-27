@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 )
 
@@ -16,12 +15,12 @@ const sector = 2048
 type extent struct{ lba, size uint32 }
 
 type iso struct {
-	f     *os.File
+	f     source
 	files map[string]extent
 }
 
 func openISO(path string) (*iso, error) {
-	f, err := os.Open(path)
+	f, err := openImage(path)
 	if err != nil {
 		return nil, err
 	}

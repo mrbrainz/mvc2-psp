@@ -32,4 +32,4 @@ A PSP build of the Marvel vs. Capcom 2 decompilation, as a new platform backend 
 
 ## Status (max 3 lines; replace, never append)
 - Boots and plays on a PSP-2003 (ARK-4) after the P82 hardware fixes; release pipeline done (P68-P71, P81).
-- Next: P75 (PSP-1000: P74 picks low, but only 15.7 MB heap at boot vs a 16.5 MB EE heap) or P123 (seeds 17/40 split; blocks P42). Select screen done: P98 draw ~3.0 ms, P99 walk 1.2-1.3 ms all unlocked. Audio mix 1.2-1.85 ms (P91/P106). ME work parked: P117 blocked, P104 behind it.
+- Next: P123 (seeds 17/40 split; blocks P42) or P41 (full speed). Audio fixed on hardware (P124 NaN music gain, P125 mix headroom). Packaging done (P72, P51). PSP-1000 parked (P80). ME work parked: P117 blocked.

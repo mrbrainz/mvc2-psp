@@ -39,4 +39,5 @@ void psp_ee_hwm(void)
     scan("ee heap (to break)", base, (uint32_t)(top - base));
     scan("arena (22 MB from heap base)", base, 0x1600000);
     if (pool && pool_n) scan("handle pool", pool, pool_n);
+    { extern void psp_ee_arena_report(void); psp_ee_arena_report(); }
 }

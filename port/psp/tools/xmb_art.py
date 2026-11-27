@@ -9,11 +9,25 @@ ICON0: DM13TEX #1 scaled to 144x144, centre-cropped to 144x80; on top,
 PIC1:  GAL39.TM2 trimmed of transparent rows (512x384), scaled to 480x360,
        top 272 rows kept.
 """
-import os, sys
+import os, struct, sys
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..'))
 sys.path.insert(0, os.path.join(ROOT, 'port', 'tools', 'convert'))
 from iso import Iso
+sys.path.insert(0, os.path.join(ROOT, 'port', 'psp', 'pack'))
+from psp_pack import open_image
+
+
+class DiscImage(Iso):
+    """Iso over any image psp_pack reads (.iso, .bin/.cue, CSO/ZSO, .zip)."""
+    def __init__(self, path):
+        self.path, self.f = path, open_image(path)
+        pvd = self._sector(16)
+        if pvd[1:6] != b'CD001':
+            raise ValueError('not an ISO9660 image')
+        root = pvd[156:156 + 34]
+        self._files = {}
+        self._walk(struct.unpack_from('<I', root, 2)[0], struct.unpack_from('<I', root, 10)[0], '')
 from afs import Afs
 import png, tim2, textures
 
@@ -86,7 +100,7 @@ def pack_pic(a, name, idx):
 def main():
     iso_path, outdir = sys.argv[1], sys.argv[2]
     os.makedirs(outdir, exist_ok=True)
-    a = Afs(Iso(iso_path), 2)
+    a = Afs(DiscImage(iso_path), 2)
 
     icon = pack_pic(a, 'DM13TEX.BIN', 1).resize(144, 144).crop(0, 32, 144, 80)
     logo = pack_pic(a, 'DM0ATEX.BIN', 1)
