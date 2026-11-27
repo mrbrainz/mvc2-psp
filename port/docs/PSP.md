@@ -117,6 +117,10 @@ Release packages: `port/psp/release/package.sh VERSION BASE_EBOOT OUTDIR`
 (macOS: needs go, lipo, codesign, ditto). CI (`.github/workflows/psp-release.yml`)
 runs it on a `v*` tag and attaches the packages to a draft GitHub release;
 a manual run only uploads them as workflow artifacts.
+The builder apps' icon is `assets/mvc2-app-icon.png`: package.sh makes the macOS
+`AppIcon.icns` (sips, iconutil), the .exe's icon resource (`go run ./winres`,
+stdlib only; the `.syso` is deleted after the Windows build), and ships a 512 px
+PNG with `install-launcher.sh` (a .desktop entry) in the Linux packages.
 
 A packed EBOOT holds copyrighted data: never commit or share it. `[disc]` lines log
 KB read and throughput every 5 s.

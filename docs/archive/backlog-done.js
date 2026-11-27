@@ -1693,5 +1693,20 @@ window.BACKLOG_ARCHIVE = [
   "description": "The builder, psp_pack.py and xmb_art.py read only a plain .iso; players' dumps are often raw BIN/CUE, CSO/ZSO or zipped. Read them in place as a 2048-byte view at build time (the EBOOT stays self-contained; the PSP never sees the source format).",
   "done_when": "Every supported format packs an EBOOT byte-identical to the one from the .iso, in both the Go builder and psp_pack.py; CHD and 7z/RAR are refused with how to convert.",
   "note": "Added builder/image.go and open_image() in psp_pack.py (xmb_art.py uses it): .iso, raw .bin mode 1/2, .cue, CSO v1/v2, ZSO, .zip (stored in place, deflated via a temp file). Verified 2026-11-27 with nine images generated from the retail ISO: identical EBOOT sha256 in Go and Python. CHD (LZMA/FLAC, no Go stdlib decoder) not supported."
+ },
+ {
+  "id": "P127",
+  "order": 60,
+  "phase": "P5",
+  "size": "XS",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/psp/release/package.sh"
+  ],
+  "title": "Builder app icon on Windows, macOS and Linux",
+  "description": "Use assets/mvc2-app-icon.png as the EBOOT builder's icon in every release package.",
+  "done_when": "The .exe carries the icon resource, the .app shows AppIcon.icns, and the Linux packages ship the icon with a launcher installer.",
+  "note": "package.sh makes the icon sizes with sips, the .icns with iconutil and the .exe resource with port/psp/builder/winres (stdlib Go). Verified 2026-11-27 on a test package: 7z lists ICON/1-5 + GROUP_ICON in the .exe, the .app is valid after ditto and shows the icon, install-launcher.sh writes a working .desktop."
  }
 ];

@@ -2,7 +2,8 @@
 # Release packages from a checked base EBOOT (MVC2_RELEASE build).
 #   port/psp/release/package.sh VERSION BASE_EBOOT OUTDIR
 # Writes OUTDIR/mvc2-psp-VERSION-{windows.zip,macos.zip,linux-x64.tar.gz,linux-arm64.tar.gz,pypack.zip}
-# and OUTDIR/SHA256SUMS. Needs go; the macOS package needs lipo, codesign, ditto.
+# and OUTDIR/SHA256SUMS. Needs go, and macOS for the rest: sips, iconutil (app icons
+# from assets/mvc2-app-icon.png), lipo, codesign, ditto.
 set -eu
 [ $# -eq 3 ] || { echo "usage: $0 VERSION BASE_EBOOT OUTDIR" >&2; exit 2; }
 VER=$1; BASE=$2; OUT=$3
@@ -11,7 +12,17 @@ REL=$ROOT/port/psp/release
 NAME=mvc2-psp-$VER
 python3 "$ROOT/port/psp/tools/check_release_eboot.py" "$BASE"
 mkdir -p "$OUT"; OUT=$(cd "$OUT" && pwd)
-W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+W=$(mktemp -d); SYSO=$ROOT/port/psp/builder/rsrc_windows_amd64.syso
+trap 'rm -rf "$W" "$SYSO"' EXIT
+
+# app icons: PNGs at each size, a macOS .icns, and the .exe's icon resource
+I=$W/icon; mkdir -p "$I/AppIcon.iconset"
+for s in 16 32 48 64 128 256 512 1024; do
+  sips -s format png -z $s $s "$ROOT/assets/mvc2-app-icon.png" --out "$I/$s.png" >/dev/null; done
+for s in 16 32 128 256 512; do
+  cp "$I/$s.png" "$I/AppIcon.iconset/icon_${s}x$s.png"
+  cp "$I/$((s * 2)).png" "$I/AppIcon.iconset/icon_${s}x$s@2x.png"; done
+iconutil -c icns -o "$I/AppIcon.icns" "$I/AppIcon.iconset"
 
 # LICENSE.txt: the PSP code licence, then third-party notices for code in the EBOOT and tools
 { cat "$ROOT/LICENSE"; echo; echo "MvC2 PSP: third-party notices"; echo
@@ -28,7 +39,9 @@ dist() { d=$W/$1/$NAME; mkdir -p "$d"; cp "$REL/README.txt" "$W/LICENSE.txt" "$d
 how() { printf '\nOpening the builder\n-------------------\n\n' >> "$1/README.txt"; cat >> "$1/README.txt"; }
 
 d=$(dist win); mkdir "$d/base"; cp "$BASE" "$d/base/EBOOT.PBP"
+(cd "$ROOT/port/psp/builder" && go run ./winres "$SYSO" "$I/256.png" "$I/64.png" "$I/48.png" "$I/32.png" "$I/16.png")
 gob windows amd64 "$d/MvC2 EBOOT Builder.exe"
+rm -f "$SYSO"
 how "$d" <<'TXT'
 Unzip first. Drag the disc image onto "MvC2 EBOOT Builder.exe". The builder is not
 signed, so the first time Windows may show "Windows protected your PC"
@@ -41,10 +54,14 @@ TXT
 for a in x64:amd64 arm64:arm64; do
   d=$(dist "linux-${a%%:*}"); mkdir "$d/base"; cp "$BASE" "$d/base/EBOOT.PBP"
   gob linux "${a#*:}" "$d/mvc2-eboot-builder"
+  cp "$I/512.png" "$d/mvc2-eboot-builder.png"
+  cp "$REL/install-launcher.sh" "$d/"
   how "$d" <<'TXT'
 Double-click mvc2-eboot-builder (or drop the disc image on it); it opens in a
 terminal window, and the file picker needs zenity. If it will not start, make
 it executable: chmod +x mvc2-eboot-builder
+
+To add it to your applications menu, with its icon: ./install-launcher.sh
 
 Command line: ./mvc2-eboot-builder ~/path/to/game.iso
 TXT
@@ -56,12 +73,14 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 gob darwin arm64 "$W/b-arm64"; gob darwin amd64 "$W/b-amd64"
 lipo -create -output "$app/Contents/MacOS/mvc2-eboot-builder" "$W/b-arm64" "$W/b-amd64"
 cp "$BASE" "$app/Contents/Resources/EBOOT.PBP"
+cp "$I/AppIcon.icns" "$app/Contents/Resources/"
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleName</key><string>MvC2 EBOOT Builder</string>
 <key>CFBundleIdentifier</key><string>io.github.mvc2-psp.builder</string>
+<key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundleExecutable</key><string>mvc2-eboot-builder</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>$VER</string>
