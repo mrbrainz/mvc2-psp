@@ -34,9 +34,11 @@ static int log_ok;
 
 /* Each line is appended and the file closed again: on a memory stick a
  * flushed but open file keeps its old size, so a crash lost the last lines. */
+/* No log file unless asked for: "log=on" in settings.txt, or a testing
+ * set-up (env.txt or mvc2exc.prx in the game folder). */
 /* Log lines on the debug screen too: debug builds only (mvc2exc.prx next to
  * the EBOOT, or SCREENLOG=1 in env.txt); cleared once the renderer owns the
- * display either way.  The log file always gets every line. */
+ * display either way.  The log file, when on, gets every line. */
 int psp_log_screen;
 
 void psp_log(const char *s) {
@@ -134,6 +136,36 @@ const char *psp_eboot_path;   /* argv[0]: the EBOOT.PBP that was started */
  * the CFW's kubridge.  The code base lets EPC/RA be matched to mvc2_psp.elf. */
 int main(int argc, char **argv);
 
+/* 1 if a line of the text file in the game folder starts with key (0: none,
+ * -1: no such file) */
+static int file_has(const char *name, const char *key)
+{
+    static char buf[2048];
+    char ep[200];
+    SceUID fd = sceIoOpen(gpath(ep, sizeof ep, name), PSP_O_RDONLY, 0);
+    int n;
+    if (fd < 0) return -1;
+    n = sceIoRead(fd, buf, sizeof buf - 1);
+    sceIoClose(fd);
+    if (n <= 0) return 0;
+    buf[n] = 0;
+    {
+        const char *p;
+        for (p = strstr(buf, key); p; p = strstr(p + 1, key))
+            if (p == buf || p[-1] == '\n') return 1;
+    }
+    return 0;
+}
+
+static int log_wanted(void)
+{
+    char ep[200];
+    SceIoStat st;
+    return file_has("settings.txt", "log=on") > 0 || file_has("env.txt", "") >= 0 ||
+           sceIoGetstat(gpath(ep, sizeof ep, "mvc2exc.prx"), &st) >= 0;
+}
+
+
 /* Debug builds (with mvc2exc.prx): a watchdog logs the main thread's state
  * every second, so a hang shows whether it spins or waits, and on what. */
 static SceUID main_thid;
@@ -155,20 +187,6 @@ static int watchdog(SceSize a, void *b)
         psp_log(line);
     }
     return 0;
-}
-
-static int env_has(const char *key)
-{
-    char buf[512];
-    char ep[200];
-    SceUID fd = sceIoOpen(gpath(ep, sizeof ep, "env.txt"), PSP_O_RDONLY, 0);
-    int n;
-    if (fd < 0) return 0;
-    n = sceIoRead(fd, buf, sizeof buf - 1);
-    sceIoClose(fd);
-    if (n <= 0) return 0;
-    buf[n] = 0;
-    return strstr(buf, key) != NULL;
 }
 
 static void exc_load(void)
@@ -195,7 +213,7 @@ static void exc_load(void)
         SceUID t = sceKernelCreateThread("mvc2_wd", watchdog, 0x10, 0x2000, PSP_THREAD_ATTR_USER, NULL);
         if (t >= 0) sceKernelStartThread(t, 0, NULL);
     }
-    if (env_has("CRASHTEST=1")) {
+    if (file_has("env.txt", "CRASHTEST=1") > 0) {
         psp_log("[host] CRASHTEST: writing to address 0\n");
         *(volatile int *)0 = 1;
     }
@@ -212,7 +230,7 @@ int main(int argc, char **argv) {
     if (t >= 0) sceKernelStartThread(t, 0, 0);
     scePowerSetClockFrequency(333, 333, 166);   /* full speed (default 222 MHz) */
     pspDebugScreenInit();
-    {
+    if (log_wanted()) {
         char prev[200];   /* the last run's log kept (a crash's log survives the next start) */
         gpath(prev, sizeof prev, "mvc2_psp.prev.log");
         sceIoRemove(prev);
@@ -220,7 +238,7 @@ int main(int argc, char **argv) {
         SceUID fd = sceIoOpen(LOG_PATH, PSP_O_WRONLY | PSP_O_CREAT | PSP_O_TRUNC, 0777);
         if (fd >= 0) { sceIoClose(fd); log_ok = 1; }
     }
-    if (env_has("SCREENLOG=1"))
+    if (file_has("env.txt", "SCREENLOG=1") > 0)
         psp_log_screen = 1;
     exc_load();
     mvc2_psp_run(MVC2_PSP_FRAMES);

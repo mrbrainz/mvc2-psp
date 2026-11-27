@@ -67,7 +67,9 @@ window.BACKLOG = {
   "P126",
   "P127",
   "P128",
+  "P129",
   "P13",
+  "P130",
   "P14",
   "P21",
   "P22",
@@ -317,6 +319,21 @@ window.BACKLOG = {
    "title": "Low profile: fit the PSP-1000 (future goal, parked)",
    "description": "On-demand loading does not work: the arena is seven fixed game heaps (15.2 MB, 12.0 MB ever written) read through pointers (PSP.md \"Game heaps in the arena (P80)\"). The PSP-1000 is ~19.4 MB short; candidates: the 4 MB volatile partition, music streaming (P78), trimming the heaps to their high-water plus margin, renderer budgets (P76), and PSP-1000-only visual cuts (16-bit textures, simpler stage background). First measure the stage's share of renderer memory and whether D_004C2878 is used outside arcade mode.",
    "done_when": "The low profile fits the PSP-1000's 15.7 MB (plus the volatile partition) in a full arcade run; full profile state dump unchanged."
+  },
+  {
+   "id": "P131",
+   "order": 43,
+   "phase": "P2",
+   "size": "S",
+   "status": "Ready",
+   "depends": [],
+   "read": [
+    ".github/workflows/psp-release.yml",
+    "port/psp/snd0/CMakeLists.txt"
+   ],
+   "title": "Check the XMB music encoder on Windows and Linux",
+   "description": "mvc2-snd0 and the workflow's snd0 jobs have only run as a local macOS build. Run psp-release by hand (workflow_dispatch) after pushing, then check the packages.",
+   "done_when": "The manual run passes, every builder package holds mvc2-snd0, and the Windows and Linux ones make an SND0.AT3 that matches macOS's or plays."
   }
  ]
 };

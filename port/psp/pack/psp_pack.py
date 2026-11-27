@@ -7,17 +7,20 @@ Only /SLUS_204.86 (the EE data the port fills from the executable) and
 as a minimal ISO9660 image so the port's disc reader is unchanged. The result
 holds copyrighted data: it is for the player's own use, never for git.
 
-    psp_pack.py [--icon0 PNG] [--pic1 PNG] <your MvC2 PS2 disc image> <EBOOT.PBP in> <EBOOT.PBP out>
+    psp_pack.py [--icon0 PNG] [--pic1 PNG] [--snd0-tool PATH] <your MvC2 PS2 disc image> <EBOOT.PBP in> <EBOOT.PBP out>
 
 The disc image may be an .iso, a raw .bin (2352-byte sectors), a .cue, a
 CSO/ZSO, or a .zip holding one of these (same as the builder, port/psp/builder).
 --icon0/--pic1 replace those sections (XMB art from tools/xmb_art.py).
+SND0.AT3 (XMB music: the character select track) is made with mvc2-snd0
+(port/psp/snd0), found next to <EBOOT.PBP in> or given by --snd0-tool.
 """
 import atexit
 import os
 import posixpath
 import shutil
 import struct
+import subprocess
 import sys
 import tempfile
 import zipfile
@@ -129,20 +132,57 @@ def mini_iso(files):
             yield bytes(SECTOR - size % SECTOR)
 
 
+SELECT_TRACK = 15  # AFS00 entry: the character select music
+
+
+def xmb_sound(iso_path, tool):
+    """SND0.AT3 from the disc, made by mvc2-snd0 (as the builder's snd0.go)."""
+    with open_image(iso_path) as iso:
+        found = iso_files(iso)
+        if "/PS2/AFS00.AFS" not in found:
+            die(iso_path + ": no /PS2/AFS00.AFS")
+        base = found["/PS2/AFS00.AFS"][0] * SECTOR
+        iso.seek(base + 8 + 8 * SELECT_TRACK)
+        off, size = struct.unpack("<II", iso.read(8))
+        iso.seek(base + off)
+        adx = iso.read(size)
+    with tempfile.TemporaryDirectory(prefix="mvc2-snd0-") as d:
+        with open(os.path.join(d, "track.adx"), "wb") as f:
+            f.write(adx)
+        r = subprocess.run([os.path.abspath(tool), "track.adx", "SND0.AT3"], cwd=d, capture_output=True)
+        if r.returncode:
+            die("%s failed: %s" % (tool, (r.stdout + r.stderr).decode("utf-8", "replace").strip()))
+        with open(os.path.join(d, "SND0.AT3"), "rb") as f:
+            return f.read()
+
+
 def main():
-    args, art = sys.argv[1:], {}
-    while args and args[0] in ("--icon0", "--pic1") and len(args) > 1:
-        art[1 if args[0] == "--icon0" else 4] = open(args[1], "rb").read()
+    usage = ("usage: psp_pack.py [--icon0 PNG] [--pic1 PNG] [--snd0-tool PATH] "
+             "<your MvC2 PS2 disc image> <EBOOT.PBP in> <EBOOT.PBP out>")
+    args, art, tool = sys.argv[1:], {}, None
+    while args and args[0] in ("--icon0", "--pic1", "--snd0-tool") and len(args) > 1:
+        if args[0] == "--snd0-tool":
+            tool = args[1]
+        else:
+            art[1 if args[0] == "--icon0" else 4] = open(args[1], "rb").read()
         args = args[2:]
     if len(args) != 3:
-        die("usage: psp_pack.py [--icon0 PNG] [--pic1 PNG] <your MvC2 PS2 disc image> <EBOOT.PBP in> <EBOOT.PBP out>")
+        die(usage)
     iso_path, pbp_in, pbp_out = args
     with open(pbp_in, "rb") as f:
         pbp = f.read()
     if pbp[:4] != b"\0PBP":
         die(pbp_in + " is not an EBOOT.PBP")
     offs = list(struct.unpack_from("<8I", pbp, 8))
-    if art:                                   # rebuild sections 0-6 with the new art
+    if tool is None:
+        here = os.path.join(os.path.dirname(os.path.abspath(pbp_in)),
+                            "mvc2-snd0" + (".exe" if os.name == "nt" else ""))
+        tool = here if os.path.isfile(here) else None
+    if tool:
+        art[5] = xmb_sound(iso_path, tool)
+    else:
+        print("psp_pack: no XMB music (mvc2-snd0 not found; see port/psp/snd0)")
+    if art:                                   # rebuild sections 0-6 with the new art and music
         secs = [pbp[offs[i]:offs[i + 1]] for i in range(7)]
         for i, b in art.items():
             secs[i] = b

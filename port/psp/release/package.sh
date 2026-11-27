@@ -4,6 +4,9 @@
 # Writes OUTDIR/mvc2-psp-VERSION-{windows.zip,macos.zip,linux-x64.tar.gz,linux-arm64.tar.gz,pypack.zip}
 # and OUTDIR/SHA256SUMS. Needs go, and macOS for the rest: sips, iconutil (app icons
 # from assets/mvc2-app-icon.png), lipo, codesign, ditto.
+# SND0_DIR: the XMB music encoder (port/psp/snd0) as {macos,windows-x64,linux-x64,
+# linux-arm64}/ build outputs (bin/'s files). A package without one builds
+# EBOOTs with no XMB music; REQUIRE_SND0=1 makes that an error.
 set -eu
 [ $# -eq 3 ] || { echo "usage: $0 VERSION BASE_EBOOT OUTDIR" >&2; exit 2; }
 VER=$1; BASE=$2; OUT=$3
@@ -34,14 +37,27 @@ iconutil -c icns -o "$I/AppIcon.icns" "$I/AppIcon.iconset"
   echo "==== PSPSDK, newlib (pspdev) and Go runtime ===="
   echo "Linked parts of PSPSDK and newlib (pspdev) and the Go standard library"
   echo "are BSD-style licensed; see https://github.com/pspdev and https://go.dev/LICENSE."
+  echo; echo "==== atracdenc (mvc2-snd0, makes the XMB music) ===="
+  echo "mvc2-snd0 is atracdenc (https://github.com/dcherednik/atracdenc, commit"
+  echo "cb170709f836) with this project's port/psp/snd0 and port/audio/adx.c; its"
+  echo "source is those, at https://github.com/mrbrainz/mvc2-psp. LGPL-2.1:"
+  for f in "${SND0_DIR:-/nonexistent}"/*/atracdenc-LICENSE.txt; do
+    if [ -f "$f" ]; then echo; cat "$f"; break; fi; done
 } > "$W/LICENSE.txt"
 
 gob() { (cd "$ROOT/port/psp/builder" && CGO_ENABLED=0 GOOS=$1 GOARCH=$2 go build -trimpath -ldflags "-s -w" -o "$3" .); }
+# snd0 PLATFORM DIR: put that platform's encoder next to the base EBOOT
+snd0() {
+  for f in "${SND0_DIR:-/nonexistent}/$1"/mvc2-snd0*; do
+    if [ -f "$f" ]; then cp "$f" "$2/"; chmod +x "$2/$(basename "$f")"; return; fi; done
+  [ -z "${REQUIRE_SND0:-}" ] || { echo "no mvc2-snd0 for $1 in SND0_DIR" >&2; exit 1; }
+  echo "warning: no mvc2-snd0 for $1: no XMB music from that package" >&2
+}
 dist() { d=$W/$1/$NAME; mkdir -p "$d"; cp "$REL/README.txt" "$W/LICENSE.txt" "$d/"; echo "$d"; }
 # README.txt's "Opening the builder" section for one package (the builders are not signed)
 how() { printf '\nOpening the builder\n-------------------\n\n' >> "$1/README.txt"; cat >> "$1/README.txt"; }
 
-d=$(dist win); mkdir "$d/base"; cp "$BASE" "$d/base/EBOOT.PBP"
+d=$(dist win); mkdir "$d/base"; cp "$BASE" "$d/base/EBOOT.PBP"; snd0 windows-x64 "$d/base"
 (cd "$ROOT/port/psp/builder" && go run ./winres "$SYSO" "$I/256.png" "$I/64.png" "$I/48.png" "$I/32.png" "$I/16.png")
 gob windows amd64 "$d/MvC2 EBOOT Builder.exe"
 rm -f "$SYSO"
@@ -55,7 +71,7 @@ TXT
 (cd "$W/win" && rm -f "$OUT/$NAME-windows.zip" && zip -qr -X "$OUT/$NAME-windows.zip" "$NAME")
 
 for a in x64:amd64 arm64:arm64; do
-  d=$(dist "linux-${a%%:*}"); mkdir "$d/base"; cp "$BASE" "$d/base/EBOOT.PBP"
+  d=$(dist "linux-${a%%:*}"); mkdir "$d/base"; cp "$BASE" "$d/base/EBOOT.PBP"; snd0 "linux-${a%%:*}" "$d/base"
   gob linux "${a#*:}" "$d/mvc2-eboot-builder"
   cp "$I/512.png" "$d/mvc2-eboot-builder.png"
   cp "$REL/install-launcher.sh" "$d/"
@@ -75,7 +91,7 @@ d=$(dist mac); app="$d/MvC2 EBOOT Builder.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 gob darwin arm64 "$W/b-arm64"; gob darwin amd64 "$W/b-amd64"
 lipo -create -output "$app/Contents/MacOS/mvc2-eboot-builder" "$W/b-arm64" "$W/b-amd64"
-cp "$BASE" "$app/Contents/Resources/EBOOT.PBP"
+cp "$BASE" "$app/Contents/Resources/EBOOT.PBP"; snd0 macos "$app/Contents/Resources"
 cp "$I/AppIcon.icns" "$app/Contents/Resources/"
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -108,6 +124,9 @@ cp "$BASE" "$d/base/EBOOT.PBP"
 cp "$ROOT/port/psp/pack/psp_pack.py" "$d/port/psp/pack/"
 cp "$ROOT/port/psp/tools/xmb_art.py" "$d/port/psp/tools/"
 cp "$ROOT/port/tools/mvc2_lz16.py" "$d/port/tools/"
+mkdir -p "$d/port/psp/snd0" "$d/port/audio"
+cp "$ROOT"/port/psp/snd0/CMakeLists.txt "$ROOT"/port/psp/snd0/*.cpp "$d/port/psp/snd0/"
+cp "$ROOT/port/audio/adx.c" "$ROOT/port/audio/adx.h" "$d/port/audio/"
 for f in iso afs png tim2 textures; do cp "$ROOT/port/tools/convert/$f.py" "$d/port/tools/convert/"; done
 how "$d" <<'TXT'
 This package has no builder: use Python 3 (any OS), in this folder:
@@ -115,6 +134,14 @@ This package has no builder: use Python 3 (any OS), in this folder:
   python3 port/psp/tools/xmb_art.py game.iso art
   mkdir MVC2
   python3 port/psp/pack/psp_pack.py --icon0 art/ICON0.PNG --pic1 art/PIC1.PNG game.iso base/EBOOT.PBP MVC2/EBOOT.PBP
+
+For the character select music in the PSP menu (optional; needs CMake, git
+and a C++ compiler), first build the encoder, then add its path to the last
+command above, before game.iso:
+
+  cmake -S port/psp/snd0 -B snd0 -DCMAKE_BUILD_TYPE=Release
+  cmake --build snd0 --config Release
+  ... psp_pack.py --snd0-tool snd0/bin/mvc2-snd0 ...
 
 Then continue from step 3.
 TXT

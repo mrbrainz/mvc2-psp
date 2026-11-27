@@ -84,6 +84,15 @@ mkdir MVC2
 python3 port/psp/pack/psp_pack.py --icon0 art/ICON0.PNG --pic1 art/PIC1.PNG game.iso base/EBOOT.PBP MVC2/EBOOT.PBP
 ```
 
+The builder apps also give the game the character select music in the PSP menu.
+With this package, first build the encoder (needs CMake, git and a C++
+compiler), then add `--snd0-tool snd0/bin/mvc2-snd0` before `game.iso`:
+
+```sh
+cmake -S port/psp/snd0 -B snd0 -DCMAKE_BUILD_TYPE=Release
+cmake --build snd0 --config Release
+```
+
 ### Builder options
 
 ```
@@ -117,12 +126,37 @@ Buttons can be reassigned in the game's own *Button Config*.
 
 ### Settings
 
-`PSP/GAME/MVC2/settings.txt` is created on first run:
+`PSP/GAME/MVC2/settings.txt` is created with the defaults the first time you run
+the game:
+
+```
+screen=stretch
+color=32
+unlock=stock
+log=off
+```
 
 | Setting | Values |
 | --- | --- |
-| `screen` | `fit` (4:3, default) or `stretch` (full 480x272). L+R+Select in game switches it. |
-| `color` | `32` (default) or `16` (16-bit colour, less VRAM and bandwidth) |
+| `screen` | `stretch` (full 480x272, default) or `fit` (the original 4:3). L+R+Select in game switches it and saves the choice. |
+| `color` | `32` (default) or `16` (dithered 16-bit colour: faster drawing, gradients may band) |
+| `unlock` | `stock` (default: characters and extras are unlocked by playing, as on the original) or `all` (everything unlocked) |
+| `log` | `off` (default) or `on` (write `mvc2_psp.log` to the game folder, for bug reports) |
+
+To change a setting, quit the game, connect the PSP over USB (or put the memory
+stick in your computer), edit the file in a text editor, save it and start the
+game again. Keep one setting per line, with no spaces around `=`.
+
+#### Unlocking all characters
+
+1. Run the game once, so that `settings.txt` exists.
+2. In `PSP/GAME/MVC2/settings.txt`, change `unlock=stock` to `unlock=all`.
+3. Start the game. All characters, extra colours and shop items are unlocked,
+   and the same character can be picked more than once in a team.
+
+If the game saves while `unlock=all` is set, the unlocks are stored in your
+save and stay after you change back to `stock`. To keep your earned progress
+separate, first copy `PSP/SAVEDATA/MVC2PSP000000/` somewhere safe.
 
 ### Saves
 
@@ -139,6 +173,7 @@ system save dialogs; the game's autosaves need no dialog.
 | "convert ... to an .iso first" | BIN/CUE, CSO/ZSO and CHD images must be converted to a plain `.iso` (for CHD: `chdman extractdvd`). |
 | macOS or Windows will not open the builder | It is not signed: see *Making your EBOOT* above for the first-launch steps. |
 | The game is not listed on the PSP | The path must be `PSP/GAME/MVC2/EBOOT.PBP`, not `PSP/GAME/MVC2/MVC2/...`. Custom firmware is needed. |
+| Something goes wrong and you want to report it | Set `log=on` in `settings.txt`, reproduce it, and attach `PSP/GAME/MVC2/mvc2_psp.log` (`mvc2_psp.prev.log` is the run before). |
 | It stops at boot on a PSP-1000 | Not supported: it needs the memory of a PSP-2000 or later. |
 
 ## Building from source
@@ -173,6 +208,10 @@ run) and unpacks the one for your computer there.
 | `docs/backlog.js` | PSP to-do list |
 
 ## Credits
+
+The XMB music is encoded with
+[atracdenc](https://github.com/dcherednik/atracdenc) (LGPL-2.1).
+
 
 This project would not exist without
 **[G Guthrie's Marvel vs. Capcom 2 decompilation and port](https://github.com/g-guthrie/mvc2-port-and-decomp)**:

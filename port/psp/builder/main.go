@@ -93,8 +93,12 @@ func run(isoPath, basePath, outDir string) (string, error) {
 	}
 	out := filepath.Join(dir, "EBOOT.PBP")
 	fmt.Printf("Building %s\n", out)
+	snd0, err := xmbSound(d, filepath.Dir(basePath))
+	if err != nil { // the game plays without it
+		fmt.Printf("No XMB music: %v\n", err)
+	}
 	last := -1
-	err = build(base, d, out, func(done, total int64) {
+	err = build(base, d, out, snd0, func(done, total int64) {
 		if p := int(done * 100 / total); p != last {
 			last = p
 			fmt.Printf("\r%3d%%", p)

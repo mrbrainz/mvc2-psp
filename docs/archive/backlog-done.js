@@ -1395,6 +1395,22 @@ window.BACKLOG_ARCHIVE = [
   "note": "psp_save.c passes base.size 1480 (the SDK's 1536 loads but every save mode fails). r_gu.c list_close ends each frame's list with a full scissor and an opaque black clear while a dialog is up (a separate per-frame list left a save stuck at Saving). The placeholder icon came from PSPLink runs (no EBOOT to read); the firmware rewrites ICON0 in place, so a fresh save is needed. MVC2_ICON_PBP (testing) reads ICON0 from another EBOOT; verified 2026-11-25 over PSPLink."
  },
  {
+  "id": "P129",
+  "order": 41,
+  "phase": "P2",
+  "size": "XS",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/psp/host/psp_entry.c",
+   "port/psp/host/psp_main.c"
+  ],
+  "title": "Log file off by default; stretch the default screen mode",
+  "description": "settings.txt gains log=off|on (default off). screen defaults to stretch. Existing settings.txt files keep their screen value.",
+  "done_when": "A fresh run writes screen=stretch and log=off and no log file; log=on writes mvc2_psp.log.",
+  "note": "Both checked in PPSSPP; on hardware a fresh run wrote those defaults and left no log (2026-11-27). env.txt or mvc2exc.prx in the game folder also turns the log on, for test set-ups."
+ },
+ {
   "id": "P73",
   "order": 42,
   "phase": "P6",
@@ -1429,6 +1445,23 @@ window.BACKLOG_ARCHIVE = [
   "description": "P91 split: in character select, func_001520E0(6) (draw each object of D_004D3690[6] through func_00152180) takes 8.3 ms a frame on the PSP-2003 without its mesh draws. Split it further (func_00152180's sprite or 2D path) and make the hot part cheaper PSP-side.",
   "done_when": "func_001520E0(6) non-mesh time <= 3 ms in fight6's character select (PROFILE=1, hardware); rendering and game-state trace unchanged.",
   "note": "Non-mesh 5.6 -> 2.80-2.93 ms (unlock=all, fight6 select, PSP-2003): node loop and func_00152400 PSP-side, psp_mesh_predraw cold paths out of line, ZBUF packets of func_003E0530 left out (MVC2_ZBUF_FULL=1 A/B 3.19-3.26 -> 2.80-2.93, fight render pass -0.2 ms). PPSSPP: shots and 3,057 per-frame records identical; snapshots differ only in the GS packet arena, its DMA queue ring, host memory past the EE heap and run-to-run noise."
+ },
+ {
+  "id": "P130",
+  "order": 42,
+  "phase": "P2",
+  "size": "M",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/psp/builder/pack.go",
+   "port/psp/pack/psp_pack.py",
+   "port/docs/ASSET_LOADING.md"
+  ],
+  "title": "Character select music as the XMB music (SND0.AT3)",
+  "description": "The builder and psp_pack.py add SND0.AT3 made from the user's disc (AFS00 file 15, 8.4 s loop; confirm by ear): ATRAC3, looping, under 500 KB. Release base EBOOT stays empty. Needs an ATRAC3 encoder.",
+  "done_when": "A built EBOOT plays the track in the XMB on hardware and loops.",
+  "note": "port/psp/snd0 (atracdenc cb17070), builder, psp_pack.py, package.sh and CI added. The packaged macOS builder and psp_pack.py make identical SND0; it plays and loops in the XMB on hardware (2026-11-27, user). Windows and Linux builds: P131."
  },
  {
   "id": "P99",

@@ -87,6 +87,9 @@ Run in PPSSPP (memory stick is `~/.config/ppsspp`):
     /Applications/PPSSPPSDL.app/Contents/MacOS/PPSSPPSDL $G/EBOOT.PBP
     # output: $G/mvc2_psp.log (state.bin only with MVC2_STATE_DUMP in env.txt)
 
+The log file is written only with `log=on` in `settings.txt`, or when
+`env.txt` or `mvc2exc.prx` is in the game folder (a testing set-up).
+
 The game data comes from the player's own PS2 disc, read through sceIo
 (`psp_disc.c`, `psp_disc_io.c`): `DISC=path` in `env.txt`, else the data
 packed into the EBOOT, else `ms0:/PSP/GAME/mvc2/mvc2.iso`, else
@@ -117,6 +120,16 @@ Release packages: `port/psp/release/package.sh VERSION BASE_EBOOT OUTDIR`
 (macOS: needs go, lipo, codesign, ditto). CI (`.github/workflows/psp-release.yml`)
 runs it on a `v*` tag and attaches the packages to a draft GitHub release;
 a manual run only uploads them as workflow artifacts.
+XMB music (P130): both packers add SND0.AT3, the character select track
+(AFS00 file 15), made by `mvc2-snd0` (`port/psp/snd0/`: atracdenc at a pinned
+commit, `adx.c`, a resampler to 44.1 kHz and the `smpl` loop; ATRAC3 132 kbps,
+about 140 KB). It is looked for next to the base EBOOT (`psp_pack.py` also takes
+`--snd0-tool`); without it the EBOOT just has no music. The CI `snd0` jobs
+build it for the packages; `draft.sh` builds this computer's only.
+
+    cmake -S port/psp/snd0 -B build/snd0 -DCMAKE_BUILD_TYPE=Release
+    cmake --build build/snd0 --config Release   # -> build/snd0/bin/mvc2-snd0
+
 The builder apps' icon is `assets/mvc2-app-icon.png`: package.sh makes the macOS
 `AppIcon.icns` (`go run ./macicon` puts the art on Apple's 824/1024 rounded tile
 with a shadow, then sips, iconutil), the .exe's icon resource (`go run ./winres`,
@@ -1176,10 +1189,10 @@ setter, blend decode, primitive set-up, texture/palette tables) is a copy of
 with more than four arguments go through `port/psp/host/psp_gu_shim.c`.
 
 - Primitives are scaled straight into the 480x272 back buffer (P23). Default
-  **fit**: the game's displayed area (640x448) with its aspect kept (389x272,
-  centred; HUD text readable over a full arcade run). **stretch** fills
-  480x272. `ms0:/PSP/GAME/mvc2/settings.txt` (written with the defaults on
-  first run): `screen=fit|stretch`, `color=32|16`; L+R+Select in game swaps
+  **stretch** fills 480x272. **fit**: the game's displayed area (640x448)
+  with its aspect kept (389x272, centred; HUD text readable over a full
+  arcade run). `ms0:/PSP/GAME/mvc2/settings.txt` (written with the defaults on
+  first run): `screen=stretch|fit`, `color=32|16`, `unlock=stock|all`, `log=off|on`; L+R+Select in game swaps
   the screen mode and saves it (the game does not see that press).
   `color=16`: dithered 5650 draw/display buffers, half the VRAM (557 KB freed)
   and fill bandwidth; read at start. Default 32, as 16 can band gradients;

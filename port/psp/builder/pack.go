@@ -1,7 +1,7 @@
 package main
 
 // EBOOT packing: a Go copy of port/psp/pack/psp_pack.py, plus the XMB art
-// sections pack-pbp would have written from xmb_art.py's PNGs.
+// sections pack-pbp would have written from xmb_art.py's PNGs, and SND0.
 
 import (
 	"bufio"
@@ -34,6 +34,7 @@ var (
 const (
 	secICON0 = 1
 	secPIC1  = 4
+	secSND0  = 5
 	secPSAR  = 7
 )
 
@@ -169,9 +170,9 @@ func writeMiniISO(w io.Writer, d *iso, progress func(done, total int64)) error {
 	return nil
 }
 
-// build writes the finished EBOOT: base sections with ICON0/PIC1 replaced,
-// then the game data as DATA.PSAR at a sector boundary.
-func build(base []byte, d *iso, out string, progress func(done, total int64)) error {
+// build writes the finished EBOOT: base sections with ICON0/PIC1 (and SND0,
+// when given) replaced, then the game data as DATA.PSAR at a sector boundary.
+func build(base []byte, d *iso, out string, snd0 []byte, progress func(done, total int64)) error {
 	s, err := pbpSections(base)
 	if err != nil {
 		return err
@@ -182,6 +183,9 @@ func build(base []byte, d *iso, out string, progress func(done, total int64)) er
 	}
 	if s[secICON0], s[secPIC1], err = xmbArt(a); err != nil {
 		return err
+	}
+	if snd0 != nil {
+		s[secSND0] = snd0
 	}
 	head := make([]byte, 40)
 	copy(head, base[:8])

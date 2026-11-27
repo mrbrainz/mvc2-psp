@@ -42,31 +42,34 @@ void r_gu_set_present(int stretch, int color16);   /* r_gu.c (P23) */
 void r_gu_toggle_stretch(void);
 int r_gu_stretch(void);
 
-/* Player settings (P23): ms0:/PSP/GAME/mvc2/settings.txt, "screen=fit|stretch"
+/* Player settings (P23): ms0:/PSP/GAME/mvc2/settings.txt, "screen=stretch|fit"
  * and "color=32|16" (16: dithered 5650 frame buffers, faster fill, read at
  * start). Written with the defaults when missing; L+R+Select in game swaps
  * the screen mode and saves it. "unlock=stock|all" (P119): stock (default)
- * is retail's locked roster; all turns on the port's unlock-everything. */
+ * is retail's locked roster; all turns on the port's unlock-everything.
+ * "log=off|on": off (default) writes no log file; read in psp_entry.c. */
 const char *psp_game_dir(void);   /* psp_entry.c: ms0:/PSP/GAME/mvc2 or the host0: folder */
 static const char *gpath(const char *name) { static char b[200]; snprintf(b, sizeof b, "%s/%s", psp_game_dir(), name); return b; }
 #define SETTINGS gpath("settings.txt")
-static int set_c16;
+static int set_c16, set_log;
 
 static void settings_save(void)
 {
     FILE *f = fopen(SETTINGS, "w");
     if (!f) return;
-    fprintf(f, "# MvC2 PSP settings\n# screen: fit (arcade 4:3, default) or stretch (full 480x272); L+R+Select swaps it in game\n"
+    fprintf(f, "# MvC2 PSP settings\n# screen: stretch (full 480x272, default) or fit (arcade 4:3); L+R+Select swaps it in game\n"
                "screen=%s\n# color: 32 (default) or 16 (dithered 16-bit: faster drawing, may band gradients)\ncolor=%d\n"
-               "# unlock: stock (default, characters and extras unlocked by playing) or all (everything unlocked)\nunlock=%s\n",
-            r_gu_stretch() ? "stretch" : "fit", set_c16 ? 16 : 32, mvc2_unlock_all ? "all" : "stock");
+               "# unlock: stock (default, characters and extras unlocked by playing) or all (everything unlocked)\nunlock=%s\n"
+               "# log: off (default) or on (write mvc2_psp.log to this folder, for bug reports)\nlog=%s\n",
+            r_gu_stretch() ? "stretch" : "fit", set_c16 ? 16 : 32, mvc2_unlock_all ? "all" : "stock",
+            set_log ? "on" : "off");
     fclose(f);
 }
 
 static void settings_load(void)
 {
     char ln[128];
-    int stretch = 0, found = 0, has_unlock = 0;
+    int stretch = 1, found = 0, has_unlock = 0, has_log = 0;
     FILE *f = fopen(SETTINGS, "r");
     mvc2_unlock_all = 0;   /* stock unless unlock=all */
     if (f) {
@@ -74,13 +77,14 @@ static void settings_load(void)
             if (!strncmp(ln, "screen=", 7)) { stretch = !strncmp(ln + 7, "stretch", 7); found = 1; }
             else if (!strncmp(ln, "color=", 6)) set_c16 = atoi(ln + 6) == 16;
             else if (!strncmp(ln, "unlock=", 7)) { mvc2_unlock_all = !strncmp(ln + 7, "all", 3); has_unlock = 1; }
+            else if (!strncmp(ln, "log=", 4)) { set_log = !strncmp(ln + 4, "on", 2); has_log = 1; }
         }
         fclose(f);
     }
     r_gu_set_present(stretch, set_c16);
     fprintf(stderr, "[host] settings: screen %s, color %d, unlock %s\n", stretch ? "stretch" : "fit", set_c16 ? 16 : 32,
             mvc2_unlock_all ? "all" : "stock");
-    if (!found || !has_unlock) settings_save();
+    if (!found || !has_unlock || !has_log) settings_save();
 }
 
 /* L+R+Select (held together, once per hold): swap FIT/STRETCH; the game does

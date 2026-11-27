@@ -11,7 +11,28 @@ permissions:
 env:
   PSPDEV_TAG: v20261101   # tested toolchain (port/docs/PSP.md)
 jobs:
+  snd0:   # the builder's XMB music encoder (port/psp/snd0), one per platform
+    strategy:
+      matrix:
+        include:
+          - {name: macos, os: macos-latest}
+          - {name: windows-x64, os: windows-latest}
+          - {name: linux-x64, os: ubuntu-latest}
+          - {name: linux-arm64, os: ubuntu-24.04-arm}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          cmake -S port/psp/snd0 -B build/snd0 -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/snd0 --config Release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snd0-${{ matrix.name }}
+          path: build/snd0/bin/
   release:
+    needs: snd0
     runs-on: macos-latest  # arm64, like the tested local setup
     timeout-minutes: 120
     steps:
@@ -35,8 +56,16 @@ jobs:
                 -DCMAKE_TOOLCHAIN_FILE="$PWD/port/cmake/psp-clang.cmake"
           ninja -C build/port-psp-rel mvc2_eboot
           python3 port/psp/tools/check_release_eboot.py build/port-psp-rel/EBOOT.PBP
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: snd0-*
+          path: ${{ runner.temp }}/snd0
       - name: Packages
+        env:
+          REQUIRE_SND0: "1"
         run: |
+          export SND0_DIR="$RUNNER_TEMP/snd0"
+          for d in "$SND0_DIR"/snd0-*; do mv "$d" "$SND0_DIR/${d##*/snd0-}"; done
           VER="${GITHUB_REF_NAME}"
           [ "$GITHUB_REF_TYPE" = tag ] || VER="dev-${GITHUB_SHA::7}"
           port/psp/release/package.sh "$VER" build/port-psp-rel/EBOOT.PBP dist
