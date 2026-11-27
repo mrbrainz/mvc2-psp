@@ -49,6 +49,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          N=port/psp/release/notes/$GITHUB_REF_NAME.md   # release text, if written
+          [ -f "$N" ] || { N=$RUNNER_TEMP/notes.md; echo "Download the package for your computer, open the builder and choose your own Marvel vs. Capcom 2 (USA) PS2 disc image. Copy the MVC2 folder it makes into PSP/GAME/. No game data is included." > "$N"; }
           gh release create "$GITHUB_REF_NAME" dist/* --draft --verify-tag \
-             --title "MvC2 PSP $GITHUB_REF_NAME" \
-             --notes "Download the package for your computer, open the builder and choose your own Marvel vs. Capcom 2 (USA) PS2 .iso. Copy the MVC2 folder it makes into PSP/GAME/. No game data is included."
+             --title "MvC2 PSP $GITHUB_REF_NAME" --notes-file "$N"
