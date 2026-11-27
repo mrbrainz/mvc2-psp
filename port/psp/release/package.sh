@@ -19,9 +19,12 @@ trap 'rm -rf "$W" "$SYSO"' EXIT
 I=$W/icon; mkdir -p "$I/AppIcon.iconset"
 for s in 16 32 48 64 128 256 512 1024; do
   sips -s format png -z $s $s "$ROOT/assets/mvc2-app-icon.png" --out "$I/$s.png" >/dev/null; done
+# macOS: the art as Apple's rounded tile with a shadow (Windows and Linux keep the square)
+(cd "$ROOT/port/psp/builder" && go run ./macicon "$ROOT/assets/mvc2-app-icon.png" "$I/mac-1024.png")
+for s in 16 32 64 128 256 512; do sips -z $s $s "$I/mac-1024.png" --out "$I/mac-$s.png" >/dev/null; done
 for s in 16 32 128 256 512; do
-  cp "$I/$s.png" "$I/AppIcon.iconset/icon_${s}x$s.png"
-  cp "$I/$((s * 2)).png" "$I/AppIcon.iconset/icon_${s}x$s@2x.png"; done
+  cp "$I/mac-$s.png" "$I/AppIcon.iconset/icon_${s}x$s.png"
+  cp "$I/mac-$((s * 2)).png" "$I/AppIcon.iconset/icon_${s}x$s@2x.png"; done
 iconutil -c icns -o "$I/AppIcon.icns" "$I/AppIcon.iconset"
 
 # LICENSE.txt: the PSP code licence, then third-party notices for code in the EBOOT and tools

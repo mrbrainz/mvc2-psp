@@ -1708,5 +1708,20 @@ window.BACKLOG_ARCHIVE = [
   "description": "Use assets/mvc2-app-icon.png as the EBOOT builder's icon in every release package.",
   "done_when": "The .exe carries the icon resource, the .app shows AppIcon.icns, and the Linux packages ship the icon with a launcher installer.",
   "note": "package.sh makes the icon sizes with sips, the .icns with iconutil and the .exe resource with port/psp/builder/winres (stdlib Go). Verified 2026-11-27 on a test package: 7z lists ICON/1-5 + GROUP_ICON in the .exe, the .app is valid after ditto and shows the icon, install-launcher.sh writes a working .desktop."
+ },
+ {
+  "id": "P128",
+  "order": 61,
+  "phase": "P5",
+  "size": "XS",
+  "status": "Done",
+  "depends": [],
+  "read": [
+   "port/psp/builder/macicon/main.go"
+  ],
+  "title": "macOS builder icon in Apple's rounded tile shape",
+  "description": "The .icns used the square art full-bleed; macOS draws legacy icons as supplied, so it showed square.",
+  "done_when": "The .app's icon is the art on Apple's rounded tile with a shadow, and macOS draws it that way.",
+  "note": "port/psp/builder/macicon (stdlib Go) scales the art to an 824 px tile with 185.4 px corners on a transparent 1024 canvas plus a soft shadow; package.sh makes the .icns from it. Verified 2026-11-27 on macOS 27.0.1: NSWorkspace draws the packaged app's icon rounded, with no grey tile."
  }
 ];
